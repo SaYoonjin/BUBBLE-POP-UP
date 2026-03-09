@@ -42,10 +42,21 @@ public class User {
     @Column(nullable = false, length = 20)
     private UserRole role;
 
-    public User(String email) {
+    public User(String email, String nickname) {
         this.email = email;
-        this.nickname = defaultNickname();
+        this.nickname = normalizeNickname(nickname);
         this.role = UserRole.GENERAL;
+    }
+
+    private static String normalizeNickname(String nickname) {
+        if (nickname == null) {
+            return defaultNickname();
+        }
+        String trimmed = nickname.trim();
+        if (trimmed.isEmpty()) {
+            return defaultNickname();
+        }
+        return trimmed.length() > 30 ? trimmed.substring(0, 30) : trimmed;
     }
 
     private static String defaultNickname() {

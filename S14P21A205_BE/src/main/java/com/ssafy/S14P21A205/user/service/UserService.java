@@ -2,12 +2,15 @@ package com.ssafy.S14P21A205.user.service;
 
 import com.ssafy.S14P21A205.exception.BaseException;
 import com.ssafy.S14P21A205.exception.ErrorCode;
+import com.ssafy.S14P21A205.user.entity.OAuthIdentity;
 import com.ssafy.S14P21A205.user.entity.User;
+import com.ssafy.S14P21A205.user.repository.OAuthIdentityRepository;
 import com.ssafy.S14P21A205.user.repository.UserRepository;
 import java.util.Locale;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.security.oauth2.core.oidc.user.OidcUser;
+import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
+import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -18,24 +21,33 @@ import org.springframework.util.StringUtils;
 @Transactional(readOnly = true)
 public class UserService {
 
-    private final UserRepository userRepository;
+    private record OAuthProfile(
+            String provider,
+            String providerUserId,
+            String email,
+            String nickname
+    ) {}
 
-    /** 용도: 이메일 기준 사용자 upsert. */
+    private final UserRepository userRepository;
+    private final OAuthIdentityRepository oauthIdentityRepository;
+
+    /** 용도: OAuth 인증 기준 사용자 upsert. */
     @Transactional
-    public User upsertByEmail(String rawEmail) {
-        String email = rawEmail == null ? null : rawEmail.trim().toLowerCase(Locale.ROOT);
-        if (!StringUtils.hasText(email)) {
-            throw new BaseException(ErrorCode.INVALID_INPUT_VALUE);
+    public User upsertFromAuthentication(OAuth2AuthenticationToken authenticationToken) {
+        OAuthProfile profile = extractProfile(authenticationToken);
+        if (!StringUtils.hasText(profile.email())) {
+            throw new BaseException(ErrorCode.UNAUTHORIZED);
         }
 
-        return userRepository.findByEmail(email)
-                .orElseGet(() -> createOrGet(email));
+        return oauthIdentityRepository.findByProviderAndProviderUserId(profile.provider(), profile.providerUserId())
+                .map(OAuthIdentity::getUser)
+                .orElseGet(() -> createOrLinkUser(profile));
     }
 
     /** 용도: 이메일 기준 닉네임 변경. */
     @Transactional
     public User changeNickname(String rawEmail, String rawNickname) {
-        String email = rawEmail == null ? null : rawEmail.trim().toLowerCase(Locale.ROOT);
+        String email = normalizeEmail(rawEmail);
         if (!StringUtils.hasText(email)) {
             throw new BaseException(ErrorCode.INVALID_INPUT_VALUE);
         }
@@ -46,25 +58,112 @@ public class UserService {
         }
 
         User user = userRepository.findByEmail(email)
-                .orElseGet(() -> createOrGet(email));
+                .orElseGet(() -> createOrGet(email, nickname));
         user.changeNickname(nickname);
         return user;
     }
 
     /** 용도: 인증 사용자 기준 닉네임 변경. */
     @Transactional
-    public User changeMyNickname(OidcUser oidcUser, String rawNickname) {
-        String email = oidcUser == null ? null : oidcUser.getEmail();
-        if (!StringUtils.hasText(email)) {
+    public User changeMyNickname(OAuth2AuthenticationToken authenticationToken, String rawNickname) {
+        User user = upsertFromAuthentication(authenticationToken);
+        String nickname = rawNickname == null ? null : rawNickname.trim();
+        if (!StringUtils.hasText(nickname) || nickname.length() > 30) {
+            throw new BaseException(ErrorCode.INVALID_INPUT_VALUE);
+        }
+        user.changeNickname(nickname);
+        return user;
+    }
+
+    private OAuthProfile extractProfile(OAuth2AuthenticationToken authenticationToken) {
+        if (authenticationToken == null) {
+            throw new BaseException(ErrorCode.UNAUTHORIZED);
+        }
+        OAuth2User oauth2User = authenticationToken.getPrincipal();
+        if (oauth2User == null) {
             throw new BaseException(ErrorCode.UNAUTHORIZED);
         }
 
-        return changeNickname(email, rawNickname);
+        String provider = normalizeProvider(authenticationToken.getAuthorizedClientRegistrationId());
+        String providerUserId = extractProviderUserId(oauth2User);
+        if (!StringUtils.hasText(provider) || !StringUtils.hasText(providerUserId)) {
+            throw new BaseException(ErrorCode.UNAUTHORIZED);
+        }
+
+        String email = normalizeEmail(asString(oauth2User.getAttribute("email")));
+        String nickname = resolveInitialNickname(oauth2User, email);
+        return new OAuthProfile(provider, providerUserId, email, nickname);
     }
 
-    private User createOrGet(String email) {
+    private String normalizeEmail(String rawEmail) {
+        return rawEmail == null ? null : rawEmail.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private String normalizeProvider(String provider) {
+        return provider == null ? null : provider.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private String resolveInitialNickname(OAuth2User oauth2User, String email) {
+        String profileName = asString(oauth2User == null ? null : oauth2User.getAttribute("name"));
+        if (StringUtils.hasText(profileName)) {
+            return profileName.trim();
+        }
+
+        if (!StringUtils.hasText(email)) {
+            return null;
+        }
+
+        int atIndex = email.indexOf('@');
+        if (atIndex > 0) {
+            String localPart = email.substring(0, atIndex);
+            if (StringUtils.hasText(localPart)) {
+                return localPart.trim();
+            }
+        }
+        return null;
+    }
+
+    private String asString(Object value) {
+        return value == null ? null : String.valueOf(value);
+    }
+
+    private String extractProviderUserId(OAuth2User oauth2User) {
+        String userId = asString(oauth2User.getAttribute("userId"));
+        if (StringUtils.hasText(userId)) {
+            return userId;
+        }
+        String sub = asString(oauth2User.getAttribute("sub"));
+        if (StringUtils.hasText(sub)) {
+            return sub;
+        }
+        String id = asString(oauth2User.getAttribute("id"));
+        if (StringUtils.hasText(id)) {
+            return id;
+        }
+        String name = oauth2User.getName();
+        return StringUtils.hasText(name) ? name : null;
+    }
+
+    private User createOrLinkUser(OAuthProfile profile) {
+        User user = userRepository.findByEmail(profile.email())
+                .orElseGet(() -> createOrGet(profile.email(), profile.nickname()));
+        return linkIdentity(user, profile);
+    }
+
+    private User linkIdentity(User user, OAuthProfile profile) {
         try {
-            return userRepository.save(new User(email));
+            oauthIdentityRepository.save(new OAuthIdentity(user, profile.provider(), profile.providerUserId()));
+            return user;
+        } catch (DataIntegrityViolationException e) {
+            return oauthIdentityRepository.findByProviderAndProviderUserId(profile.provider(), profile.providerUserId())
+                    .map(OAuthIdentity::getUser)
+                    .orElseThrow(() -> e);
+        }
+    }
+
+    private User createOrGet(String email, String nickname) {
+        try {
+            return userRepository.save(new User(email, nickname));
         } catch (DataIntegrityViolationException e) {
             return userRepository.findByEmail(email)
                     .orElseThrow(() -> e);

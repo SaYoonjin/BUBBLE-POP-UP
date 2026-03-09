@@ -3,6 +3,7 @@ package com.ssafy.S14P21A205.security.handler;
 import com.ssafy.S14P21A205.exception.ErrorCode;
 import com.ssafy.S14P21A205.exception.ErrorResponse;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.http.MediaType;
@@ -19,7 +20,8 @@ import java.nio.charset.StandardCharsets;
 @Component
 public class RestAccessDeniedHandler implements AccessDeniedHandler {
 
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper()
+            .registerModule(new JavaTimeModule());
 
     /**
      * 용도: 403 응답 바디 작성.

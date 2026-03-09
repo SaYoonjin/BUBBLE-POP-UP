@@ -6,8 +6,7 @@ import com.ssafy.S14P21A205.user.service.UserService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.oauth2.core.oidc.user.OidcUser;
+import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -24,9 +23,9 @@ public class UserApi implements UserApiDoc {
     @Override
     public ResponseEntity<AuthMeResponse> updateMyNickname(
             @Valid @RequestBody UserNicknameUpdateRequest request,
-            @AuthenticationPrincipal OidcUser oidcUser
+            OAuth2AuthenticationToken authenticationToken
     ) {
-        var user = userService.changeMyNickname(oidcUser, request.nickname());
-        return ResponseEntity.ok(AuthMeResponse.from(oidcUser, user));
+        var user = userService.changeMyNickname(authenticationToken, request.nickname());
+        return ResponseEntity.ok(AuthMeResponse.from(authenticationToken, user));
     }
 }

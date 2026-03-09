@@ -11,7 +11,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.oauth2.core.oidc.user.OidcUser;
+import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
 
 @Tag(name = "User API", description = "사용자 정보 API")
 public interface UserApiDoc {
@@ -36,6 +36,6 @@ public interface UserApiDoc {
     })
     ResponseEntity<AuthMeResponse> updateMyNickname(
             UserNicknameUpdateRequest request,
-            @Parameter(hidden = true) OidcUser oidcUser
+            @Parameter(hidden = true) OAuth2AuthenticationToken authenticationToken
     );
 }

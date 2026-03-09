@@ -17,10 +17,10 @@ spring:
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
   datasource:
-    url: ${DB_URL:jdbc:postgresql://localhost:5432/mydb}
+    url: ${DB_URL:jdbc:mysql://localhost:13306/mydb?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul}
     username: ${DB_USERNAME:myuser}
     password: ${DB_PASSWORD:mypassword}
-    driver-class-name: org.postgresql.Driver
+    driver-class-name: com.mysql.cj.jdbc.Driver
 # endregion
 
 # region ===== JPA =====
@@ -30,7 +30,7 @@ spring:
     show-sql: ${JPA_SHOW_SQL:true}
 # endregion
 
-# region ===== OAuth2 (Google) =====
+# region ===== OAuth2 (Google + SSAFY) =====
   security:
     oauth2:
       client:
@@ -41,6 +41,21 @@ spring:
             scope: openid,profile,email
             redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}"
             client-name: Google
+          ssafy:
+            client-id: ${SSAFY_CLIENT_ID:}
+            client-secret: ${SSAFY_CLIENT_SECRET:}
+            client-authentication-method: client_secret_post
+            authorization-grant-type: authorization_code
+            scope: ${SSAFY_SCOPE:profile,email}
+            redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}"
+            client-name: SSAFY
+            provider: ssafy
+        provider:
+          ssafy:
+            authorization-uri: ${SSAFY_AUTHORIZATION_URI:}
+            token-uri: ${SSAFY_TOKEN_URI:}
+            user-info-uri: ${SSAFY_USER_INFO_URI:}
+            user-name-attribute: ${SSAFY_USER_NAME_ATTRIBUTE:userId}
 # endregion
 
 # region ===== Server =====

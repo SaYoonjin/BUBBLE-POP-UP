@@ -2,17 +2,23 @@
 # This compose file is for teammate local development.
 # Application itself is run by `./gradlew bootRun` on host.
 services:
-  # region ===== PostgreSQL =====
-  postgres:
-    image: postgres:15-alpine
+  # region ===== MySQL =====
+  mysql:
+    image: mysql:8.4
     ports:
-      - "5432:5432"
+      - "13306:3306"
     environment:
-      POSTGRES_DB: mydb
-      POSTGRES_USER: myuser
-      POSTGRES_PASSWORD: mypassword
+      MYSQL_DATABASE: mydb
+      MYSQL_USER: myuser
+      MYSQL_PASSWORD: mypassword
+      MYSQL_ROOT_PASSWORD: rootpassword
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
   # endregion
 
   # region ===== Redis =====
@@ -45,5 +51,5 @@ services:
 
 # region ===== Named Volumes =====
 volumes:
-  postgres_data:
+  mysql_data:
 # endregion

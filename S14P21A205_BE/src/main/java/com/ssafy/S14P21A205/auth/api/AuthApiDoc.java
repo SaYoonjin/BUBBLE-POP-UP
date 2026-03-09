@@ -11,25 +11,34 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.oauth2.core.oidc.user.OidcUser;
+import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
 
 /** 용도: 인증 API Swagger 문서 정의. */
-@Tag(name = "Auth API", description = "Swagger 테스트를 위한 Google OAuth2 인증 API")
+@Tag(name = "Auth API", description = "Google/SSAFY OAuth2 인증 API")
 public interface AuthApiDoc {
 
     @Operation(
-            summary = "Google 로그인 시작",
+            summary = "OAuth2 로그인 시작",
             description = """
-                    Google OAuth2 로그인 플로우를 시작합니다.
+                    OAuth2 로그인 플로우를 시작합니다.
 
+                    - provider 파라미터로 로그인 제공자(google|ssafy)를 선택할 수 있습니다.
+                    - provider 미지정 시 google이 기본값입니다.
                     - redirect 파라미터로 로그인 완료 후 돌아갈 경로를 지정할 수 있습니다.
                     - 상대 경로(/...) 또는 allow-list에 등록된 절대 URL만 허용됩니다.
                     """
     )
     @ApiResponses({
-            @ApiResponse(responseCode = "302", description = "Google OAuth2 인가 엔드포인트로 리다이렉트")
+            @ApiResponse(responseCode = "302", description = "선택한 OAuth2 인가 엔드포인트로 리다이렉트"),
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "지원하지 않는 provider",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            )
     })
     ResponseEntity<Void> login(
+            @Parameter(description = "로그인 제공자", example = "google")
+            String provider,
             @Parameter(description = "로그인 완료 후 이동 경로", example = "/swagger-ui/index.html")
             String redirect,
             @Parameter(hidden = true) HttpServletRequest request
@@ -49,6 +58,6 @@ public interface AuthApiDoc {
             )
     })
     ResponseEntity<AuthMeResponse> me(
-            @Parameter(hidden = true) OidcUser oidcUser
+            @Parameter(hidden = true) OAuth2AuthenticationToken authenticationToken
     );
 }

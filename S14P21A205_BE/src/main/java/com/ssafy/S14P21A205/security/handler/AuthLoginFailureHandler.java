@@ -45,11 +45,14 @@ public class AuthLoginFailureHandler implements AuthenticationFailureHandler {
                   AuthenticationException exception
     ) throws IOException {
         String errorCode = "oauth2_login_failed";
+        String errorDescription = null;
         if (exception instanceof OAuth2AuthenticationException oauth2) {
             errorCode = oauth2.getError().getErrorCode();
+            errorDescription = oauth2.getError().getDescription();
             log.error("OAuth2 login failed: code={}, description={}", oauth2.getError().getErrorCode(), oauth2.getError().getDescription(), exception);
         } else {
             log.error("OAuth2 login failed: {}", exception.getMessage(), exception);
+            errorDescription = exception.getMessage();
         }
 
         String redirect = authRedirectService.consumeLoginRedirect(request);
@@ -66,6 +69,10 @@ public class AuthLoginFailureHandler implements AuthenticationFailureHandler {
         String target = redirect.contains("?")
                       ? redirect + "&loginError=" + encoded
                       : redirect + "?loginError=" + encoded;
+        if (errorDescription != null && !errorDescription.isBlank()) {
+            String encodedDescription = URLEncoder.encode(errorDescription, StandardCharsets.UTF_8);
+            target = target + "&loginErrorDescription=" + encodedDescription;
+        }
 
         response.sendRedirect(target);
     }

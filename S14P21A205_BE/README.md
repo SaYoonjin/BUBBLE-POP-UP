@@ -11,6 +11,13 @@ Fill required values in `.env`:
 - `GOOGLE_CLIENT_ID`
 - `GOOGLE_CLIENT_SECRET`
 
+Optional values (when enabling SSAFY login):
+- `SSAFY_CLIENT_ID`
+- `SSAFY_CLIENT_SECRET`
+- `SSAFY_AUTHORIZATION_URI`
+- `SSAFY_TOKEN_URI`
+- `SSAFY_USER_INFO_URI`
+
 ### 1-2. Run
 ```bash
 ./gradlew bootRun
@@ -21,7 +28,7 @@ Fill required values in `.env`:
 
 Notes:
 - This project includes Spring Boot Docker Compose integration.
-- `bootRun` automatically links local infra in `compose.yaml` (postgres/redis/kafka).
+- `bootRun` automatically links local infra in `compose.yaml` (mysql/redis/kafka).
 - `compose.yaml` does not use fixed container names, so team members can still auto-start via `bootRun` without name conflicts.
 - Do not commit `.env`.
 
@@ -92,11 +99,19 @@ sudo systemctl reload nginx
 curl -I https://pss6161.bunnect.kr
 ```
 
-## 3) Google OAuth Redirect URI
+## 3) OAuth Redirect URI
 
 Google OAuth Client must include both:
 - `http://localhost:8080/login/oauth2/code/google`
 - `https://pss6161.bunnect.kr/login/oauth2/code/google`
+
+SSAFY OAuth Client (if used) must include both:
+- `http://localhost:8080/login/oauth2/code/ssafy`
+- `https://pss6161.bunnect.kr/login/oauth2/code/ssafy`
+
+Login start API examples:
+- Google: `/api/v1/auth/login?provider=google`
+- SSAFY: `/api/v1/auth/login?provider=ssafy`
 
 ## 4) GitLab CI/CD (Self-Hosted Runner)
 

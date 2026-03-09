@@ -71,6 +71,9 @@ public class SwaggerUiLoginOverlayConfig {
                   <a href="/api/v1/auth/login?redirect=/swagger-ui/index.html" style="display: inline-flex; align-items: center; gap: 8px; background: #4285F4; color: #fff; border-radius: 10px; padding: 8px 10px; text-decoration: none; font-size: 13px; font-weight: 600;">
                     Google 로그인
                   </a>
+                  <a href="/api/v1/auth/login?provider=ssafy&redirect=/swagger-ui/index.html" style="display: inline-flex; align-items: center; gap: 8px; background: #00A86B; color: #fff; border-radius: 10px; padding: 8px 10px; text-decoration: none; font-size: 13px; font-weight: 600;">
+                    SSAFY 로그인
+                  </a>
                   <button id="swagger-auth-me" type="button" style="background: #fff; color: #111; border: 1px solid rgba(255,255,255,0.15); border-radius: 10px; padding: 8px 10px; font-size: 13px; cursor: pointer;">
                     내 정보
                   </button>
@@ -83,11 +86,47 @@ public class SwaggerUiLoginOverlayConfig {
                 </div>
                 <script>
                   (() => {
+                    const params = new URLSearchParams(window.location.search);
+                    const readCookie = (name) => {
+                      const prefix = name + "=";
+                      const cookie = document.cookie
+                        .split("; ")
+                        .find((value) => value.startsWith(prefix));
+                      return cookie ? decodeURIComponent(cookie.substring(prefix.length)) : null;
+                    };
+
+                    const loginError = params.get("loginError");
+                    if (loginError) {
+                      const loginErrorDescription = params.get("loginErrorDescription");
+                      const message = loginErrorDescription
+                        ? "로그인 실패: " + loginError + "\\n" + loginErrorDescription
+                        : "로그인 실패: " + loginError;
+                      window.setTimeout(() => alert(message), 100);
+                      params.delete("loginError");
+                      params.delete("loginErrorDescription");
+                      const nextQuery = params.toString();
+                      const nextUrl = nextQuery
+                        ? window.location.pathname + "?" + nextQuery + window.location.hash
+                        : window.location.pathname + window.location.hash;
+                      window.history.replaceState({}, "", nextUrl);
+                    }
+
+                    const csrfHeaders = (method) => {
+                      if (["GET", "HEAD", "OPTIONS"].includes(method)) {
+                        return {};
+                      }
+                      const token = readCookie("XSRF-TOKEN");
+                      return token ? { "X-XSRF-TOKEN": token } : {};
+                    };
+
                     const request = (url, method = "GET") =>
                       fetch(url, {
                         method,
                         credentials: "include",
-                        headers: { "Accept": "application/json" }
+                        headers: {
+                          "Accept": "application/json",
+                          ...csrfHeaders(method)
+                        }
                       });
 
                     const meBtn = document.getElementById("swagger-auth-me");
