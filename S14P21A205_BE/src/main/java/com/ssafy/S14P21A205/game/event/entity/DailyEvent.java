@@ -1,0 +1,41 @@
+package com.ssafy.S14P21A205.game.event.entity;
+
+import com.ssafy.S14P21A205.game.season.entity.Season;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.Table;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+
+@Getter
+@Entity
+@Table(name = "daily_event")
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+public class DailyEvent {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "season_event_id", nullable = false, updatable = false)
+    private Long id;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "season_id", nullable = false)
+    private Season season;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "event_id", nullable = false)
+    private RandomEvent event;
+
+    @Column(nullable = false)
+    private Integer day;
+
+    @Column(name = "news_title", nullable = false, length = 120)
+    private String newsTitle;
+}

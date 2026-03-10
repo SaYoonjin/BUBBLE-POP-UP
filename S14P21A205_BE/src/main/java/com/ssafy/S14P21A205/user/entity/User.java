@@ -42,10 +42,14 @@ public class User {
     @Column(nullable = false, length = 20)
     private UserRole role;
 
+    @Column(nullable = false)
+    private Integer point;
+
     public User(String email, String nickname) {
         this.email = email;
         this.nickname = normalizeNickname(nickname);
         this.role = UserRole.GENERAL;
+        this.point = 0;
     }
 
     private static String normalizeNickname(String nickname) {
