@@ -55,7 +55,17 @@ deploy-web:
     - rsync -az "$BACKEND_DIR/Dockerfile" "$BACKEND_DIR/.dockerignore" "$BACKEND_DIR/docker-compose.yml" "$WEB_USER@$WEB_SERVER_IP:$WEB_APP_DIR/"
     - rsync -az "$BACKEND_DIR/ops/" "$WEB_USER@$WEB_SERVER_IP:$WEB_APP_DIR/ops/"
     - scp "$BACKEND_DIR/build/libs/app.jar" "$WEB_USER@$WEB_SERVER_IP:$WEB_APP_DIR/build/libs/app.jar"
-    - echo "$PROD_ENV_FILE_B64" | base64 -d > .env.prod
+    - |
+      if [ -n "${PROD_ENV_FILE:-}" ]; then
+        printf '%s\n' "$PROD_ENV_FILE" > .env.prod
+      elif [ -n "${PROD_ENV_FILE_B64:-}" ]; then
+        printf '%s' "$PROD_ENV_FILE_B64" | base64 -d > .env.prod
+      else
+        echo "Missing PROD_ENV_FILE or PROD_ENV_FILE_B64"
+        exit 1
+      fi
+    - sed -i 's/\r$//' .env.prod
+    - grep '^NGINX_SERVER_NAME=' .env.prod
     - scp .env.prod "$WEB_USER@$WEB_SERVER_IP:$WEB_APP_DIR/.env.prod"
     - ssh "$WEB_USER@$WEB_SERVER_IP" "cd '$WEB_APP_DIR' && docker compose up -d --build --remove-orphans"
   rules:
