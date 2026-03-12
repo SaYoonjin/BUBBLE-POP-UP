@@ -7,10 +7,13 @@ import com.ssafy.S14P21A205.user.entity.User;
 import com.ssafy.S14P21A205.user.repository.OAuthIdentityRepository;
 import com.ssafy.S14P21A205.user.repository.UserRepository;
 import java.util.Locale;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
 import org.springframework.security.oauth2.core.user.OAuth2User;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -39,9 +42,10 @@ public class UserService {
             throw new BaseException(ErrorCode.UNAUTHORIZED);
         }
 
-        return oauthIdentityRepository.findByProviderAndProviderUserId(profile.provider(), profile.providerUserId())
+        User user = oauthIdentityRepository.findByProviderAndProviderUserId(profile.provider(), profile.providerUserId())
                 .map(OAuthIdentity::getUser)
                 .orElseGet(() -> createOrLinkUser(profile));
+        return loadUser(user);
     }
 
     /** 용도: 이메일 기준 닉네임 변경. */
@@ -63,10 +67,29 @@ public class UserService {
         return user;
     }
 
+    /** 용도: 현재 인증 사용자 조회. */
+    public User getCurrentUser(Authentication authentication) {
+        if (authentication instanceof OAuth2AuthenticationToken oauth2AuthenticationToken) {
+            return upsertFromAuthentication(oauth2AuthenticationToken);
+        }
+        if (authentication instanceof JwtAuthenticationToken jwtAuthenticationToken) {
+            return getRequiredUser(jwtAuthenticationToken.getToken().getSubject());
+        }
+        throw new BaseException(ErrorCode.UNAUTHORIZED);
+    }
+
+    /** 용도: 인증 사용자 기준 사용자 조회. */
+    public User getUser(String rawUserId, Authentication authentication) {
+        User currentUser = getCurrentUser(authentication);
+        validateSameUser(rawUserId, currentUser);
+        return currentUser;
+    }
+
     /** 용도: 인증 사용자 기준 닉네임 변경. */
     @Transactional
-    public User changeMyNickname(OAuth2AuthenticationToken authenticationToken, String rawNickname) {
-        User user = upsertFromAuthentication(authenticationToken);
+    public User changeNickname(String rawUserId, Authentication authentication, String rawNickname) {
+        User user = getCurrentUser(authentication);
+        validateSameUser(rawUserId, user);
         String nickname = rawNickname == null ? null : rawNickname.trim();
         if (!StringUtils.hasText(nickname) || nickname.length() > 30) {
             throw new BaseException(ErrorCode.INVALID_INPUT_VALUE);
@@ -167,6 +190,33 @@ public class UserService {
         } catch (DataIntegrityViolationException e) {
             return userRepository.findByEmail(email)
                     .orElseThrow(() -> e);
+        }
+    }
+
+    private User loadUser(User user) {
+        if (user == null || user.getId() == null) {
+            throw new BaseException(ErrorCode.UNAUTHORIZED);
+        }
+        return userRepository.findById(user.getId())
+                .orElseThrow(() -> new BaseException(ErrorCode.UNAUTHORIZED));
+    }
+
+    private void validateSameUser(String rawUserId, User user) {
+        if (user == null || user.getId() == null || !user.getId().toString().equals(rawUserId)) {
+            throw new BaseException(ErrorCode.UNAUTHORIZED);
+        }
+    }
+
+    private User getRequiredUser(String rawUserId) {
+        if (!StringUtils.hasText(rawUserId)) {
+            throw new BaseException(ErrorCode.UNAUTHORIZED);
+        }
+        try {
+            UUID userId = UUID.fromString(rawUserId);
+            return userRepository.findById(userId)
+                    .orElseThrow(() -> new BaseException(ErrorCode.UNAUTHORIZED));
+        } catch (IllegalArgumentException e) {
+            throw new BaseException(ErrorCode.UNAUTHORIZED);
         }
     }
 }
