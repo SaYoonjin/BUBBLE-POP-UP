@@ -5,6 +5,7 @@ import com.ssafy.S14P21A205.shop.dto.ShopItemListResponse;
 import com.ssafy.S14P21A205.shop.service.ShopService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -25,8 +26,12 @@ public class ShopController implements ShopControllerDoc {
 
     @GetMapping("/purchased")
     public ResponseEntity<PurchasedItemListResponse> getPurchasedItems(
-            @AuthenticationPrincipal(expression = "id") Long userId
+            Authentication authentication
     ) {
+        System.out.println("authentication.getName() = " + authentication.getName());
+        System.out.println("principal class = " + authentication.getPrincipal().getClass());
+
+        Long userId = Long.valueOf(authentication.getName());
         return ResponseEntity.ok(shopService.getPurchasedItems(userId));
     }
 }

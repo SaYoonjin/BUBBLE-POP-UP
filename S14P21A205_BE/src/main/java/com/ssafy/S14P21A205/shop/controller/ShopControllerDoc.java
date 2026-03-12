@@ -7,6 +7,7 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 
 @Tag(name = "Shop", description = "상점 API")
@@ -25,7 +26,6 @@ public interface ShopControllerDoc {
             security = @SecurityRequirement(name = "bearerAuth")
     )
     ResponseEntity<PurchasedItemListResponse> getPurchasedItems(
-            @Parameter(hidden = true)
-            @AuthenticationPrincipal(expression = "id") Long userId
+            @Parameter(hidden = true) Authentication authentication
     );
 }
