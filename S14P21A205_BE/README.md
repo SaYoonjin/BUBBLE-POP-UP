@@ -4,10 +4,10 @@
 
 ### 1-1. First setup
 ```bash
-cp env.template .env
+Fill `.env` with the shared local development values.
 ```
 
-Fill required values in `.env`:
+Required values in `.env`:
 - `GOOGLE_CLIENT_ID`
 - `GOOGLE_CLIENT_SECRET`
 
@@ -53,11 +53,7 @@ bash ops/scripts/setup_server_nginx.sh
 ```
 
 ### 2-1. Prepare env file
-Use template:
-```bash
-cp env.prod.template .env.prod
-```
-Set real values in `.env.prod`.
+Prepare `.env.prod` with the real deployment values.
 
 Required production values:
 - `DB_URL`, `DB_USERNAME`, `DB_PASSWORD` for RDS

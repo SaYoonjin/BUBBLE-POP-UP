@@ -18,7 +18,7 @@ spring:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
   datasource:
-    url: ${DB_URL:jdbc:mysql://localhost:13306/mydb?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul}
+    url: ${DB_URL:jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:13306}/${DB_NAME:mydb}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul}
     username: ${DB_USERNAME:myuser}
     password: ${DB_PASSWORD:mypassword}
     driver-class-name: com.mysql.cj.jdbc.Driver
