@@ -1,4 +1,4 @@
-package com.ssafy.S14P21A205.shop.api;
+package com.ssafy.S14P21A205.shop.controller;
 
 import com.ssafy.S14P21A205.shop.dto.ShopItemListResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -7,7 +7,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.ResponseEntity;
 
 @Tag(name = "Shop", description = "상점 API")
-public interface ShopApiDoc {
+public interface ShopControllerDoc {
 
     @Operation(
             summary = "상점 아이템 목록 조회",
