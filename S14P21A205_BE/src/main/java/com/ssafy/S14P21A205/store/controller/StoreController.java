@@ -2,7 +2,6 @@ package com.ssafy.S14P21A205.store.controller;
 
 import com.ssafy.S14P21A205.store.dto.StoreResponse;
 import com.ssafy.S14P21A205.store.service.StoreService;
-import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -18,7 +17,7 @@ public class StoreController implements StoreControllerDoc {
     @Override
     @GetMapping("/{userId}")
     public ResponseEntity<StoreResponse> getStore(
-            @PathVariable UUID userId
+            @PathVariable Integer userId
     ) {
         return ResponseEntity.ok(storeService.getStore(userId));
     }
