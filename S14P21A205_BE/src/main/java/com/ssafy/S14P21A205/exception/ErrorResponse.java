@@ -19,4 +19,8 @@ public record ErrorResponse(
     public ErrorResponse(ErrorCode errorCode, String path) {
         this(errorCode.getCode(), errorCode.getMessage(), Instant.now(), path);
     }
+
+    public ErrorResponse(ErrorCode errorCode, String message, String path) {
+        this(errorCode.getCode(), message, Instant.now(), path);
+    }
 }
