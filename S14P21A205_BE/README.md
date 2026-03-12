@@ -4,10 +4,10 @@
 
 ### 1-1. First setup
 ```bash
-cp env.template .env
+Fill `.env` with the shared local development values.
 ```
 
-Fill required values in `.env`:
+Required values in `.env`:
 - `GOOGLE_CLIENT_ID`
 - `GOOGLE_CLIENT_SECRET`
 
@@ -28,104 +28,97 @@ Optional values (when enabling SSAFY login):
 
 Notes:
 - This project includes Spring Boot Docker Compose integration.
-- `bootRun` automatically links local infra in `compose.yaml` (mysql/redis/kafka).
-- `compose.yaml` does not use fixed container names, so team members can still auto-start via `bootRun` without name conflicts.
+- `bootRun` automatically links local infra in `docker-compose.local.yml` when needed.
 - Do not commit `.env`.
 
 If startup fails due to leftover containers, clean with:
 ```bash
-docker compose -f compose.yaml down --remove-orphans
+docker compose -f docker-compose.local.yml down --remove-orphans
 ```
 and run `./gradlew bootRun` again.
 
-## 2) Production Server (Ubuntu + Nginx)
+## 2) Production Server (Ubuntu + Docker Compose)
 
 ### 2-0. Fast path (automated script)
-After preparing `app.jar` and `.env.prod`, run:
+After preparing deployment files and `.env.prod`, run:
 ```bash
-DOMAIN=pss6161.bunnect.kr APP_DIR=/home/ubuntu/S14P21A205 CERTBOT_EMAIL=you@example.com \
+DOMAIN=<YOUR_API_DOMAIN> APP_DIR=/home/ubuntu/S14P21A205 CERTBOT_EMAIL=you@example.com \
+bash ops/scripts/bootstrap_ec2.sh
+```
+
+Then upload the repo deployment files + `build/libs/app.jar` and run:
+```bash
+DOMAIN=<YOUR_API_DOMAIN> APP_DIR=/home/ubuntu/S14P21A205 CERTBOT_EMAIL=you@example.com \
 bash ops/scripts/setup_server_nginx.sh
 ```
 
 ### 2-1. Prepare env file
-Use template:
-```bash
-cp env.prod.template .env.prod
-```
-Set real values in `.env.prod`.
+Prepare `.env.prod` with the real deployment values.
+
+Required production values:
+- `DB_URL`, `DB_USERNAME`, `DB_PASSWORD` for RDS
+- `REDIS_HOST=redis`
+- `NGINX_SERVER_NAME`
+- `NGINX_SSL_CERT_PATH`
+- `NGINX_SSL_KEY_PATH`
+- OAuth client values
 
 ### 2-2. Prepare app binary
 ```bash
 ./gradlew clean bootJar
 ```
-Upload `build/libs/*.jar` to server as `/home/ubuntu/S14P21A205/app.jar`.
+Rename or copy the built jar as `build/libs/app.jar` before deploy.
 
-### 2-3. Register systemd service
+### 2-3. Bootstrap web server
 ```bash
-sudo cp ops/systemd/S14P21A205.service /etc/systemd/system/S14P21A205.service
-sudo systemctl daemon-reload
-sudo systemctl enable --now S14P21A205
-sudo systemctl status S14P21A205
+sudo DEPLOY_USER=ubuntu APP_DIR=/home/ubuntu/S14P21A205 \
+bash ops/scripts/bootstrap_ec2.sh
 ```
 
-### 2-4. Install Nginx + Certbot
+### 2-4. Upload deployment files
 ```bash
-sudo apt update
-sudo apt install -y nginx certbot python3-certbot-nginx
+rsync -az Dockerfile docker-compose.yml ops/ ubuntu@<WEB_SERVER_IP>:/home/ubuntu/S14P21A205/
+scp build/libs/app.jar ubuntu@<WEB_SERVER_IP>:/home/ubuntu/S14P21A205/build/libs/app.jar
+scp .env.prod ubuntu@<WEB_SERVER_IP>:/home/ubuntu/S14P21A205/.env.prod
 ```
 
-### 2-5. Apply Nginx HTTP proxy config
+### 2-5. Start HTTP container and issue certificate
 ```bash
-sudo cp ops/nginx/pss6161.bunnect.kr.http.conf /etc/nginx/sites-available/S14P21A205
-sudo ln -sf /etc/nginx/sites-available/S14P21A205 /etc/nginx/sites-enabled/S14P21A205
-sudo nginx -t
-sudo systemctl reload nginx
+DOMAIN=<YOUR_API_DOMAIN> APP_DIR=/home/ubuntu/S14P21A205 CERTBOT_EMAIL=you@example.com \
+bash /home/ubuntu/S14P21A205/ops/scripts/setup_server_nginx.sh
 ```
 
-### 2-6. Issue certificate
+### 2-6. Verify
 ```bash
-sudo certbot certonly --nginx -d pss6161.bunnect.kr
-```
-
-### 2-7. Switch to HTTPS config
-```bash
-sudo cp ops/nginx/pss6161.bunnect.kr.https.conf /etc/nginx/sites-available/S14P21A205
-sudo nginx -t
-sudo systemctl reload nginx
-```
-
-### 2-8. Verify
-```bash
-curl -I https://pss6161.bunnect.kr
+curl -I https://<YOUR_API_DOMAIN>
 ```
 
 ## 3) OAuth Redirect URI
 
 Google OAuth Client must include both:
 - `http://localhost:8080/login/oauth2/code/google`
-- `https://pss6161.bunnect.kr/login/oauth2/code/google`
+- `https://<YOUR_API_DOMAIN>/login/oauth2/code/google`
 
 SSAFY OAuth Client (if used) must include both:
 - `http://localhost:8080/login/oauth2/code/ssafy`
-- `https://pss6161.bunnect.kr/login/oauth2/code/ssafy`
+- `https://<YOUR_API_DOMAIN>/login/oauth2/code/ssafy`
 
 Login start API examples:
 - Google: `/api/v1/auth/login?provider=google`
 - SSAFY: `/api/v1/auth/login?provider=ssafy`
 
-## 4) GitLab CI/CD (Self-Hosted Runner)
+## 4) GitLab CI/CD (Self-Hosted Runner -> Web Server Docker Compose)
 
-This repo includes `.gitlab-ci.yml` with:
-- `build_jar`: build boot jar
-- `bootstrap_ec2` (manual, one-time): install server packages and prepare deploy permissions
-- `deploy_prod`: upload jar/env and restart `S14P21A205` service
+This repo includes `.gitlab-ci.yml` in the parent directory with:
+- `build-backend`: build `build/libs/app.jar`
+- `bootstrap-webserver` (manual, one-time): install Docker/Certbot on the web server
+- `deploy-web`: upload Docker deployment files and run `docker compose up -d --build`
 
 Required GitLab CI variables:
 - `SSH_PRIVATE_KEY`: private key for server SSH
-- `PROD_HOST`: EC2 public DNS/IP
-- `PROD_USER`: default `ubuntu`
-- `PROD_APP_DIR`: default `/home/ubuntu/S14P21A205`
+- `WEB_SERVER_IP`: EC2 public DNS/IP
+- `WEB_USER`: default `ubuntu`
+- `WEB_APP_DIR`: default `/home/ubuntu/S14P21A205`
 - `PROD_ENV_FILE_B64`: base64-encoded `.env.prod` content
-
-Optional variable:
-- `PROD_DOMAIN`: default `pss6161.bunnect.kr`
+- `WEB_DOMAIN`: API domain for certificate issue
+- `CERTBOT_EMAIL`: email for Let's Encrypt

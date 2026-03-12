@@ -6,16 +6,15 @@ This repository is a Spring Boot backend.
 - Main domains: `auth`, `user`, `config`, `security/handler`, `exception`
 - Resources/config: `src/main/resources` (`application.yml`, `banner.txt`)
 - Tests: `src/test/java/com/ssafy/S14P21A205`
-- DevOps/deploy files: `ops/scripts`, `ops/systemd`, `ops/nginx`
-- Local infrastructure: `compose.yaml`
-- Environment templates: `env.template`, `env.prod.template`
+- DevOps/deploy files: `ops/scripts`, `ops/nginx/docker`, `Dockerfile`, `docker-compose.yml`
+- Local infrastructure: `docker-compose.local.yml`
+- Environment files: `.env` for local, `.env.prod` for deployment
 
 ## Build, Test, and Development Commands
-- `cp env.template .env`: create local environment file.
 - `./gradlew bootRun`: run app locally (includes Spring Boot Docker Compose integration for local infra).
 - `./gradlew clean bootJar`: build deployable JAR to `build/libs/`.
 - `./gradlew test`: run unit/integration tests.
-- `docker compose -f compose.yaml down --remove-orphans`: clean stale local containers if startup conflicts occur.
+- `docker compose -f docker-compose.local.yml down --remove-orphans`: clean stale local containers if startup conflicts occur.
 
 ## Coding Style & Naming Conventions
 - Language/runtime: Java 17, Spring Boot 4.
@@ -44,6 +43,5 @@ This repository is a Spring Boot backend.
 
 ## Security & Configuration Tips
 - Never commit `.env` or real secrets.
-- Keep only placeholder values in template files.
 - `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are required for OAuth client startup.
 - Set `SPRING_DOCKER_COMPOSE_ENABLED=false` in production runtime environments.
