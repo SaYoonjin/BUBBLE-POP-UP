@@ -1,6 +1,7 @@
 package com.ssafy.S14P21A205.store.controller;
 
 import com.ssafy.S14P21A205.store.dto.LocationListResponse;
+import com.ssafy.S14P21A205.store.dto.MenuListResponse;
 import com.ssafy.S14P21A205.store.dto.StoreResponse;
 import com.ssafy.S14P21A205.store.dto.UpdateStoreLocationRequest;
 import com.ssafy.S14P21A205.store.dto.UpdateStoreLocationResponse;
@@ -43,6 +44,13 @@ public class StoreController implements StoreControllerDoc {
     public ResponseEntity<LocationListResponse> getLocations(Authentication authentication) {
         Integer userId = extractUserId(authentication);
         return ResponseEntity.ok(storeService.getLocations(userId));
+    }
+
+    @Override
+    @GetMapping("/menus")
+    public ResponseEntity<MenuListResponse> getMenus(Authentication authentication) {
+        Integer userId = extractUserId(authentication);
+        return ResponseEntity.ok(storeService.getMenus(userId));
     }
 
     private Integer extractUserId(Authentication authentication) {

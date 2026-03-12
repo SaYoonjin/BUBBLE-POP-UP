@@ -24,4 +24,6 @@ public interface StoreRepository extends JpaRepository<Store, Long> {
             @Param("storeId") Long storeId,
             @Param("category") ItemCategory category
     );
+
+    Optional<Store> findByUserId(Integer userId);
 }

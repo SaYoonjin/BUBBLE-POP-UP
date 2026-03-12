@@ -1,17 +1,21 @@
 package com.ssafy.S14P21A205.store.service;
 
 import com.ssafy.S14P21A205.shop.entity.ItemCategory;
+import com.ssafy.S14P21A205.shop.entity.Menu;
 import com.ssafy.S14P21A205.store.dto.LocationListResponse;
 import com.ssafy.S14P21A205.store.dto.LocationResponse;
+import com.ssafy.S14P21A205.store.dto.MenuListResponse;
 import com.ssafy.S14P21A205.store.dto.StoreResponse;
 import com.ssafy.S14P21A205.store.dto.UpdateStoreLocationRequest;
 import com.ssafy.S14P21A205.store.dto.UpdateStoreLocationResponse;
 import com.ssafy.S14P21A205.store.entity.Location;
 import com.ssafy.S14P21A205.store.entity.Store;
 import com.ssafy.S14P21A205.store.repository.LocationRepository;
+import com.ssafy.S14P21A205.store.repository.MenuRepository;
 import com.ssafy.S14P21A205.store.repository.StoreRepository;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
@@ -26,6 +30,7 @@ public class StoreServiceImpl implements StoreService {
 
     private final StoreRepository storeRepository;
     private final LocationRepository locationRepository;
+    private final MenuRepository menuRepository;
     private final StringRedisTemplate stringRedisTemplate;
 
     @Override
@@ -84,6 +89,26 @@ public class StoreServiceImpl implements StoreService {
         );
     }
 
+    @Override
+    public MenuListResponse getMenus(Integer userId) {
+        Store store = getStoreByUserId(userId);
+        Long storeId = store.getId();
+        float discount = getDisplayedIngredientDiscountRate(storeId).floatValue();
+
+        List<MenuListResponse.MenuInfo> menuInfos = menuRepository.findAllByOrderByIdAsc().stream()
+                .map(menu -> MenuListResponse.MenuInfo.builder()
+                        .menuId(Math.toIntExact(menu.getId()))
+                        .menuName(menu.getMenuName())
+                        .ingredientPrice(menu.getOriginPrice())
+                        .discount(discount)
+                        .build())
+                .toList();
+
+        return MenuListResponse.builder()
+                .menus(menuInfos)
+                .build();
+    }
+
     private Integer deductBalance(Long storeId, Integer amount) {
         String key = generateBalanceKey(storeId);
         String value = stringRedisTemplate.opsForValue().get(key);
@@ -116,6 +141,13 @@ public class StoreServiceImpl implements StoreService {
     private BigDecimal getDisplayedRentDiscountRate(Long storeId) {
         return normalizeDiscountRate(
                 storeRepository.findPurchasedDiscountRateByStoreIdAndCategory(storeId, ItemCategory.RENT)
+                        .orElse(BigDecimal.ZERO)
+        );
+    }
+
+    private BigDecimal getDisplayedIngredientDiscountRate(Long storeId) {
+        return normalizeDiscountRate(
+                storeRepository.findPurchasedDiscountRateByStoreIdAndCategory(storeId, ItemCategory.INGREDIENT)
                         .orElse(BigDecimal.ZERO)
         );
     }

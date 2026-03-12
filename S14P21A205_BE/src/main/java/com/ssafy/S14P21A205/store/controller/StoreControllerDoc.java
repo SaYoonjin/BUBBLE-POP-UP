@@ -2,6 +2,7 @@ package com.ssafy.S14P21A205.store.controller;
 
 import com.ssafy.S14P21A205.exception.ErrorResponse;
 import com.ssafy.S14P21A205.store.dto.LocationListResponse;
+import com.ssafy.S14P21A205.store.dto.MenuListResponse;
 import com.ssafy.S14P21A205.store.dto.StoreResponse;
 import com.ssafy.S14P21A205.store.dto.UpdateStoreLocationRequest;
 import com.ssafy.S14P21A205.store.dto.UpdateStoreLocationResponse;
@@ -101,6 +102,32 @@ public interface StoreControllerDoc {
             )
     })
     ResponseEntity<LocationListResponse> getLocations(
+            @Parameter(hidden = true) Authentication authentication
+    );
+
+    @Operation(
+            summary = "메뉴 목록 조회",
+            description = "사용자 매장과 INGREDIENT 할인권 정보를 반영한 전체 메뉴 목록을 조회합니다.",
+            security = @SecurityRequirement(name = "bearerAuth")
+    )
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "메뉴 목록 조회 성공",
+                    content = @Content(schema = @Schema(implementation = MenuListResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "401",
+                    description = "인증 필요",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "500",
+                    description = "메뉴 목록 조회 실패",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            )
+    })
+    ResponseEntity<MenuListResponse> getMenus(
             @Parameter(hidden = true) Authentication authentication
     );
 }
