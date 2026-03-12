@@ -43,6 +43,19 @@ services:
     volumes:
       - datanode_data:/hadoop/dfs/data
 
+  hdfs-init:
+    image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
+    container_name: hdfs-init
+    depends_on:
+      - namenode
+      - datanode
+    volumes:
+      - ./data:/local-data
+    env_file:
+      - ./hadoop.env
+    command: bash /local-data/init-hdfs.sh
+    restart: "no"
+
   spark-master:
     build:
       context: ./spark
