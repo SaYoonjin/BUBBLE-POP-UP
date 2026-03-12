@@ -19,10 +19,10 @@ This repository is a Spring Boot backend.
 ## Coding Style & Naming Conventions
 - Language/runtime: Java 17, Spring Boot 4.
 - Use consistent 4-space indentation and keep methods focused.
-- Package names are lowercase by domain (for example, `...auth.service`, `...user.api.v1`).
+- Package names are lowercase by domain (for example, `...auth.service`, `...user.controller`).
 - Class/record/enum names: `PascalCase`; methods/fields: `camelCase`.
 - DTO naming: `*Request`, `*Response`.
-- Keep API versioning under `/api/v1/...`.
+- Keep API paths consistent under `/api/...`.
 
 ## Testing Guidelines
 - Testing stack: JUnit 5 with Spring Boot test support.
