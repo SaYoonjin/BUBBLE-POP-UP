@@ -1,6 +1,7 @@
 package com.ssafy.S14P21A205.store.controller;
 
 import com.ssafy.S14P21A205.exception.ErrorResponse;
+import com.ssafy.S14P21A205.store.dto.LocationListResponse;
 import com.ssafy.S14P21A205.store.dto.StoreResponse;
 import com.ssafy.S14P21A205.store.dto.UpdateStoreLocationRequest;
 import com.ssafy.S14P21A205.store.dto.UpdateStoreLocationResponse;
@@ -12,73 +13,93 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import java.util.UUID;
 import org.springframework.http.ResponseEntity;
 
-@Tag(name = "Store", description = "내 매장 API")
+@Tag(name = "Store", description = "Store API")
 public interface StoreControllerDoc {
 
     @Operation(
-            summary = "내 매장 조회",
-            description = "사용자 ID로 매장 정보를 조회합니다.",
+            summary = "Get My Store",
+            description = "Returns the current store information from the authenticated store context.",
             security = @SecurityRequirement(name = "bearerAuth")
     )
     @ApiResponses({
             @ApiResponse(
                     responseCode = "200",
-                    description = "조회 성공",
+                    description = "Store lookup succeeded",
                     content = @Content(schema = @Schema(implementation = StoreResponse.class))
             ),
             @ApiResponse(
-                    responseCode = "400",
-                    description = "잘못된 사용자 ID 형식",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
-            ),
-            @ApiResponse(
                     responseCode = "401",
-                    description = "인증 필요",
+                    description = "Authentication required",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))
             ),
             @ApiResponse(
                     responseCode = "500",
-                    description = "매장 조회 실패",
+                    description = "Store lookup failed",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))
             )
     })
     ResponseEntity<StoreResponse> getStore(
-            @Parameter(description = "조회할 사용자 ID")
-            UUID userId
+            @Parameter(hidden = true) Long storeId
     );
 
     @Operation(
-            summary = "매장 위치 변경",
-            description = "현재 로그인한 사용자의 매장 위치를 변경합니다.",
+            summary = "Update Store Location",
+            description = "Updates the location of the authenticated store.",
             security = @SecurityRequirement(name = "bearerAuth")
     )
     @ApiResponses({
             @ApiResponse(
                     responseCode = "200",
-                    description = "위치 변경 성공",
+                    description = "Location update succeeded",
                     content = @Content(schema = @Schema(implementation = UpdateStoreLocationResponse.class))
             ),
             @ApiResponse(
                     responseCode = "400",
-                    description = "잘못된 요청",
+                    description = "Invalid request",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))
             ),
             @ApiResponse(
                     responseCode = "401",
-                    description = "인증 필요",
+                    description = "Authentication required",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))
             ),
             @ApiResponse(
                     responseCode = "500",
-                    description = "위치 변경 실패",
+                    description = "Location update failed",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))
             )
     })
     ResponseEntity<UpdateStoreLocationResponse> updateStoreLocation(
-            @Parameter(description = "위치 변경 요청")
+            @Parameter(hidden = true) Long storeId,
+            @Parameter(description = "Location update payload")
             UpdateStoreLocationRequest request
+    );
+
+    @Operation(
+            summary = "Get Location List",
+            description = "Returns the available location list for the authenticated store.",
+            security = @SecurityRequirement(name = "bearerAuth")
+    )
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "Location list lookup succeeded",
+                    content = @Content(schema = @Schema(implementation = LocationListResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "401",
+                    description = "Authentication required",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "500",
+                    description = "Location list lookup failed",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            )
+    })
+    ResponseEntity<LocationListResponse> getLocations(
+            @Parameter(hidden = true) Long storeId
     );
 }
