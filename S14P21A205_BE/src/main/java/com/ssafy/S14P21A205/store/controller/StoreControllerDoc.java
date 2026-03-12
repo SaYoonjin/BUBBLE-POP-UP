@@ -10,7 +10,6 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import java.util.UUID;
 import org.springframework.http.ResponseEntity;
 
 @Tag(name = "Store", description = "내 매장 API")
@@ -44,6 +43,6 @@ public interface StoreControllerDoc {
             )
     })
     ResponseEntity<StoreResponse> getStore(
-            @Parameter(description = "조회할 사용자 ID") UUID userId
+            @Parameter(description = "조회할 사용자 ID") Integer userId
     );
 }
