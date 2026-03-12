@@ -54,4 +54,8 @@ public class Store {
     @UpdateTimestamp
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
+
+    public void changeLocation(Location location) {
+        this.location = location;
+    }
 }

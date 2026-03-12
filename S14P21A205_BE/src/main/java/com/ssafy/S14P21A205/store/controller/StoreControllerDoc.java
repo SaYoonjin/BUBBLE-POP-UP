@@ -2,6 +2,8 @@ package com.ssafy.S14P21A205.store.controller;
 
 import com.ssafy.S14P21A205.exception.ErrorResponse;
 import com.ssafy.S14P21A205.store.dto.StoreResponse;
+import com.ssafy.S14P21A205.store.dto.UpdateStoreLocationRequest;
+import com.ssafy.S14P21A205.store.dto.UpdateStoreLocationResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -44,6 +46,39 @@ public interface StoreControllerDoc {
             )
     })
     ResponseEntity<StoreResponse> getStore(
-            @Parameter(description = "조회할 사용자 ID") UUID userId
+            @Parameter(description = "조회할 사용자 ID")
+            UUID userId
+    );
+
+    @Operation(
+            summary = "매장 위치 변경",
+            description = "현재 로그인한 사용자의 매장 위치를 변경합니다.",
+            security = @SecurityRequirement(name = "bearerAuth")
+    )
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "위치 변경 성공",
+                    content = @Content(schema = @Schema(implementation = UpdateStoreLocationResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "잘못된 요청",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "401",
+                    description = "인증 필요",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "500",
+                    description = "위치 변경 실패",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            )
+    })
+    ResponseEntity<UpdateStoreLocationResponse> updateStoreLocation(
+            @Parameter(description = "위치 변경 요청")
+            UpdateStoreLocationRequest request
     );
 }
