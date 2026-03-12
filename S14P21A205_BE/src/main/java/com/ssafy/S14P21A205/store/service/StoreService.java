@@ -7,9 +7,9 @@ import com.ssafy.S14P21A205.store.dto.UpdateStoreLocationResponse;
 
 public interface StoreService {
 
-    StoreResponse getStore(Long userId);
+    StoreResponse getStore(Integer userId);
 
-    UpdateStoreLocationResponse updateStoreLocation(Long userId, UpdateStoreLocationRequest request);
+    UpdateStoreLocationResponse updateStoreLocation(Integer userId, UpdateStoreLocationRequest request);
 
-    LocationListResponse getLocations(Long userId);
+    LocationListResponse getLocations(Integer userId);
 }

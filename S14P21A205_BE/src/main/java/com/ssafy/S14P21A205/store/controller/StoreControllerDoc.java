@@ -14,14 +14,14 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.core.Authentication;
 
 @Tag(name = "Store", description = "매장 API")
 public interface StoreControllerDoc {
 
     @Operation(
             summary = "내 매장 조회",
-            description = "현재 로그인한 사용자의 매장 정보를 조회합니다.",
+            description = "인증된 사용자의 매장 정보를 조회합니다.",
             security = @SecurityRequirement(name = "bearerAuth")
     )
     @ApiResponses({
@@ -42,12 +42,12 @@ public interface StoreControllerDoc {
             )
     })
     ResponseEntity<StoreResponse> getStore(
-            @Parameter(hidden = true) Jwt jwt
+            @Parameter(hidden = true) Authentication authentication
     );
 
     @Operation(
             summary = "매장 위치 변경",
-            description = "현재 로그인한 사용자의 매장 위치를 변경합니다.",
+            description = "인증된 사용자의 매장 위치를 변경합니다.",
             security = @SecurityRequirement(name = "bearerAuth")
     )
     @ApiResponses({
@@ -73,14 +73,14 @@ public interface StoreControllerDoc {
             )
     })
     ResponseEntity<UpdateStoreLocationResponse> updateStoreLocation(
-            @Parameter(hidden = true) Jwt jwt,
+            @Parameter(hidden = true) Authentication authentication,
             @Parameter(description = "위치 변경 요청")
             UpdateStoreLocationRequest request
     );
 
     @Operation(
             summary = "지역 목록 조회",
-            description = "현재 로그인한 사용자의 매장 아이템 정보를 반영하여 지역 목록을 조회합니다.",
+            description = "사용자 매장과 RENT 할인권 정보를 반영한 지역 목록을 조회합니다.",
             security = @SecurityRequirement(name = "bearerAuth")
     )
     @ApiResponses({
@@ -101,6 +101,6 @@ public interface StoreControllerDoc {
             )
     })
     ResponseEntity<LocationListResponse> getLocations(
-            @Parameter(hidden = true) Jwt jwt
+            @Parameter(hidden = true) Authentication authentication
     );
 }

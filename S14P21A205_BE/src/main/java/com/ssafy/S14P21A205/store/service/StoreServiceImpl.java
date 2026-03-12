@@ -29,7 +29,7 @@ public class StoreServiceImpl implements StoreService {
     private final StringRedisTemplate stringRedisTemplate;
 
     @Override
-    public StoreResponse getStore(Long userId) {
+    public StoreResponse getStore(Integer userId) {
         Store store = getStoreByUserId(userId);
 
         return new StoreResponse(
@@ -42,11 +42,11 @@ public class StoreServiceImpl implements StoreService {
 
     @Override
     @Transactional
-    public UpdateStoreLocationResponse updateStoreLocation(Long userId, UpdateStoreLocationRequest request) {
+    public UpdateStoreLocationResponse updateStoreLocation(Integer userId, UpdateStoreLocationRequest request) {
         Store store = getStoreByUserId(userId);
         Long storeId = store.getId();
 
-        BigDecimal rentDiscountRate = getRentDiscountRate(storeId);
+        BigDecimal rentDiscountMultiplier = getRentDiscountMultiplier(storeId);
 
         Location location = locationRepository.findById(request.locationId())
                 .orElseThrow(() -> new RuntimeException("지역을 찾을 수 없습니다."));
@@ -55,7 +55,7 @@ public class StoreServiceImpl implements StoreService {
             throw new RuntimeException("이미 해당 지역에 매장이 위치해 있습니다.");
         }
 
-        Integer discountedRent = applyDiscount(location.getRent(), rentDiscountRate);
+        Integer discountedRent = applyDiscount(location.getRent(), rentDiscountMultiplier);
         Integer updatedBalance = deductBalance(storeId, discountedRent);
 
         store.changeLocation(location);
@@ -67,12 +67,10 @@ public class StoreServiceImpl implements StoreService {
     }
 
     @Override
-    public LocationListResponse getLocations(Long userId) {
+    public LocationListResponse getLocations(Integer userId) {
         Store store = getStoreByUserId(userId);
         Long storeId = store.getId();
-
-        BigDecimal rentDiscountRate = getRentDiscountRate(storeId);
-        float discount = rentDiscountRate.floatValue();
+        float discount = getDisplayedRentDiscountRate(storeId).floatValue();
 
         return new LocationListResponse(
                 locationRepository.findAllByOrderByIdAsc().stream()
@@ -110,17 +108,23 @@ public class StoreServiceImpl implements StoreService {
         return BALANCE_KEY_PREFIX + storeId;
     }
 
-    private BigDecimal getRentDiscountRate(Long storeId) {
-        return storeRepository
-                .findPurchasedDiscountRateByStoreIdAndCategory(storeId, ItemCategory.RENT)
+    private BigDecimal getRentDiscountMultiplier(Long storeId) {
+        return storeRepository.findPurchasedDiscountRateByStoreIdAndCategory(storeId, ItemCategory.RENT)
                 .orElse(BigDecimal.ONE);
     }
 
-    private Integer applyDiscount(Integer amount, BigDecimal discountRate) {
-        BigDecimal normalizedDiscountRate = normalizeDiscountRate(discountRate);
+    private BigDecimal getDisplayedRentDiscountRate(Long storeId) {
+        return normalizeDiscountRate(
+                storeRepository.findPurchasedDiscountRateByStoreIdAndCategory(storeId, ItemCategory.RENT)
+                        .orElse(BigDecimal.ZERO)
+        );
+    }
+
+    private Integer applyDiscount(Integer amount, BigDecimal discountMultiplier) {
+        BigDecimal normalizedDiscountMultiplier = normalizeDiscountRate(discountMultiplier);
 
         BigDecimal discountedAmount = BigDecimal.valueOf(amount)
-                .multiply(normalizedDiscountRate)
+                .multiply(normalizedDiscountMultiplier)
                 .setScale(0, RoundingMode.HALF_UP);
 
         return discountedAmount.intValue();
@@ -128,7 +132,7 @@ public class StoreServiceImpl implements StoreService {
 
     private BigDecimal normalizeDiscountRate(BigDecimal discountRate) {
         if (discountRate == null || discountRate.signum() <= 0) {
-            return BigDecimal.ONE;
+            return BigDecimal.ZERO;
         }
 
         if (discountRate.compareTo(BigDecimal.ONE) > 0) {
@@ -138,7 +142,7 @@ public class StoreServiceImpl implements StoreService {
         return discountRate;
     }
 
-    private Store getStoreByUserId(Long userId) {
+    private Store getStoreByUserId(Integer userId) {
         return storeRepository.findByUser_Id(userId)
                 .orElseThrow(() -> new RuntimeException("매장을 찾을 수 없습니다."));
     }

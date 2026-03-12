@@ -10,7 +10,7 @@ import org.springframework.data.repository.query.Param;
 
 public interface StoreRepository extends JpaRepository<Store, Long> {
 
-    Optional<Store> findByUser_Id(Long userId);
+    Optional<Store> findByUser_Id(Integer userId);
 
     @Query("""
             select item.discountRate

@@ -7,9 +7,12 @@ import com.ssafy.S14P21A205.store.dto.UpdateStoreLocationResponse;
 import com.ssafy.S14P21A205.store.service.StoreService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.oauth2.jwt.Jwt;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/stores")
@@ -20,51 +23,42 @@ public class StoreController implements StoreControllerDoc {
 
     @Override
     @GetMapping
-    public ResponseEntity<StoreResponse> getStore(
-            @AuthenticationPrincipal Jwt jwt
-    ) {
-        Long userId = extractUserId(jwt);
+    public ResponseEntity<StoreResponse> getStore(Authentication authentication) {
+        Integer userId = extractUserId(authentication);
         return ResponseEntity.ok(storeService.getStore(userId));
     }
 
     @Override
     @PatchMapping("/location")
     public ResponseEntity<UpdateStoreLocationResponse> updateStoreLocation(
-            @AuthenticationPrincipal Jwt jwt,
+            Authentication authentication,
             @RequestBody UpdateStoreLocationRequest request
     ) {
-        Long userId = extractUserId(jwt);
+        Integer userId = extractUserId(authentication);
         return ResponseEntity.ok(storeService.updateStoreLocation(userId, request));
     }
 
     @Override
     @GetMapping("/locations")
-    public ResponseEntity<LocationListResponse> getLocations(
-            @AuthenticationPrincipal Jwt jwt
-    ) {
-        Long userId = extractUserId(jwt);
+    public ResponseEntity<LocationListResponse> getLocations(Authentication authentication) {
+        Integer userId = extractUserId(authentication);
         return ResponseEntity.ok(storeService.getLocations(userId));
     }
 
-    private Long extractUserId(Jwt jwt) {
-        Object userIdClaim = jwt.getClaim("userId");
-
-        if (userIdClaim == null) {
-            throw new RuntimeException("JWT에 userId 클레임이 없습니다.");
+    private Integer extractUserId(Authentication authentication) {
+        if (authentication == null || !authentication.isAuthenticated()) {
+            throw new RuntimeException("인증 정보가 없습니다.");
         }
 
-        if (userIdClaim instanceof Long value) {
-            return value;
+        String rawUserId = authentication.getName();
+        if (rawUserId == null || rawUserId.isBlank()) {
+            throw new RuntimeException("userId가 없습니다.");
         }
 
-        if (userIdClaim instanceof Integer value) {
-            return value.longValue();
+        try {
+            return Integer.valueOf(rawUserId);
+        } catch (NumberFormatException e) {
+            throw new RuntimeException("userId 형식이 올바르지 않습니다.");
         }
-
-        if (userIdClaim instanceof String value) {
-            return Long.valueOf(value);
-        }
-
-        throw new RuntimeException("JWT의 userId 클레임 형식이 올바르지 않습니다.");
     }
 }
