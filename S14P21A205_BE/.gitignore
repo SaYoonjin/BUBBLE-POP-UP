@@ -43,3 +43,6 @@ out/
 # Windows ADS artifacts
 *:Zone.Identifier
 *_Zone.Identifier
+
+# Spark jars (downloaded at docker build time)
+spark/jars/

@@ -65,17 +65,15 @@ server:
   forward-headers-strategy: framework
 # endregion
 
-# region ===== Swagger =====
-springdoc:
-  swagger-ui:
-    path: /swagger-ui/index.html
-# endregion
-
 # region ===== Auth Redirect Policy =====
 app:
   auth:
     default-redirect-url: ${APP_AUTH_DEFAULT_REDIRECT_URL:/swagger-ui/index.html}
     allowed-redirect-origins: ${APP_AUTH_ALLOWED_REDIRECT_ORIGINS:http://localhost:8080,http://127.0.0.1:8080}
+  jwt:
+    secret: ${JWT_SECRET:}
+    access-token-ttl: ${JWT_ACCESS_TOKEN_TTL:PT30M}
+    refresh-token-ttl: ${JWT_REFRESH_TOKEN_TTL:P14D}
 # endregion
 
 # region ===== Dotenv =====

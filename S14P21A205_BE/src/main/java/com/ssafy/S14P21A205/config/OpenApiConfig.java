@@ -1,7 +1,9 @@
 package com.ssafy.S14P21A205.config;
 
 import io.swagger.v3.oas.models.OpenAPI;
+import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.info.Info;
+import io.swagger.v3.oas.models.security.SecurityScheme;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -13,9 +15,16 @@ public class OpenApiConfig {
     @Bean
     public OpenAPI openAPI() {
         return new OpenAPI()
+                .components(new Components().addSecuritySchemes(
+                        "bearerAuth",
+                        new SecurityScheme()
+                                .type(SecurityScheme.Type.HTTP)
+                                .scheme("bearer")
+                                .bearerFormat("JWT")
+                ))
                 .info(new Info()
                         .title("S14P21A205 API")
                         .version("v1")
-                        .description("Swagger 상단의 Google 로그인 버튼으로 인증 후 Try it out을 사용할 수 있습니다."));
+                        .description("Swagger 상단의 OAuth 로그인 버튼으로 JWT를 발급받은 뒤 Try it out을 사용할 수 있습니다."));
     }
 }
