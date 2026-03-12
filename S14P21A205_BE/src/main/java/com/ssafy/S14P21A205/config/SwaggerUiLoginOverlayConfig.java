@@ -68,31 +68,82 @@ public class SwaggerUiLoginOverlayConfig {
     private static String swaggerLoginBarHtml() {
         return """
                 <div id="swagger-auth-bar" style="position: sticky; top: 0; z-index: 9999; background: #111; color: #fff; padding: 10px 12px; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, 'Apple SD Gothic Neo', 'Noto Sans KR'; display: flex; gap: 10px; align-items: center;">
-                  <a href="/api/v1/auth/login?redirect=/swagger-ui/index.html" style="display: inline-flex; align-items: center; gap: 8px; background: #4285F4; color: #fff; border-radius: 10px; padding: 8px 10px; text-decoration: none; font-size: 13px; font-weight: 600;">
+                  <a href="/api/auth/login?redirect=/swagger-ui/index.html" style="display: inline-flex; align-items: center; gap: 8px; background: #4285F4; color: #fff; border-radius: 10px; padding: 8px 10px; text-decoration: none; font-size: 13px; font-weight: 600;">
                     Google 로그인
                   </a>
-                  <a href="/api/v1/auth/login?provider=ssafy&redirect=/swagger-ui/index.html" style="display: inline-flex; align-items: center; gap: 8px; background: #00A86B; color: #fff; border-radius: 10px; padding: 8px 10px; text-decoration: none; font-size: 13px; font-weight: 600;">
+                  <a href="/api/auth/login?provider=ssafy&redirect=/swagger-ui/index.html" style="display: inline-flex; align-items: center; gap: 8px; background: #00A86B; color: #fff; border-radius: 10px; padding: 8px 10px; text-decoration: none; font-size: 13px; font-weight: 600;">
                     SSAFY 로그인
                   </a>
                   <button id="swagger-auth-me" type="button" style="background: #fff; color: #111; border: 1px solid rgba(255,255,255,0.15); border-radius: 10px; padding: 8px 10px; font-size: 13px; cursor: pointer;">
                     내 정보
                   </button>
+                  <button id="swagger-auth-refresh" type="button" style="background: #f6c344; color: #111; border: 1px solid rgba(255,255,255,0.15); border-radius: 10px; padding: 8px 10px; font-size: 13px; cursor: pointer;">
+                    토큰 재발급
+                  </button>
                   <button id="swagger-auth-logout" type="button" style="background: transparent; color: #fff; border: 1px solid rgba(255,255,255,0.25); border-radius: 10px; padding: 8px 10px; font-size: 13px; cursor: pointer;">
                     Logout
                   </button>
                   <span style="margin-left: auto; opacity: 0.85; font-size: 12px;">
-                    세션 쿠키 기반 인증
+                    Access JWT + HttpOnly refresh 쿠키
                   </span>
                 </div>
                 <script>
                   (() => {
+                    const ACCESS_TOKEN_KEY = "swaggerAccessToken";
                     const params = new URLSearchParams(window.location.search);
-                    const readCookie = (name) => {
-                      const prefix = name + "=";
-                      const cookie = document.cookie
-                        .split("; ")
-                        .find((value) => value.startsWith(prefix));
-                      return cookie ? decodeURIComponent(cookie.substring(prefix.length)) : null;
+
+                    const getAccessToken = () => window.localStorage.getItem(ACCESS_TOKEN_KEY);
+                    const getJwtPayload = () => {
+                      const accessToken = getAccessToken();
+                      if (!accessToken) {
+                        return null;
+                      }
+                      const parts = accessToken.split(".");
+                      if (parts.length !== 3) {
+                        return null;
+                      }
+                      try {
+                        const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+                        const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
+                        return JSON.parse(atob(padded));
+                      } catch (error) {
+                        return null;
+                      }
+                    };
+                    const setTokens = (accessToken) => {
+                      if (accessToken) {
+                        window.localStorage.setItem(ACCESS_TOKEN_KEY, accessToken);
+                      }
+                    };
+                    const clearTokens = () => {
+                      window.localStorage.removeItem(ACCESS_TOKEN_KEY);
+                    };
+                    const stripHash = () => window.history.replaceState({}, "", window.location.pathname + window.location.search);
+                    const saveTokensFromHash = () => {
+                      const rawHash = window.location.hash.startsWith("#")
+                        ? window.location.hash.substring(1)
+                        : window.location.hash;
+                      if (!rawHash) {
+                        return;
+                      }
+                      const hashParams = new URLSearchParams(rawHash);
+                      const accessToken = hashParams.get("accessToken");
+                      if (accessToken) {
+                        setTokens(accessToken);
+                        stripHash();
+                      }
+                    };
+                    const applySwaggerToken = () => {
+                      const accessToken = getAccessToken();
+                      if (!accessToken || !window.ui || !window.ui.preauthorizeApiKey) {
+                        return false;
+                      }
+                      try {
+                        window.ui.preauthorizeApiKey("bearerAuth", accessToken);
+                        return true;
+                      } catch (error) {
+                        return false;
+                      }
                     };
 
                     const loginError = params.get("loginError");
@@ -111,28 +162,45 @@ public class SwaggerUiLoginOverlayConfig {
                       window.history.replaceState({}, "", nextUrl);
                     }
 
-                    const csrfHeaders = (method) => {
-                      if (["GET", "HEAD", "OPTIONS"].includes(method)) {
-                        return {};
-                      }
-                      const token = readCookie("XSRF-TOKEN");
-                      return token ? { "X-XSRF-TOKEN": token } : {};
-                    };
+                    saveTokensFromHash();
 
-                    const request = (url, method = "GET") =>
-                      fetch(url, {
+                    let tries = 0;
+                    const interval = window.setInterval(() => {
+                      tries += 1;
+                      if (applySwaggerToken() || tries > 40) {
+                        window.clearInterval(interval);
+                      }
+                    }, 500);
+
+                    const request = (url, method = "GET", body) => {
+                      const headers = {
+                        "Accept": "application/json"
+                      };
+                      const accessToken = getAccessToken();
+                      if (accessToken) {
+                        headers["Authorization"] = "Bearer " + accessToken;
+                      }
+                      if (body !== undefined) {
+                        headers["Content-Type"] = "application/json";
+                      }
+                      return fetch(url, {
                         method,
                         credentials: "include",
-                        headers: {
-                          "Accept": "application/json",
-                          ...csrfHeaders(method)
-                        }
+                        headers,
+                        body: body === undefined ? undefined : JSON.stringify(body)
                       });
+                    };
 
                     const meBtn = document.getElementById("swagger-auth-me");
                     if (meBtn) {
                       meBtn.addEventListener("click", async () => {
-                        const response = await request("/api/v1/auth/me");
+                        const payload = getJwtPayload();
+                        const userId = payload && payload.sub;
+                        if (!userId) {
+                          alert("access token에서 사용자 ID를 읽을 수 없습니다. 다시 로그인해주세요.");
+                          return;
+                        }
+                        const response = await request("/api/users/" + encodeURIComponent(userId));
                         if (!response.ok) {
                           alert("인증 상태를 확인해주세요. HTTP " + response.status);
                           return;
@@ -142,10 +210,26 @@ public class SwaggerUiLoginOverlayConfig {
                       });
                     }
 
+                    const refreshBtn = document.getElementById("swagger-auth-refresh");
+                    if (refreshBtn) {
+                      refreshBtn.addEventListener("click", async () => {
+                        const response = await request("/api/auth/refresh", "POST");
+                        if (!response.ok) {
+                          alert("토큰 재발급에 실패했습니다. HTTP " + response.status);
+                          return;
+                        }
+                        const body = await response.json();
+                        setTokens(body.accessToken);
+                        applySwaggerToken();
+                        alert("토큰 재발급 완료");
+                      });
+                    }
+
                     const logoutBtn = document.getElementById("swagger-auth-logout");
                     if (logoutBtn) {
                       logoutBtn.addEventListener("click", async () => {
-                        await request("/api/v1/auth/logout", "POST");
+                        await request("/api/auth/logout", "POST");
+                        clearTokens();
                         window.location.reload();
                       });
                     }
