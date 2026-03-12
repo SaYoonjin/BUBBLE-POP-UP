@@ -48,4 +48,16 @@ public class Order {
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
+
+    private Order(Menu menu, Store store, Integer quantity, Integer totalCost, Integer orderedDay) {
+        this.menu = menu;
+        this.store = store;
+        this.quantity = quantity;
+        this.totalCost = totalCost;
+        this.orderedDay = orderedDay;
+    }
+
+    public static Order create(Menu menu, Store store, Integer quantity, Integer totalCost, Integer orderedDay) {
+        return new Order(menu, store, quantity, totalCost, orderedDay);
+    }
 }
