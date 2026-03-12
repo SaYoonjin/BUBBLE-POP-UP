@@ -10,11 +10,12 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/v1/stores")
 @RequiredArgsConstructor
-public class StoreController {
+public class StoreController implements StoreControllerDoc {
 
     private final StoreService storeService;
 
     // 내 매장 조회
+    @Override
     @GetMapping("/{userId}")
     public ResponseEntity<StoreResponse> getStore(
             @PathVariable UUID userId
