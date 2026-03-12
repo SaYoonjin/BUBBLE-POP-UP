@@ -8,6 +8,7 @@ import com.ssafy.S14P21A205.store.service.StoreService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -17,31 +18,53 @@ public class StoreController implements StoreControllerDoc {
 
     private final StoreService storeService;
 
-    // 내 매장 조회
     @Override
     @GetMapping
     public ResponseEntity<StoreResponse> getStore(
-            @AuthenticationPrincipal(expression = "storeId") Long storeId
+            @AuthenticationPrincipal Jwt jwt
     ) {
-        return ResponseEntity.ok(storeService.getStore(storeId));
+        Long userId = extractUserId(jwt);
+        return ResponseEntity.ok(storeService.getStore(userId));
     }
 
-    // 팝업 이전
     @Override
     @PatchMapping("/location")
     public ResponseEntity<UpdateStoreLocationResponse> updateStoreLocation(
-            @AuthenticationPrincipal(expression = "storeId") Long storeId,
+            @AuthenticationPrincipal Jwt jwt,
             @RequestBody UpdateStoreLocationRequest request
     ) {
-        return ResponseEntity.ok(storeService.updateStoreLocation(storeId, request));
+        Long userId = extractUserId(jwt);
+        return ResponseEntity.ok(storeService.updateStoreLocation(userId, request));
     }
 
-    // 지역 목록 조회
     @Override
     @GetMapping("/locations")
     public ResponseEntity<LocationListResponse> getLocations(
-            @AuthenticationPrincipal(expression = "storeId") Long storeId
+            @AuthenticationPrincipal Jwt jwt
     ) {
-        return ResponseEntity.ok(storeService.getLocations(storeId));
+        Long userId = extractUserId(jwt);
+        return ResponseEntity.ok(storeService.getLocations(userId));
+    }
+
+    private Long extractUserId(Jwt jwt) {
+        Object userIdClaim = jwt.getClaim("userId");
+
+        if (userIdClaim == null) {
+            throw new RuntimeException("JWT에 userId 클레임이 없습니다.");
+        }
+
+        if (userIdClaim instanceof Long value) {
+            return value;
+        }
+
+        if (userIdClaim instanceof Integer value) {
+            return value.longValue();
+        }
+
+        if (userIdClaim instanceof String value) {
+            return Long.valueOf(value);
+        }
+
+        throw new RuntimeException("JWT의 userId 클레임 형식이 올바르지 않습니다.");
     }
 }
