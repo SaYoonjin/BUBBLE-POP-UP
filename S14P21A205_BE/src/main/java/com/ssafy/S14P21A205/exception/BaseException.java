@@ -15,12 +15,22 @@ public class BaseException extends RuntimeException {
         this.errorCode = errorCode;
     }
 
+    public BaseException(ErrorCode errorCode, String message) {
+        super(message);
+        this.errorCode = errorCode;
+    }
+
     /** 용도: 원인 예외 포함 생성. */
     public BaseException(ErrorCode errorCode, Throwable cause) {
         super(errorCode.getMessage(), cause);
         this.errorCode = errorCode;
     }
 
+    public BaseException(ErrorCode errorCode, String message, Throwable cause) {
+        super(message, cause);
+        this.errorCode = errorCode;
+    }
+    
     /** 용도: ErrorCode의 HTTP 상태 반환. */
     public HttpStatus getHttpStatus() {
         return errorCode.getHttpStatus();
