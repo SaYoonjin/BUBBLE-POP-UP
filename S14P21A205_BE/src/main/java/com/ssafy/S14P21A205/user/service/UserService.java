@@ -7,7 +7,6 @@ import com.ssafy.S14P21A205.user.entity.User;
 import com.ssafy.S14P21A205.user.repository.OAuthIdentityRepository;
 import com.ssafy.S14P21A205.user.repository.UserRepository;
 import java.util.Locale;
-import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.core.Authentication;
@@ -212,10 +211,10 @@ public class UserService {
             throw new BaseException(ErrorCode.UNAUTHORIZED);
         }
         try {
-            UUID userId = UUID.fromString(rawUserId);
+            Integer userId = Integer.parseInt(rawUserId);
             return userRepository.findById(userId)
                     .orElseThrow(() -> new BaseException(ErrorCode.UNAUTHORIZED));
-        } catch (IllegalArgumentException e) {
+        } catch (NumberFormatException e) {
             throw new BaseException(ErrorCode.UNAUTHORIZED);
         }
     }
