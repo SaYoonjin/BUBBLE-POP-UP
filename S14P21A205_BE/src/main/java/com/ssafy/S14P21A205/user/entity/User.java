@@ -5,15 +5,14 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Index;
 import jakarta.persistence.Table;
-import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import org.hibernate.annotations.UuidGenerator;
 
 @Getter
 @Entity
@@ -27,10 +26,9 @@ import org.hibernate.annotations.UuidGenerator;
 public class User {
 
     @Id
-    @GeneratedValue
-    @UuidGenerator
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(nullable = false, updatable = false)
-    private UUID id;
+    private Integer id;
 
     @Column(nullable = false, length = 320)
     private String email;

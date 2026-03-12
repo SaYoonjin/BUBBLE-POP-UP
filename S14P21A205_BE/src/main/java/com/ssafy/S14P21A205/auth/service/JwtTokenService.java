@@ -190,10 +190,10 @@ public class JwtTokenService {
             throw new BaseException(ErrorCode.UNAUTHORIZED);
         }
         try {
-            UUID userId = UUID.fromString(rawUserId);
+            Integer userId = Integer.parseInt(rawUserId);
             return userRepository.findById(userId)
                     .orElseThrow(() -> new BaseException(ErrorCode.UNAUTHORIZED));
-        } catch (IllegalArgumentException e) {
+        } catch (NumberFormatException e) {
             throw new BaseException(ErrorCode.UNAUTHORIZED);
         }
     }
