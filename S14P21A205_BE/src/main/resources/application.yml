@@ -65,6 +65,17 @@ server:
   forward-headers-strategy: framework
 # endregion
 
+# region ===== Actuator / Prometheus =====
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus
+  endpoint:
+    health:
+      show-details: when_authorized
+# endregion
+
 # region ===== Auth Redirect Policy =====
 app:
   auth:

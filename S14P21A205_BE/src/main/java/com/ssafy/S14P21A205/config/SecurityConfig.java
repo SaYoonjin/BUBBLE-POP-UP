@@ -29,6 +29,8 @@ public class SecurityConfig {
 
     private static final String[] PUBLIC_WHITELIST = {
             "/error",
+            "/actuator/health",
+            "/actuator/prometheus",
             "/oauth2/**",
             "/login/oauth2/**",
             "/api/auth/login",
