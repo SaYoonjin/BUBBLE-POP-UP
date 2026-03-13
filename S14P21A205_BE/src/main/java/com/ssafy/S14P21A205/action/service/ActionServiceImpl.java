@@ -7,7 +7,7 @@ import com.ssafy.S14P21A205.action.entity.ActionCategory;
 import com.ssafy.S14P21A205.action.repository.ActionRepository;
 import com.ssafy.S14P21A205.exception.BaseException;
 import com.ssafy.S14P21A205.exception.ErrorCode;
-import com.ssafy.S14P21A205.game.repository.GameStateRedisRepository;
+import com.ssafy.S14P21A205.game.state.repository.GameStateRedisRepository;
 import com.ssafy.S14P21A205.game.season.entity.Season;
 import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
 import com.ssafy.S14P21A205.game.season.repository.SeasonRepository;
@@ -35,7 +35,7 @@ public class ActionServiceImpl implements ActionService {
     public ActionStatusResponse getActionStatus(Integer userId) {
         Store store = findStore(userId);
         int day = getCurrentDay();
-        Map<Object, Object> actions = gameStateRedisRepository.getActions(store.getId(), day);
+        Map<String, Boolean> actions = gameStateRedisRepository.getActions(store.getId(), day);
         return ActionStatusResponse.from(actions);
     }
 

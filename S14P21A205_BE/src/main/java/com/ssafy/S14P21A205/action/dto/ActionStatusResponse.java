@@ -13,19 +13,15 @@ public record ActionStatusResponse(
         @Schema(description = "전단지 홍보 사용 여부") boolean leafletUsed,
         @Schema(description = "지인소개 홍보 사용 여부") boolean friendUsed
 ) {
-    public static ActionStatusResponse from(Map<Object, Object> actions) {
+    public static ActionStatusResponse from(Map<String, Boolean> actions) {
         return new ActionStatusResponse(
-                "true".equals(str(actions.get("discount"))),
-                "true".equals(str(actions.get("emergency"))),
-                "true".equals(str(actions.get("donation"))),
-                "true".equals(str(actions.get("influencer"))),
-                "true".equals(str(actions.get("sns"))),
-                "true".equals(str(actions.get("leaflet"))),
-                "true".equals(str(actions.get("friend")))
+                Boolean.TRUE.equals(actions.get("discount")),
+                Boolean.TRUE.equals(actions.get("emergency")),
+                Boolean.TRUE.equals(actions.get("donation")),
+                Boolean.TRUE.equals(actions.get("influencer")),
+                Boolean.TRUE.equals(actions.get("sns")),
+                Boolean.TRUE.equals(actions.get("leaflet")),
+                Boolean.TRUE.equals(actions.get("friend"))
         );
-    }
-
-    private static String str(Object obj) {
-        return obj == null ? null : obj.toString();
     }
 }
