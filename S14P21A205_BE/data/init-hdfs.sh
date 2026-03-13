@@ -9,6 +9,7 @@ else
   hdfs dfs -put /local-data/news /data/
   hdfs dfs -put /local-data/population /data/
   hdfs dfs -put /local-data/traffic /data/
+
   echo "HDFS data upload complete!"
 fi
 
