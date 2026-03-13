@@ -1,7 +1,6 @@
 package com.ssafy.S14P21A205.game.day.controller;
 
 import com.ssafy.S14P21A205.exception.ErrorResponse;
-import com.ssafy.S14P21A205.game.day.dto.GameDayStartRequest;
 import com.ssafy.S14P21A205.game.day.dto.GameDayStartResponse;
 import com.ssafy.S14P21A205.game.day.dto.GameStateResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -45,10 +44,7 @@ public interface GameDayControllerDoc {
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))
             )
     })
-    ResponseEntity<GameDayStartResponse> startDay(
-            GameDayStartRequest request,
-            @Parameter(hidden = true) Authentication authentication
-    );
+    ResponseEntity<GameDayStartResponse> startDay(@Parameter(hidden = true) Authentication authentication);
 
     @Operation(
             summary = "현재 영업 상태를 조회합니다.",
