@@ -2,6 +2,8 @@ package com.ssafy.S14P21A205.order.controller;
 
 import com.ssafy.S14P21A205.exception.ErrorResponse;
 import com.ssafy.S14P21A205.order.dto.CurrentOrderResponse;
+import com.ssafy.S14P21A205.order.dto.RegularOrderRequest;
+import com.ssafy.S14P21A205.order.dto.RegularOrderResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -40,5 +42,38 @@ public interface OrderControllerDoc {
     })
     ResponseEntity<CurrentOrderResponse> getCurrentOrder(
             @Parameter(hidden = true) Authentication authentication
+    );
+
+    @Operation(
+            summary = "정규 발주 생성",
+            description = "인증된 사용자의 매장에 대해 정규 발주를 생성합니다.",
+            security = @SecurityRequirement(name = "bearerAuth")
+    )
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "201",
+                    description = "정규 발주 생성 성공",
+                    content = @Content(schema = @Schema(implementation = RegularOrderResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "잘못된 요청",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "401",
+                    description = "인증 필요",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "500",
+                    description = "정규 발주 생성 실패",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            )
+    })
+    ResponseEntity<RegularOrderResponse> createRegularOrder(
+            @Parameter(hidden = true) Authentication authentication,
+            @Parameter(description = "정규 발주 요청")
+            RegularOrderRequest request
     );
 }
