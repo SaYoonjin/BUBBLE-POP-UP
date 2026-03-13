@@ -28,6 +28,7 @@ import com.ssafy.S14P21A205.user.entity.User;
 import com.ssafy.S14P21A205.user.service.UserService;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -48,14 +49,16 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
-public class GameDayService {
+public class GameDayStartService {
 
     private static final int INITIAL_CAPITAL = 10_000_000;
-    private static final int BUSINESS_OPEN_HOUR = 10;
-    private static final int BUSINESS_CLOSE_HOUR = 22;
+    private static final int BUSINESS_OPEN_HOUR = SeasonTimeline.BUSINESS_OPEN_HOUR;
+    private static final int BUSINESS_CLOSE_HOUR = SeasonTimeline.BUSINESS_CLOSE_HOUR;
     private static final int[] PURCHASE_QUANTITY_WEIGHTS = {10, 40, 35, 15};
     private static final BigDecimal INITIAL_CAPTURE_RATE = new BigDecimal("0.00");
+    private static final BigDecimal DECIMAL_ONE = new BigDecimal("1.00");
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
+    private static final SeasonTimeline SEASON_TIMELINE_POLICY = new SeasonTimeline();
 
     private final UserService userService;
     private final StoreRepository storeRepository;
@@ -67,14 +70,15 @@ public class GameDayService {
     private final OrderRepository orderRepository;
     private final GameDaySnapshotRedisRepository gameDaySnapshotRedisRepository;
 
+    private Clock clock = Clock.systemDefaultZone();
+
     @Transactional
     public GameDayStartResponse startDay(
             Authentication authentication,
             GameDayStartRequest request
     ) {
         User user = userService.getCurrentUser(authentication);
-        Store store = storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(user.getId(), SeasonStatus.IN_PROGRESS)
-                .orElseThrow(() -> new BaseException(ErrorCode.RESOURCE_NOT_FOUND));
+        Store store = getActiveStore(user.getId());
 
         validateRequestMatchesStore(request, store);
 
@@ -87,7 +91,7 @@ public class GameDayService {
             return existingSnapshot.response();
         }
 
-        Order existingOrder = orderRepository.findByStoreIdAndOrderedDay(store.getId(), day).orElse(null);
+        Order existingOrder = orderRepository.findDailyStartOrder(store.getId(), day).orElse(null);
         validateRepeatedStartRequest(store, request, existingOrder);
 
         if (existingOrder == null) {
@@ -127,12 +131,17 @@ public class GameDayService {
         return response;
     }
 
+    private Store getActiveStore(Integer userId) {
+        return storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(userId, SeasonStatus.IN_PROGRESS)
+                .orElseThrow(() -> new BaseException(ErrorCode.RESOURCE_NOT_FOUND));
+    }
+
     private void validateRequestMatchesStore(GameDayStartRequest request, Store store) {
         if (!Objects.equals(request.locationId(), store.getLocation().getId())
                 || !Objects.equals(request.menuId(), store.getMenu().getId())) {
             throw new BaseException(
                     ErrorCode.INVALID_INPUT_VALUE,
-                    "요청한 locationId/menuId가 현재 상점 정보와 일치하지 않습니다. "
+                    "Request locationId/menuId does not match the active store. "
                             + "expectedLocationId=%d, expectedMenuId=%d, requestLocationId=%d, requestMenuId=%d"
                             .formatted(
                                     store.getLocation().getId(),
@@ -152,7 +161,7 @@ public class GameDayService {
                 || !Objects.equals(store.getPrice(), request.price())) {
             throw new BaseException(
                     ErrorCode.INVALID_INPUT_VALUE,
-                    "이미 시작한 영업일은 동일한 price와 orderCount로만 다시 조회할 수 있습니다. "
+                    "Repeated start request must use the same price and orderCount as the existing daily order. "
                             + "expectedPrice=%d, expectedOrderCount=%d, requestPrice=%d, requestOrderCount=%d"
                             .formatted(
                                     store.getPrice(),
@@ -169,7 +178,7 @@ public class GameDayService {
                 || !Objects.equals(existingSnapshot.price(), request.price())) {
             throw new BaseException(
                     ErrorCode.INVALID_INPUT_VALUE,
-                    "?대? ?쒖옉???곸뾽?쇱? ?숈씪??price? orderCount濡쒕쭔 ?ㅼ떆 議고쉶?????덉뒿?덈떎. "
+                    "Repeated start request must use the same price and orderCount as the existing snapshot. "
                             + "expectedPrice=%d, expectedOrderCount=%d, requestPrice=%d, requestOrderCount=%d"
                             .formatted(
                                     store.getPrice(),
@@ -184,7 +193,7 @@ public class GameDayService {
     private int resolveCurrentDay(Season season) {
         int currentDay = season.getCurrentDay() == null ? 1 : season.getCurrentDay();
         if (currentDay < 1 || currentDay > season.getTotalDays()) {
-            throw new BaseException(ErrorCode.INVALID_INPUT_VALUE, "현재 시즌의 day 정보가 올바르지 않습니다.");
+            throw new BaseException(ErrorCode.INVALID_INPUT_VALUE, "Current season day is out of range.");
         }
         return currentDay;
     }
@@ -212,7 +221,7 @@ public class GameDayService {
             int maxAffordableOrderCount = carriedBalance / store.getMenu().getOriginPrice();
             throw new BaseException(
                     ErrorCode.INVALID_INPUT_VALUE,
-                    "보유 자금이 부족하여 해당 수량을 발주할 수 없습니다. "
+                    "Insufficient balance for the requested order count. "
                             + "maxOrderCount=%d, requestOrderCount=%d, balanceBeforeOrder=%d, originPrice=%d"
                             .formatted(
                                     maxAffordableOrderCount,
@@ -258,7 +267,7 @@ public class GameDayService {
         for (int hour = BUSINESS_OPEN_HOUR; hour < BUSINESS_CLOSE_HOUR; hour++) {
             BigDecimal trafficMultiplier = trafficByHour.containsKey(hour)
                     ? ratio(trafficByHour.get(hour), trafficBaseline)
-                    : BigDecimal.ONE.setScale(2, RoundingMode.HALF_UP);
+                    : DECIMAL_ONE;
             hourlySchedule.put(
                     String.valueOf(hour),
                     new GameDayStartResponse.HourlySchedule(
@@ -297,14 +306,14 @@ public class GameDayService {
 
     private BigDecimal ratio(int trafficStatus, BigDecimal baseline) {
         if (baseline.compareTo(BigDecimal.ZERO) == 0) {
-            return BigDecimal.ONE.setScale(2, RoundingMode.HALF_UP);
+            return DECIMAL_ONE;
         }
         return BigDecimal.valueOf(trafficStatus).divide(baseline, 2, RoundingMode.HALF_UP);
     }
 
     private BigDecimal average(List<BigDecimal> values) {
         if (values.isEmpty()) {
-            return BigDecimal.ONE.setScale(2, RoundingMode.HALF_UP);
+            return DECIMAL_ONE;
         }
 
         BigDecimal total = BigDecimal.ZERO;
@@ -341,7 +350,7 @@ public class GameDayService {
                     ? null
                     : event.getCapitalFlat();
             eventSchedule.add(new GameDayStartResponse.EventSchedule(
-                    formatHour(BUSINESS_OPEN_HOUR),
+                    SEASON_TIMELINE_POLICY.formatGameTime(dailyEvent.getApplyOffsetSeconds()),
                     event.getEventType(),
                     new GameDayStartResponse.Scope(null, null),
                     dailyEvent.getNewsTitle(),
@@ -361,6 +370,7 @@ public class GameDayService {
     ) {
         long dailySeed = ThreadLocalRandom.current().nextLong(1, Long.MAX_VALUE);
         List<Integer> purchaseList = buildPurchaseList(dailySeed, response.hourlySchedule());
+        LocalDateTime startedAt = LocalDateTime.now(clock);
         gameDaySnapshotRedisRepository.save(
                 userId,
                 store.getSeason().getId(),
@@ -376,7 +386,9 @@ public class GameDayService {
                         dailySeed,
                         purchaseList,
                         0,
-                        response
+                        response,
+                        startedAt,
+                        startedAt
                 )
         );
     }
@@ -414,7 +426,7 @@ public class GameDayService {
             case SNOW -> "눈";
             case HEATWAVE -> "폭염";
             case COLDWAVE -> "한파";
-            case FOG -> "안개";
+            case FOG -> "흐림";
         };
     }
 
@@ -438,5 +450,4 @@ public class GameDayService {
             BigDecimal dailyTrafficMultiplier
     ) {
     }
-
 }
