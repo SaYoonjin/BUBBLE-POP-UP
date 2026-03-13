@@ -169,15 +169,25 @@ deploy-monitoring:
     - chmod 600 ~/.ssh/id_rsa
     - ssh-keyscan -H "$MONITOR_SERVER_IP" >> ~/.ssh/known_hosts
   script:
-    - ssh "$MONITOR_USER@$MONITOR_SERVER_IP" "mkdir -p '$MONITOR_APP_DIR/monitoring'"
+    - ssh "$MONITOR_USER@$MONITOR_SERVER_IP" "mkdir -p '$MONITOR_APP_DIR/monitoring' '$MONITOR_APP_DIR/monitoring/secrets'"
     - rsync -az "$BACKEND_DIR/docker-compose.monitoring.yml" "$MONITOR_USER@$MONITOR_SERVER_IP:$MONITOR_APP_DIR/"
     - rsync -az "$BACKEND_DIR/monitoring/" "$MONITOR_USER@$MONITOR_SERVER_IP:$MONITOR_APP_DIR/monitoring/"
     - |
-      if [ -n "${MONITORING_ENV_FILE:-}" ]; then
-        printf '%s\n' "$MONITORING_ENV_FILE" > .env.monitoring
-        sed -i 's/\r$//' .env.monitoring
-        scp .env.monitoring "$MONITOR_USER@$MONITOR_SERVER_IP:$MONITOR_APP_DIR/.env.monitoring"
-      fi
+      {
+        printf 'WEB_SCRAPE_SSH_HOST=%s\n' "$WEB_SERVER_IP"
+        printf 'WEB_SCRAPE_SSH_USER=%s\n' "$WEB_USER"
+        printf 'DATA_SCRAPE_SSH_HOST=%s\n' "$DATA_SERVER_IP"
+        printf 'DATA_SCRAPE_SSH_USER=%s\n' "$DATA_USER"
+        if [ -n "${MONITORING_ENV_FILE:-}" ]; then
+          printf '%s\n' "$MONITORING_ENV_FILE"
+        fi
+      } > .env.monitoring
+    - sed -i 's/\r$//' .env.monitoring
+    - scp .env.monitoring "$MONITOR_USER@$MONITOR_SERVER_IP:$MONITOR_APP_DIR/.env.monitoring"
+    - printf '%s' "${SCRAPE_SSH_PRIVATE_KEY:-$SSH_PRIVATE_KEY}" | tr -d '\r' > exporter_tunnel_id_rsa
+    - chmod 600 exporter_tunnel_id_rsa
+    - scp exporter_tunnel_id_rsa "$MONITOR_USER@$MONITOR_SERVER_IP:$MONITOR_APP_DIR/monitoring/secrets/exporter_tunnel_id_rsa"
+    - ssh "$MONITOR_USER@$MONITOR_SERVER_IP" "chmod 600 '$MONITOR_APP_DIR/monitoring/secrets/exporter_tunnel_id_rsa'"
     - |
       ssh "$MONITOR_USER@$MONITOR_SERVER_IP" "cd '$MONITOR_APP_DIR' && \
       if [ -f .env.monitoring ]; then \

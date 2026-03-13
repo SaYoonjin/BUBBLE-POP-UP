@@ -9,11 +9,41 @@ services:
     volumes:
       - /:/host:ro,rslave
 
+  web-node-exporter-tunnel:
+    build:
+      context: ./monitoring/tunnel
+    container_name: monitoring-web-node-exporter-tunnel
+    environment:
+      SSH_HOST: ${WEB_SCRAPE_SSH_HOST}
+      SSH_USER: ${WEB_SCRAPE_SSH_USER:-ubuntu}
+      REMOTE_HOST: 127.0.0.1
+      REMOTE_PORT: 9100
+      LOCAL_PORT: 19100
+    volumes:
+      - ./monitoring/secrets:/run/secrets:ro
+    restart: unless-stopped
+
+  data-node-exporter-tunnel:
+    build:
+      context: ./monitoring/tunnel
+    container_name: monitoring-data-node-exporter-tunnel
+    environment:
+      SSH_HOST: ${DATA_SCRAPE_SSH_HOST}
+      SSH_USER: ${DATA_SCRAPE_SSH_USER:-ubuntu}
+      REMOTE_HOST: 127.0.0.1
+      REMOTE_PORT: 9100
+      LOCAL_PORT: 19101
+    volumes:
+      - ./monitoring/secrets:/run/secrets:ro
+    restart: unless-stopped
+
   prometheus:
     image: prom/prometheus
     container_name: monitoring-prometheus
     depends_on:
       - node-exporter
+      - web-node-exporter-tunnel
+      - data-node-exporter-tunnel
     ports:
       - "127.0.0.1:9090:9090"
     command:
