@@ -101,8 +101,8 @@ services:
         condition: service_started
       spark-worker:
         condition: service_started
-      hdfs-init:
-        condition: service_completed_successfully
+      namenode:
+        condition: service_started
     env_file:
       - ./hadoop.env
     volumes:
