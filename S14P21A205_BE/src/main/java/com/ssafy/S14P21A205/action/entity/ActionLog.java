@@ -35,4 +35,11 @@ public class ActionLog {
 
     @Column(name = "is_used", nullable = false)
     private Boolean isUsed;
+
+    public ActionLog(Action action, Store store, Integer gameDay) {
+        this.action = action;
+        this.store = store;
+        this.gameDay = gameDay;
+        this.isUsed = true;
+    }
 }
