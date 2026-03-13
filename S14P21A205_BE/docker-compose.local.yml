@@ -89,6 +89,25 @@ services:
     volumes:
       - ./spark/jobs:/opt/spark-jobs
 
+  spark-etl:
+    build:
+      context: ./spark
+      target: master
+    container_name: spark-etl
+    depends_on:
+      spark-master:
+        condition: service_started
+      spark-worker:
+        condition: service_started
+      hdfs-init:
+        condition: service_completed_successfully
+    env_file:
+      - ./hadoop.env
+    volumes:
+      - ./spark/jobs:/opt/spark-jobs
+    command: bash /opt/spark-jobs/run-etl.sh
+    restart: "no"
+
 volumes:
   mysql_data:
   namenode_data:
