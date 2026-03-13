@@ -15,6 +15,8 @@ public interface StoreRepository extends JpaRepository<Store, Long> {
     @EntityGraph(attributePaths = {"user", "location", "menu", "season"})
     Optional<Store> findFirstByUser_IdAndSeasonStatusOrderByIdDesc(Integer userId, SeasonStatus seasonStatus);
 
+    Optional<Store> findFirstByUser_IdOrderBySeason_IdDescIdDesc(Integer userId);
+
     Optional<Store> findByUser_Id(Integer userId);
 
     @Query("""

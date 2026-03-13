@@ -1,5 +1,6 @@
 package com.ssafy.S14P21A205.shop.repository;
 
+import com.ssafy.S14P21A205.shop.entity.ItemCategory;
 import com.ssafy.S14P21A205.shop.entity.ItemUser;
 import com.ssafy.S14P21A205.shop.entity.ItemUserId;
 import java.util.List;
@@ -9,9 +10,6 @@ import org.springframework.data.repository.query.Param;
 
 public interface ItemUserRepository extends JpaRepository<ItemUser, ItemUserId> {
 
-    /**
-     * 로그인한 사용자의 최신 시즌 매장에서 구매한 아이템 목록 조회
-     */
     @Query("""
             SELECT iu
             FROM ItemUser iu
@@ -26,5 +24,18 @@ public interface ItemUserRepository extends JpaRepository<ItemUser, ItemUserId> 
               )
             ORDER BY i.id ASC
             """)
-    List<ItemUser> findPurchasedItemsByUserId(@Param("userId") Long userId);
+    List<ItemUser> findPurchasedItemsByUserId(@Param("userId") Integer userId);
+
+    @Query("""
+            SELECT CASE WHEN COUNT(iu) > 0 THEN true ELSE false END
+            FROM ItemUser iu
+            JOIN iu.item item
+            WHERE iu.store.id = :storeId
+              AND iu.isPurchased = true
+              AND item.category = :category
+            """)
+    boolean existsPurchasedCategoryItem(
+            @Param("storeId") Long storeId,
+            @Param("category") ItemCategory category
+    );
 }
