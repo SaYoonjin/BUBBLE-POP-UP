@@ -32,4 +32,14 @@ public class ItemUser {
 
     @Column(name = "is_purchased", nullable = false)
     private Boolean isPurchased;
+
+    private ItemUser(Item item, Store store, Boolean isPurchased) {
+        this.item = item;
+        this.store = store;
+        this.isPurchased = isPurchased;
+    }
+
+    public static ItemUser purchase(Item item, Store store) {
+        return new ItemUser(item, store, true);
+    }
 }
