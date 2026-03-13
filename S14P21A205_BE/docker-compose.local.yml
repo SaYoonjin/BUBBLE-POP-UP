@@ -31,7 +31,6 @@ services:
       - ./hadoop.env
     volumes:
       - namenode_data:/hadoop/dfs/name
-      - ./data:/local-data
 
   datanode:
     image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
@@ -46,6 +45,8 @@ services:
   hdfs-init:
     image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
     container_name: hdfs-init
+    profiles:
+      - hdfs-init
     depends_on:
       - namenode
       - datanode
@@ -94,6 +95,8 @@ services:
       context: ./spark
       target: master
     container_name: spark-etl
+    profiles:
+      - spark-etl
     depends_on:
       spark-master:
         condition: service_started
