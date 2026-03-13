@@ -1,0 +1,71 @@
+services:
+  namenode:
+    image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
+    container_name: namenode
+    ports:
+      - "9870:9870"
+      - "9000:9000"
+    env_file:
+      - ./hadoop.env
+    volumes:
+      - namenode_data:/hadoop/dfs/name
+
+  datanode:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+    container_name: datanode
+    depends_on:
+      - namenode
+    env_file:
+      - ./hadoop.env
+    volumes:
+      - datanode_data:/hadoop/dfs/data
+
+  hdfs-init:
+    image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
+    container_name: hdfs-init
+    depends_on:
+      - namenode
+      - datanode
+    volumes:
+      - ./data:/local-data
+    env_file:
+      - ./hadoop.env
+    command: bash /local-data/init-hdfs.sh
+    restart: "no"
+
+  spark-master:
+    build:
+      context: ./spark
+      target: master
+    container_name: spark-master
+    ports:
+      - "8082:8080"
+      - "7077:7077"
+    env_file:
+      - ./hadoop.env
+    environment:
+      - INIT_DAEMON_STEP=setup_spark
+    volumes:
+      - ./spark/jobs:/opt/spark-jobs
+
+  spark-worker:
+    build:
+      context: ./spark
+      target: worker
+    container_name: spark-worker
+    depends_on:
+      - spark-master
+    ports:
+      - "8083:8081"
+    env_file:
+      - ./hadoop.env
+    environment:
+      - SPARK_MASTER=spark://spark-master:7077
+      - SPARK_WORKER_MEMORY=2g
+      - SPARK_WORKER_CORES=2
+    volumes:
+      - ./spark/jobs:/opt/spark-jobs
+
+volumes:
+  namenode_data:
+  datanode_data:
