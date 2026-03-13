@@ -30,6 +30,7 @@ public class OrderController implements OrderControllerDoc {
     }
 
     // 정규 발주 api
+    @Override
     @PostMapping("/regular")
     public ResponseEntity<RegularOrderResponse> createRegularOrder(
             Authentication authentication,

@@ -35,6 +35,14 @@ public class OrderServiceImpl implements OrderService {
     private final StringRedisTemplate stringRedisTemplate;
     private final EntityManager entityManager;
 
+    /**
+     * 현재 매장에서 판매 중인 메뉴의 가격 및 재고 조회
+     * 1. userId로 매장 조회
+     * 2. 매장에서 판매 중인 메뉴 조회
+     * 3. 원재료 할인 아이템 적용 여부 확인
+     * 4. 할인 적용 원가 계산
+     * 5. Redis에서 재고 조회
+     */
     @Override
     public CurrentOrderResponse getCurrentOrder(Integer userId) {
         Store store = getStoreByUserId(userId);
@@ -54,6 +62,23 @@ public class OrderServiceImpl implements OrderService {
                 .build();
     }
 
+    /**
+     * 정규 발주 생성
+     * 처리 흐름
+     * 1. userId로 매장 조회
+     * 2. 현재 시즌 기준 발주 가능 일자 계산
+     * 3. 정규 발주 가능 일자 검증
+     * 4. 발주 수량 검증
+     * 5. 동일 발주일 중복 발주 여부 확인
+     * 6. 발주할 메뉴 조회
+     * 7. 현재 판매 메뉴와 동일한지 확인
+     * 8. 할인 적용 원가 계산
+     * 9. 총 발주 비용 계산
+     * 10. Redis 잔액 차감
+     * 11. Redis 재고 업데이트
+     * 12. 필요 시 매장 판매 메뉴 변경
+     * 13. orders 테이블에 발주 기록 저장
+     */
     @Override
     @Transactional
     public RegularOrderResponse createRegularOrder(Integer userId, RegularOrderRequest request) {
@@ -138,7 +163,7 @@ public class OrderServiceImpl implements OrderService {
     }
 
     private void validateNoExistingOrder(Long storeId, Integer orderedDay) {
-        if (orderRepository.findByStoreIdAndOrderedDay(storeId, orderedDay).isPresent()) {
+        if (orderRepository.findDailyStartOrder(storeId, orderedDay).isPresent()) {
             throw new RuntimeException("해당 발주일에는 이미 정규 발주가 완료되었습니다.");
         }
     }
