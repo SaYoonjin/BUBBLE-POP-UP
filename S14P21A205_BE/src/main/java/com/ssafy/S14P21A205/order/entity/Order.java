@@ -4,6 +4,8 @@ import com.ssafy.S14P21A205.shop.entity.Menu;
 import com.ssafy.S14P21A205.store.entity.Store;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -45,7 +47,45 @@ public class Order {
     @Column(name = "ordered_day", nullable = false)
     private Integer orderedDay;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "order_type", length = 20)
+    private OrderType orderType;
+
+    @Column(name = "arrived_time")
+    private LocalDateTime arrivedTime;
+
+    @Column(name = "is_arrived")
+    private Boolean isArrived;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
+
+    private Order(
+            Menu menu,
+            Store store,
+            Integer quantity,
+            Integer totalCost,
+            Integer orderedDay,
+            OrderType orderType,
+            LocalDateTime arrivedTime,
+            Boolean isArrived
+    ) {
+        this.menu = menu;
+        this.store = store;
+        this.quantity = quantity;
+        this.totalCost = totalCost;
+        this.orderedDay = orderedDay;
+        this.orderType = orderType;
+        this.arrivedTime = arrivedTime;
+        this.isArrived = isArrived;
+    }
+
+    public static Order create(Menu menu, Store store, Integer quantity, Integer totalCost, Integer orderedDay) {
+        return new Order(menu, store, quantity, totalCost, orderedDay, OrderType.NORMAL, null, true);
+    }
+
+    public void markArrived() {
+        this.isArrived = true;
+    }
 }

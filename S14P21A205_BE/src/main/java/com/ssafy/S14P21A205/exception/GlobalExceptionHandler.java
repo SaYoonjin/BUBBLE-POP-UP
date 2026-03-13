@@ -8,6 +8,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.validation.BindException;
+import org.springframework.validation.BindingResult;
+import org.springframework.validation.FieldError;
+import org.springframework.validation.ObjectError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -15,16 +18,12 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
-/**
- * 용도: 전역 예외를 공통 JSON 응답으로 변환.
- */
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
     private static final String REQUEST_LOG_FORMAT = "[{}] {} {} - {}";
 
-    /** 용도: BaseException 처리. */
     @ExceptionHandler(BaseException.class)
     public ResponseEntity<ErrorResponse> handleBaseException(BaseException e, HttpServletRequest request) {
         HttpStatus status = e.getHttpStatus();
@@ -33,10 +32,11 @@ public class GlobalExceptionHandler {
         } else {
             log.warn(REQUEST_LOG_FORMAT, e.getErrorCode().getCode(), request.getMethod(), request.getRequestURI(), e.getMessage());
         }
-        return ResponseEntity.status(status).body(new ErrorResponse(e.getErrorCode(), request.getRequestURI()));
+        return ResponseEntity
+                .status(status)
+                .body(new ErrorResponse(e.getErrorCode(), e.getMessage(), request.getRequestURI()));
     }
 
-    /** 용도: 입력/바인딩/파싱 예외를 400으로 처리. */
     @ExceptionHandler({
             BindException.class,
             MethodArgumentNotValidException.class,
@@ -47,13 +47,13 @@ public class GlobalExceptionHandler {
             ConstraintViolationException.class
     })
     public ResponseEntity<ErrorResponse> handleInvalidInput(Exception e, HttpServletRequest request) {
-        log.info(REQUEST_LOG_FORMAT, ErrorCode.INVALID_INPUT_VALUE.getCode(), request.getMethod(), request.getRequestURI(), summarize(e));
+        String message = summarize(e);
+        log.info(REQUEST_LOG_FORMAT, ErrorCode.INVALID_INPUT_VALUE.getCode(), request.getMethod(), request.getRequestURI(), message);
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
-                .body(new ErrorResponse(ErrorCode.INVALID_INPUT_VALUE, request.getRequestURI()));
+                .body(new ErrorResponse(ErrorCode.INVALID_INPUT_VALUE, message, request.getRequestURI()));
     }
 
-    /** 용도: 인가 실패 예외를 403으로 처리. */
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<ErrorResponse> handleAccessDenied(AccessDeniedException e, HttpServletRequest request) {
         log.warn(REQUEST_LOG_FORMAT, ErrorCode.ACCESS_DENIED.getCode(), request.getMethod(), request.getRequestURI(), e.getMessage());
@@ -62,7 +62,6 @@ public class GlobalExceptionHandler {
                 .body(new ErrorResponse(ErrorCode.ACCESS_DENIED, request.getRequestURI()));
     }
 
-    /** 용도: 미처리 예외를 500으로 처리. */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleException(Exception e, HttpServletRequest request) {
         log.error(REQUEST_LOG_FORMAT, ErrorCode.INTERNAL_SERVER_ERROR.getCode(), request.getMethod(), request.getRequestURI(), e.getMessage(), e);
@@ -72,10 +71,51 @@ public class GlobalExceptionHandler {
     }
 
     private static String summarize(Exception e) {
+        if (e instanceof MethodArgumentNotValidException ex) {
+            return summarizeBindingResult(ex.getBindingResult());
+        }
+        if (e instanceof BindException ex) {
+            return summarizeBindingResult(ex.getBindingResult());
+        }
+        if (e instanceof ConstraintViolationException ex && !ex.getConstraintViolations().isEmpty()) {
+            return ex.getConstraintViolations().iterator().next().getMessage();
+        }
+        if (e instanceof MissingServletRequestParameterException ex) {
+            return ex.getParameterName() + " 요청 파라미터는 필수입니다.";
+        }
+        if (e instanceof MethodArgumentTypeMismatchException ex) {
+            return ex.getName() + " 값의 형식이 올바르지 않습니다.";
+        }
+        if (e instanceof HttpMessageNotReadableException) {
+            return "요청 본문 JSON 형식이 올바르지 않습니다.";
+        }
+
         String message = e.getMessage();
         if (message == null || message.isBlank()) {
-            return "잘못된 요청 값입니다.";
+            return ErrorCode.INVALID_INPUT_VALUE.getMessage();
         }
         return message;
+    }
+
+    private static String summarizeBindingResult(BindingResult bindingResult) {
+        FieldError fieldError = bindingResult.getFieldErrors().stream().findFirst().orElse(null);
+        if (fieldError != null) {
+            String message = fieldError.getDefaultMessage();
+            if (message == null || message.isBlank()) {
+                return fieldError.getField() + " 값이 올바르지 않습니다.";
+            }
+            return message;
+        }
+
+        ObjectError objectError = bindingResult.getGlobalErrors().stream().findFirst().orElse(null);
+        if (objectError != null) {
+            String message = objectError.getDefaultMessage();
+            if (message == null || message.isBlank()) {
+                return ErrorCode.INVALID_INPUT_VALUE.getMessage();
+            }
+            return message;
+        }
+
+        return ErrorCode.INVALID_INPUT_VALUE.getMessage();
     }
 }

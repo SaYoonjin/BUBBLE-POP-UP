@@ -1,0 +1,42 @@
+package com.ssafy.S14P21A205.game.day.dto;
+
+import java.time.LocalDateTime;
+import java.util.List;
+
+public record GameStateResponse(
+        LocalDateTime serverTime,
+        Long seasonId,
+        Integer day,
+        String population,
+        LocalDateTime lastCalculatedAt,
+        Long cash,
+        Integer customerCount,
+        Inventory inventory,
+        ActionStatus actionStatus,
+        List<AppliedEvent> appliedEvents
+) {
+    public record Inventory(
+            Integer totalStock
+    ) {
+    }
+
+    public record ActionStatus(
+            Boolean discountUsed,
+            Boolean donationUsed,
+            Boolean influencerUsed,
+            Boolean snsUsed,
+            Boolean leafletUsed,
+            Boolean friendUsed,
+            Boolean emergencyOrderPending,
+            LocalDateTime emergencyOrderArriveAt
+    ) {
+    }
+
+    public record AppliedEvent(
+            String eventType,
+            String eventName,
+            String newsTitle,
+            LocalDateTime appliedAt
+    ) {
+    }
+}
