@@ -36,6 +36,12 @@ public class DailyEvent {
     @Column(nullable = false)
     private Integer day;
 
+    @Column(name = "apply_offset_seconds")
+    private Integer applyOffsetSeconds;
+
+    @Column(name = "expire_offset_seconds")
+    private Integer expireOffsetSeconds;
+
     @Column(name = "news_title", nullable = false, length = 120)
     private String newsTitle;
 }

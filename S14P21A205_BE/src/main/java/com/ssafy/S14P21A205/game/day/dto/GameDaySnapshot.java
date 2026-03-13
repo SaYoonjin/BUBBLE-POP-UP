@@ -1,5 +1,6 @@
 package com.ssafy.S14P21A205.game.day.dto;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 public record GameDaySnapshot(
@@ -13,6 +14,8 @@ public record GameDaySnapshot(
         Long dailySeed,
         List<Integer> purchaseList,
         Integer purchaseCursor,
-        GameDayStartResponse response
+        GameDayStartResponse response,
+        LocalDateTime startedAt,
+        LocalDateTime lastCalculatedAt
 ) {
 }
