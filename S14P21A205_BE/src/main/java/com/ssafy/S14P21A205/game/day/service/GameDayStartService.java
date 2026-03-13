@@ -3,7 +3,6 @@ package com.ssafy.S14P21A205.game.day.service;
 import com.ssafy.S14P21A205.exception.BaseException;
 import com.ssafy.S14P21A205.exception.ErrorCode;
 import com.ssafy.S14P21A205.game.day.dto.GameDaySnapshot;
-import com.ssafy.S14P21A205.game.day.dto.GameDayStartRequest;
 import com.ssafy.S14P21A205.game.day.dto.GameDayStartResponse;
 import com.ssafy.S14P21A205.game.day.repository.GameDaySnapshotRedisRepository;
 import com.ssafy.S14P21A205.game.environment.entity.Population;
@@ -37,7 +36,6 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Random;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Function;
@@ -73,41 +71,20 @@ public class GameDayStartService {
     private Clock clock = Clock.systemDefaultZone();
 
     @Transactional
-    public GameDayStartResponse startDay(
-            Authentication authentication,
-            GameDayStartRequest request
-    ) {
+    public GameDayStartResponse startDay(Authentication authentication) {
         User user = userService.getCurrentUser(authentication);
         Store store = getActiveStore(user.getId());
-
-        validateRequestMatchesStore(request, store);
 
         int day = resolveCurrentDay(store.getSeason());
         GameDaySnapshot existingSnapshot = gameDaySnapshotRedisRepository
                 .find(user.getId(), store.getSeason().getId(), day)
                 .orElse(null);
         if (existingSnapshot != null) {
-            validateRepeatedStartRequest(store, request, existingSnapshot);
             return existingSnapshot.response();
         }
 
         Order existingOrder = orderRepository.findDailyStartOrder(store.getId(), day).orElse(null);
-        validateRepeatedStartRequest(store, request, existingOrder);
-
-        if (existingOrder == null) {
-            store.changePrice(request.price());
-        }
-
-        StartingState startingState = resolveStartingState(store, day, existingOrder, request.orderCount());
-        if (existingOrder == null && request.orderCount() > 0) {
-            orderRepository.save(Order.create(
-                    store.getMenu(),
-                    store,
-                    request.orderCount(),
-                    startingState.orderCost(),
-                    day
-            ));
-        }
+        StartingState startingState = resolveStartingState(store, day, existingOrder);
 
         DaySchedule daySchedule = buildDaySchedule(store.getLocation().getId(), day);
         Weather weather = selectWeather(day);
@@ -127,67 +104,13 @@ public class GameDayStartService {
                 startingState.initialStock()
         );
 
-        writeSnapshot(user.getId(), store, day, request, response);
+        writeSnapshot(user.getId(), store, day, startingState, response);
         return response;
     }
 
     private Store getActiveStore(Integer userId) {
         return storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(userId, SeasonStatus.IN_PROGRESS)
                 .orElseThrow(() -> new BaseException(ErrorCode.RESOURCE_NOT_FOUND));
-    }
-
-    private void validateRequestMatchesStore(GameDayStartRequest request, Store store) {
-        if (!Objects.equals(request.locationId(), store.getLocation().getId())
-                || !Objects.equals(request.menuId(), store.getMenu().getId())) {
-            throw new BaseException(
-                    ErrorCode.INVALID_INPUT_VALUE,
-                    "Request locationId/menuId does not match the active store. "
-                            + "expectedLocationId=%d, expectedMenuId=%d, requestLocationId=%d, requestMenuId=%d"
-                            .formatted(
-                                    store.getLocation().getId(),
-                                    store.getMenu().getId(),
-                                    request.locationId(),
-                                    request.menuId()
-                            )
-            );
-        }
-    }
-
-    private void validateRepeatedStartRequest(Store store, GameDayStartRequest request, Order existingOrder) {
-        if (existingOrder == null) {
-            return;
-        }
-        if (!Objects.equals(existingOrder.getQuantity(), request.orderCount())
-                || !Objects.equals(store.getPrice(), request.price())) {
-            throw new BaseException(
-                    ErrorCode.INVALID_INPUT_VALUE,
-                    "Repeated start request must use the same price and orderCount as the existing daily order. "
-                            + "expectedPrice=%d, expectedOrderCount=%d, requestPrice=%d, requestOrderCount=%d"
-                            .formatted(
-                                    store.getPrice(),
-                                    existingOrder.getQuantity(),
-                                    request.price(),
-                                    request.orderCount()
-                            )
-            );
-        }
-    }
-
-    private void validateRepeatedStartRequest(Store store, GameDayStartRequest request, GameDaySnapshot existingSnapshot) {
-        if (!Objects.equals(existingSnapshot.orderCount(), request.orderCount())
-                || !Objects.equals(existingSnapshot.price(), request.price())) {
-            throw new BaseException(
-                    ErrorCode.INVALID_INPUT_VALUE,
-                    "Repeated start request must use the same price and orderCount as the existing snapshot. "
-                            + "expectedPrice=%d, expectedOrderCount=%d, requestPrice=%d, requestOrderCount=%d"
-                            .formatted(
-                                    store.getPrice(),
-                                    existingSnapshot.orderCount(),
-                                    request.price(),
-                                    request.orderCount()
-                            )
-            );
-        }
     }
 
     private int resolveCurrentDay(Season season) {
@@ -198,11 +121,9 @@ public class GameDayStartService {
         return currentDay;
     }
 
-    private StartingState resolveStartingState(Store store, int day, Order existingOrder, int requestedOrderCount) {
-        int orderCount = existingOrder == null ? requestedOrderCount : existingOrder.getQuantity();
-        int orderCost = existingOrder == null
-                ? Math.multiplyExact(store.getMenu().getOriginPrice(), requestedOrderCount)
-                : existingOrder.getTotalCost();
+    private StartingState resolveStartingState(Store store, int day, Order existingOrder) {
+        int orderCount = existingOrder == null ? 0 : existingOrder.getQuantity();
+        int orderCost = existingOrder == null ? 0 : existingOrder.getTotalCost();
 
         int carriedBalance;
         int carriedStock;
@@ -221,18 +142,18 @@ public class GameDayStartService {
             int maxAffordableOrderCount = carriedBalance / store.getMenu().getOriginPrice();
             throw new BaseException(
                     ErrorCode.INVALID_INPUT_VALUE,
-                    "Insufficient balance for the requested order count. "
-                            + "maxOrderCount=%d, requestOrderCount=%d, balanceBeforeOrder=%d, originPrice=%d"
+                    "Insufficient balance for the existing regular order. "
+                            + "maxOrderCount=%d, existingOrderCount=%d, balanceBeforeOrder=%d, originPrice=%d"
                             .formatted(
                                     maxAffordableOrderCount,
-                                    requestedOrderCount,
+                                    orderCount,
                                     carriedBalance,
                                     store.getMenu().getOriginPrice()
                             )
             );
         }
 
-        return new StartingState(initialBalance, Math.addExact(carriedStock, orderCount), orderCost);
+        return new StartingState(initialBalance, Math.addExact(carriedStock, orderCount), orderCount);
     }
 
     private DaySchedule buildDaySchedule(Long locationId, int day) {
@@ -365,7 +286,7 @@ public class GameDayStartService {
             Integer userId,
             Store store,
             int day,
-            GameDayStartRequest request,
+            StartingState startingState,
             GameDayStartResponse response
     ) {
         long dailySeed = ThreadLocalRandom.current().nextLong(1, Long.MAX_VALUE);
@@ -379,10 +300,10 @@ public class GameDayStartService {
                         store.getId(),
                         store.getSeason().getId(),
                         day,
-                        request.locationId(),
-                        request.menuId(),
-                        request.price(),
-                        request.orderCount(),
+                        store.getLocation().getId(),
+                        store.getMenu().getId(),
+                        store.getPrice(),
+                        startingState.orderCount(),
                         dailySeed,
                         purchaseList,
                         0,
@@ -441,7 +362,7 @@ public class GameDayStartService {
     private record StartingState(
             int initialBalance,
             int initialStock,
-            int orderCost
+            int orderCount
     ) {
     }
 
