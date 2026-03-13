@@ -58,4 +58,8 @@ public class Store {
     public void changeLocation(Location location) {
         this.location = location;
     }
+
+    public void changePrice(Integer price) {
+        this.price = price;
+    }
 }

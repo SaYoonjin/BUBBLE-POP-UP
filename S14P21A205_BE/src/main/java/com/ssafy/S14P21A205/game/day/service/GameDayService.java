@@ -1,0 +1,442 @@
+package com.ssafy.S14P21A205.game.day.service;
+
+import com.ssafy.S14P21A205.exception.BaseException;
+import com.ssafy.S14P21A205.exception.ErrorCode;
+import com.ssafy.S14P21A205.game.day.dto.GameDaySnapshot;
+import com.ssafy.S14P21A205.game.day.dto.GameDayStartRequest;
+import com.ssafy.S14P21A205.game.day.dto.GameDayStartResponse;
+import com.ssafy.S14P21A205.game.day.repository.GameDaySnapshotRedisRepository;
+import com.ssafy.S14P21A205.game.environment.entity.Population;
+import com.ssafy.S14P21A205.game.environment.entity.Traffic;
+import com.ssafy.S14P21A205.game.environment.entity.Weather;
+import com.ssafy.S14P21A205.game.environment.entity.WeatherType;
+import com.ssafy.S14P21A205.game.environment.repository.PopulationRepository;
+import com.ssafy.S14P21A205.game.environment.repository.TrafficRepository;
+import com.ssafy.S14P21A205.game.environment.repository.WeatherRepository;
+import com.ssafy.S14P21A205.game.event.entity.DailyEvent;
+import com.ssafy.S14P21A205.game.event.entity.RandomEvent;
+import com.ssafy.S14P21A205.game.event.repository.DailyEventRepository;
+import com.ssafy.S14P21A205.game.season.entity.DailyReport;
+import com.ssafy.S14P21A205.game.season.entity.Season;
+import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
+import com.ssafy.S14P21A205.game.season.repository.DailyReportRepository;
+import com.ssafy.S14P21A205.order.entity.Order;
+import com.ssafy.S14P21A205.order.repository.OrderRepository;
+import com.ssafy.S14P21A205.store.entity.Store;
+import com.ssafy.S14P21A205.store.repository.StoreRepository;
+import com.ssafy.S14P21A205.user.entity.User;
+import com.ssafy.S14P21A205.user.service.UserService;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Random;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.function.Function;
+import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.Authentication;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+@Service
+@RequiredArgsConstructor
+@Transactional(readOnly = true)
+public class GameDayService {
+
+    private static final int INITIAL_CAPITAL = 10_000_000;
+    private static final int BUSINESS_OPEN_HOUR = 10;
+    private static final int BUSINESS_CLOSE_HOUR = 22;
+    private static final int[] PURCHASE_QUANTITY_WEIGHTS = {10, 40, 35, 15};
+    private static final BigDecimal INITIAL_CAPTURE_RATE = new BigDecimal("0.00");
+    private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
+
+    private final UserService userService;
+    private final StoreRepository storeRepository;
+    private final DailyReportRepository dailyReportRepository;
+    private final PopulationRepository populationRepository;
+    private final TrafficRepository trafficRepository;
+    private final WeatherRepository weatherRepository;
+    private final DailyEventRepository dailyEventRepository;
+    private final OrderRepository orderRepository;
+    private final GameDaySnapshotRedisRepository gameDaySnapshotRedisRepository;
+
+    @Transactional
+    public GameDayStartResponse startDay(
+            Authentication authentication,
+            GameDayStartRequest request
+    ) {
+        User user = userService.getCurrentUser(authentication);
+        Store store = storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(user.getId(), SeasonStatus.IN_PROGRESS)
+                .orElseThrow(() -> new BaseException(ErrorCode.RESOURCE_NOT_FOUND));
+
+        validateRequestMatchesStore(request, store);
+
+        int day = resolveCurrentDay(store.getSeason());
+        GameDaySnapshot existingSnapshot = gameDaySnapshotRedisRepository
+                .find(user.getId(), store.getSeason().getId(), day)
+                .orElse(null);
+        if (existingSnapshot != null) {
+            validateRepeatedStartRequest(store, request, existingSnapshot);
+            return existingSnapshot.response();
+        }
+
+        Order existingOrder = orderRepository.findByStoreIdAndOrderedDay(store.getId(), day).orElse(null);
+        validateRepeatedStartRequest(store, request, existingOrder);
+
+        if (existingOrder == null) {
+            store.changePrice(request.price());
+        }
+
+        StartingState startingState = resolveStartingState(store, day, existingOrder, request.orderCount());
+        if (existingOrder == null && request.orderCount() > 0) {
+            orderRepository.save(Order.create(
+                    store.getMenu(),
+                    store,
+                    request.orderCount(),
+                    startingState.orderCost(),
+                    day
+            ));
+        }
+
+        DaySchedule daySchedule = buildDaySchedule(store.getLocation().getId(), day);
+        Weather weather = selectWeather(day);
+        BigDecimal captureRate = resolveStartingCaptureRate(store, day);
+        List<GameDayStartResponse.EventSchedule> eventSchedule = buildEventSchedule(store.getSeason().getId(), day);
+
+        GameDayStartResponse response = new GameDayStartResponse(
+                formatHour(BUSINESS_OPEN_HOUR),
+                formatHour(BUSINESS_CLOSE_HOUR),
+                daySchedule.hourlySchedule(),
+                toWeatherLabel(weather.getWeatherType()),
+                normalizeScale(weather.getPopulationPercent()),
+                daySchedule.dailyTrafficMultiplier(),
+                captureRate,
+                eventSchedule,
+                startingState.initialBalance(),
+                startingState.initialStock()
+        );
+
+        writeSnapshot(user.getId(), store, day, request, response);
+        return response;
+    }
+
+    private void validateRequestMatchesStore(GameDayStartRequest request, Store store) {
+        if (!Objects.equals(request.locationId(), store.getLocation().getId())
+                || !Objects.equals(request.menuId(), store.getMenu().getId())) {
+            throw new BaseException(
+                    ErrorCode.INVALID_INPUT_VALUE,
+                    "요청한 locationId/menuId가 현재 상점 정보와 일치하지 않습니다. "
+                            + "expectedLocationId=%d, expectedMenuId=%d, requestLocationId=%d, requestMenuId=%d"
+                            .formatted(
+                                    store.getLocation().getId(),
+                                    store.getMenu().getId(),
+                                    request.locationId(),
+                                    request.menuId()
+                            )
+            );
+        }
+    }
+
+    private void validateRepeatedStartRequest(Store store, GameDayStartRequest request, Order existingOrder) {
+        if (existingOrder == null) {
+            return;
+        }
+        if (!Objects.equals(existingOrder.getQuantity(), request.orderCount())
+                || !Objects.equals(store.getPrice(), request.price())) {
+            throw new BaseException(
+                    ErrorCode.INVALID_INPUT_VALUE,
+                    "이미 시작한 영업일은 동일한 price와 orderCount로만 다시 조회할 수 있습니다. "
+                            + "expectedPrice=%d, expectedOrderCount=%d, requestPrice=%d, requestOrderCount=%d"
+                            .formatted(
+                                    store.getPrice(),
+                                    existingOrder.getQuantity(),
+                                    request.price(),
+                                    request.orderCount()
+                            )
+            );
+        }
+    }
+
+    private void validateRepeatedStartRequest(Store store, GameDayStartRequest request, GameDaySnapshot existingSnapshot) {
+        if (!Objects.equals(existingSnapshot.orderCount(), request.orderCount())
+                || !Objects.equals(existingSnapshot.price(), request.price())) {
+            throw new BaseException(
+                    ErrorCode.INVALID_INPUT_VALUE,
+                    "?대? ?쒖옉???곸뾽?쇱? ?숈씪??price? orderCount濡쒕쭔 ?ㅼ떆 議고쉶?????덉뒿?덈떎. "
+                            + "expectedPrice=%d, expectedOrderCount=%d, requestPrice=%d, requestOrderCount=%d"
+                            .formatted(
+                                    store.getPrice(),
+                                    existingSnapshot.orderCount(),
+                                    request.price(),
+                                    request.orderCount()
+                            )
+            );
+        }
+    }
+
+    private int resolveCurrentDay(Season season) {
+        int currentDay = season.getCurrentDay() == null ? 1 : season.getCurrentDay();
+        if (currentDay < 1 || currentDay > season.getTotalDays()) {
+            throw new BaseException(ErrorCode.INVALID_INPUT_VALUE, "현재 시즌의 day 정보가 올바르지 않습니다.");
+        }
+        return currentDay;
+    }
+
+    private StartingState resolveStartingState(Store store, int day, Order existingOrder, int requestedOrderCount) {
+        int orderCount = existingOrder == null ? requestedOrderCount : existingOrder.getQuantity();
+        int orderCost = existingOrder == null
+                ? Math.multiplyExact(store.getMenu().getOriginPrice(), requestedOrderCount)
+                : existingOrder.getTotalCost();
+
+        int carriedBalance;
+        int carriedStock;
+        if (day == 1) {
+            carriedBalance = INITIAL_CAPITAL - Math.multiplyExact(store.getLocation().getRent(), store.getSeason().getTotalDays());
+            carriedStock = 0;
+        } else {
+            DailyReport previousDay = dailyReportRepository.findByStoreIdAndDay(store.getId(), day - 1)
+                    .orElseThrow(() -> new BaseException(ErrorCode.RESOURCE_NOT_FOUND));
+            carriedBalance = previousDay.getBalance();
+            carriedStock = previousDay.getStockRemaining();
+        }
+
+        int initialBalance = carriedBalance - orderCost;
+        if (initialBalance < 0) {
+            int maxAffordableOrderCount = carriedBalance / store.getMenu().getOriginPrice();
+            throw new BaseException(
+                    ErrorCode.INVALID_INPUT_VALUE,
+                    "보유 자금이 부족하여 해당 수량을 발주할 수 없습니다. "
+                            + "maxOrderCount=%d, requestOrderCount=%d, balanceBeforeOrder=%d, originPrice=%d"
+                            .formatted(
+                                    maxAffordableOrderCount,
+                                    requestedOrderCount,
+                                    carriedBalance,
+                                    store.getMenu().getOriginPrice()
+                            )
+            );
+        }
+
+        return new StartingState(initialBalance, Math.addExact(carriedStock, orderCount), orderCost);
+    }
+
+    private DaySchedule buildDaySchedule(Long locationId, int day) {
+        List<Population> populations = populationRepository.findByLocationIdOrderByDateAsc(locationId);
+        List<Traffic> traffics = trafficRepository.findByLocationIdOrderByDateAsc(locationId);
+        if (populations.isEmpty() || traffics.isEmpty()) {
+            throw new BaseException(ErrorCode.RESOURCE_NOT_FOUND);
+        }
+
+        List<Population> selectedPopulations = selectRowsForDay(populations, Population::getDate, day);
+        List<Traffic> selectedTraffics = selectRowsForDay(traffics, Traffic::getDate, day);
+        BigDecimal trafficBaseline = averageTrafficStatus(traffics);
+
+        Map<Integer, Integer> populationByHour = new LinkedHashMap<>();
+        for (Population population : selectedPopulations) {
+            int hour = population.getDate().getHour();
+            if (hour >= BUSINESS_OPEN_HOUR && hour < BUSINESS_CLOSE_HOUR) {
+                populationByHour.put(hour, population.getFloatingPopulation());
+            }
+        }
+
+        Map<Integer, Integer> trafficByHour = new LinkedHashMap<>();
+        for (Traffic traffic : selectedTraffics) {
+            int hour = traffic.getDate().getHour();
+            if (hour >= BUSINESS_OPEN_HOUR && hour < BUSINESS_CLOSE_HOUR) {
+                trafficByHour.put(hour, traffic.getTrafficStatus());
+            }
+        }
+
+        LinkedHashMap<String, GameDayStartResponse.HourlySchedule> hourlySchedule = new LinkedHashMap<>();
+        List<BigDecimal> hourlyMultipliers = new ArrayList<>();
+        for (int hour = BUSINESS_OPEN_HOUR; hour < BUSINESS_CLOSE_HOUR; hour++) {
+            BigDecimal trafficMultiplier = trafficByHour.containsKey(hour)
+                    ? ratio(trafficByHour.get(hour), trafficBaseline)
+                    : BigDecimal.ONE.setScale(2, RoundingMode.HALF_UP);
+            hourlySchedule.put(
+                    String.valueOf(hour),
+                    new GameDayStartResponse.HourlySchedule(
+                            populationByHour.getOrDefault(hour, 0),
+                            trafficMultiplier
+                    )
+            );
+            hourlyMultipliers.add(trafficMultiplier);
+        }
+
+        return new DaySchedule(hourlySchedule, average(hourlyMultipliers));
+    }
+
+    private <T> List<T> selectRowsForDay(List<T> rows, Function<T, LocalDateTime> dateExtractor, int day) {
+        Map<LocalDate, List<T>> rowsByDate = new LinkedHashMap<>();
+        for (T row : rows) {
+            rowsByDate.computeIfAbsent(dateExtractor.apply(row).toLocalDate(), key -> new ArrayList<>()).add(row);
+        }
+
+        List<List<T>> groupedRows = new ArrayList<>(rowsByDate.values());
+        if (groupedRows.isEmpty()) {
+            throw new BaseException(ErrorCode.RESOURCE_NOT_FOUND);
+        }
+
+        int index = Math.floorMod(day - 1, groupedRows.size());
+        return groupedRows.get(index);
+    }
+
+    private BigDecimal averageTrafficStatus(List<Traffic> traffics) {
+        BigDecimal total = BigDecimal.ZERO;
+        for (Traffic traffic : traffics) {
+            total = total.add(BigDecimal.valueOf(traffic.getTrafficStatus()));
+        }
+        return total.divide(BigDecimal.valueOf(traffics.size()), 6, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal ratio(int trafficStatus, BigDecimal baseline) {
+        if (baseline.compareTo(BigDecimal.ZERO) == 0) {
+            return BigDecimal.ONE.setScale(2, RoundingMode.HALF_UP);
+        }
+        return BigDecimal.valueOf(trafficStatus).divide(baseline, 2, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal average(List<BigDecimal> values) {
+        if (values.isEmpty()) {
+            return BigDecimal.ONE.setScale(2, RoundingMode.HALF_UP);
+        }
+
+        BigDecimal total = BigDecimal.ZERO;
+        for (BigDecimal value : values) {
+            total = total.add(value);
+        }
+        return total.divide(BigDecimal.valueOf(values.size()), 2, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal resolveStartingCaptureRate(Store store, int day) {
+        if (day == 1) {
+            return INITIAL_CAPTURE_RATE;
+        }
+
+        DailyReport previousDay = dailyReportRepository.findByStoreIdAndDay(store.getId(), day - 1)
+                .orElseThrow(() -> new BaseException(ErrorCode.RESOURCE_NOT_FOUND));
+        return normalizeScale(previousDay.getCaptureRate());
+    }
+
+    private Weather selectWeather(int day) {
+        List<Weather> weathers = weatherRepository.findAllByOrderByIdAsc();
+        if (weathers.isEmpty()) {
+            throw new BaseException(ErrorCode.RESOURCE_NOT_FOUND);
+        }
+        return weathers.get(Math.floorMod(day - 1, weathers.size()));
+    }
+
+    private List<GameDayStartResponse.EventSchedule> buildEventSchedule(Long seasonId, int day) {
+        List<DailyEvent> dailyEvents = dailyEventRepository.findBySeasonIdAndDayOrderByIdAsc(seasonId, day);
+        List<GameDayStartResponse.EventSchedule> eventSchedule = new ArrayList<>();
+        for (DailyEvent dailyEvent : dailyEvents) {
+            RandomEvent event = dailyEvent.getEvent();
+            Integer balanceChange = event.getCapitalFlat() == null || event.getCapitalFlat() == 0
+                    ? null
+                    : event.getCapitalFlat();
+            eventSchedule.add(new GameDayStartResponse.EventSchedule(
+                    formatHour(BUSINESS_OPEN_HOUR),
+                    event.getEventType(),
+                    new GameDayStartResponse.Scope(null, null),
+                    dailyEvent.getNewsTitle(),
+                    normalizeScale(event.getPopulationRate()),
+                    balanceChange
+            ));
+        }
+        return eventSchedule;
+    }
+
+    private void writeSnapshot(
+            Integer userId,
+            Store store,
+            int day,
+            GameDayStartRequest request,
+            GameDayStartResponse response
+    ) {
+        long dailySeed = ThreadLocalRandom.current().nextLong(1, Long.MAX_VALUE);
+        List<Integer> purchaseList = buildPurchaseList(dailySeed, response.hourlySchedule());
+        gameDaySnapshotRedisRepository.save(
+                userId,
+                store.getSeason().getId(),
+                day,
+                new GameDaySnapshot(
+                        store.getId(),
+                        store.getSeason().getId(),
+                        day,
+                        request.locationId(),
+                        request.menuId(),
+                        request.price(),
+                        request.orderCount(),
+                        dailySeed,
+                        purchaseList,
+                        0,
+                        response
+                )
+        );
+    }
+
+    private List<Integer> buildPurchaseList(long dailySeed, Map<String, GameDayStartResponse.HourlySchedule> hourlySchedule) {
+        int expectedCustomerCount = 0;
+        for (GameDayStartResponse.HourlySchedule schedule : hourlySchedule.values()) {
+            expectedCustomerCount += schedule.population();
+        }
+
+        Random random = new Random(dailySeed);
+        List<Integer> purchaseList = new ArrayList<>(expectedCustomerCount);
+        for (int i = 0; i < expectedCustomerCount; i++) {
+            purchaseList.add(drawPurchaseQuantity(random));
+        }
+        return purchaseList;
+    }
+
+    private int drawPurchaseQuantity(Random random) {
+        int roll = random.nextInt(100);
+        int cumulative = 0;
+        for (int quantity = 0; quantity < PURCHASE_QUANTITY_WEIGHTS.length; quantity++) {
+            cumulative += PURCHASE_QUANTITY_WEIGHTS[quantity];
+            if (roll < cumulative) {
+                return quantity;
+            }
+        }
+        return PURCHASE_QUANTITY_WEIGHTS.length - 1;
+    }
+
+    private String toWeatherLabel(WeatherType weatherType) {
+        return switch (weatherType) {
+            case SUNNY -> "맑음";
+            case RAIN -> "비";
+            case SNOW -> "눈";
+            case HEATWAVE -> "폭염";
+            case COLDWAVE -> "한파";
+            case FOG -> "안개";
+        };
+    }
+
+    private BigDecimal normalizeScale(BigDecimal value) {
+        return value.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private String formatHour(int hour) {
+        return LocalTime.of(hour % 24, 0).format(TIME_FORMATTER);
+    }
+
+    private record StartingState(
+            int initialBalance,
+            int initialStock,
+            int orderCost
+    ) {
+    }
+
+    private record DaySchedule(
+            Map<String, GameDayStartResponse.HourlySchedule> hourlySchedule,
+            BigDecimal dailyTrafficMultiplier
+    ) {
+    }
+
+}
