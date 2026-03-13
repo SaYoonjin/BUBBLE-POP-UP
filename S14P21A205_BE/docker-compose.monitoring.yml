@@ -1,7 +1,19 @@
 services:
+  node-exporter:
+    image: prom/node-exporter
+    container_name: monitoring-node-exporter
+    command:
+      - --path.rootfs=/host
+    pid: host
+    restart: unless-stopped
+    volumes:
+      - /:/host:ro,rslave
+
   prometheus:
     image: prom/prometheus
     container_name: monitoring-prometheus
+    depends_on:
+      - node-exporter
     ports:
       - "127.0.0.1:9090:9090"
     command:
