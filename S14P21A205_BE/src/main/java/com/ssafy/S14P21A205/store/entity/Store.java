@@ -55,6 +55,10 @@ public class Store {
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
+    public void changeLocation(Location location) {
+        this.location = location;
+    }
+
     public void changePrice(Integer price) {
         this.price = price;
     }
