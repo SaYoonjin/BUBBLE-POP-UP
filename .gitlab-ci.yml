@@ -6,6 +6,8 @@ variables:
   BACKEND_DIR: "S14P21A205_BE"
   WEB_USER: "ubuntu"
   WEB_APP_DIR: "/home/ubuntu/S14P21A205"
+  DATA_USER: "ubuntu"
+  DATA_APP_DIR: "/home/ubuntu/S14P21A205-data"
 
 build-backend:
   stage: build
@@ -39,6 +41,23 @@ bootstrap-webserver:
   rules:
     - if: '$CI_COMMIT_BRANCH == "master"'
 
+bootstrap-data-server:
+  stage: deploy
+  image: alpine:3.20
+  when: manual
+  before_script:
+    - apk add --no-cache openssh-client bash rsync
+    - mkdir -p ~/.ssh
+    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/id_rsa
+    - chmod 600 ~/.ssh/id_rsa
+    - ssh-keyscan -H "$DATA_SERVER_IP" >> ~/.ssh/known_hosts
+  script:
+    - ssh "$DATA_USER@$DATA_SERVER_IP" "mkdir -p '$DATA_APP_DIR/ops'"
+    - rsync -az "$BACKEND_DIR/ops/" "$DATA_USER@$DATA_SERVER_IP:$DATA_APP_DIR/ops/"
+    - ssh "$DATA_USER@$DATA_SERVER_IP" "cd '$DATA_APP_DIR' && sudo DEPLOY_USER='$DATA_USER' APP_DIR='$DATA_APP_DIR' bash ops/scripts/bootstrap_data_ec2.sh"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "master"'
+
 deploy-web:
   stage: deploy
   image: alpine:3.20
@@ -68,6 +87,24 @@ deploy-web:
     - grep '^NGINX_SERVER_NAME=' .env.prod
     - scp .env.prod "$WEB_USER@$WEB_SERVER_IP:$WEB_APP_DIR/.env.prod"
     - ssh "$WEB_USER@$WEB_SERVER_IP" "cd '$WEB_APP_DIR' && docker compose up -d --build --remove-orphans"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "master"'
+
+deploy-data:
+  stage: deploy
+  image: alpine:3.20
+  before_script:
+    - apk add --no-cache openssh-client bash rsync
+    - mkdir -p ~/.ssh
+    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/id_rsa
+    - chmod 600 ~/.ssh/id_rsa
+    - ssh-keyscan -H "$DATA_SERVER_IP" >> ~/.ssh/known_hosts
+  script:
+    - ssh "$DATA_USER@$DATA_SERVER_IP" "mkdir -p '$DATA_APP_DIR/data' '$DATA_APP_DIR/spark/jobs'"
+    - rsync -az "$BACKEND_DIR/docker-compose.data.yml" "$BACKEND_DIR/hadoop.env" "$DATA_USER@$DATA_SERVER_IP:$DATA_APP_DIR/"
+    - rsync -az "$BACKEND_DIR/data/" "$DATA_USER@$DATA_SERVER_IP:$DATA_APP_DIR/data/"
+    - rsync -az "$BACKEND_DIR/spark/" "$DATA_USER@$DATA_SERVER_IP:$DATA_APP_DIR/spark/"
+    - ssh "$DATA_USER@$DATA_SERVER_IP" "cd '$DATA_APP_DIR' && docker compose -f docker-compose.data.yml up -d --build --remove-orphans"
   rules:
     - if: '$CI_COMMIT_BRANCH == "master"'
 

@@ -1,26 +1,4 @@
 services:
-  mysql:
-    image: mysql:8.4
-    ports:
-      - "${DB_PORT:-13306}:3306"
-    environment:
-      MYSQL_DATABASE: ${DB_NAME:-mydb}
-      MYSQL_USER: ${DB_USERNAME:-myuser}
-      MYSQL_PASSWORD: ${DB_PASSWORD:-mypassword}
-      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-rootpassword}
-    volumes:
-      - mysql_data:/var/lib/mysql
-    healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD || exit 1"]
-      interval: 5s
-      timeout: 5s
-      retries: 20
-
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-
   namenode:
     image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
     container_name: namenode
@@ -32,6 +10,7 @@ services:
     volumes:
       - namenode_data:/hadoop/dfs/name
       - ./data:/local-data
+    restart: unless-stopped
 
   datanode:
     image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
@@ -42,19 +21,18 @@ services:
       - ./hadoop.env
     volumes:
       - datanode_data:/hadoop/dfs/data
+    restart: unless-stopped
 
   hdfs-init:
     image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
     container_name: hdfs-init
-    profiles:
-      - hdfs-init
     depends_on:
       - namenode
       - datanode
-    volumes:
-      - ./data:/local-data
     env_file:
       - ./hadoop.env
+    volumes:
+      - ./data:/local-data
     command: bash /local-data/init-hdfs.sh
     restart: "no"
 
@@ -63,6 +41,9 @@ services:
       context: ./spark
       target: master
     container_name: spark-master
+    depends_on:
+      - namenode
+      - datanode
     ports:
       - "8082:8080"
       - "7077:7077"
@@ -72,6 +53,7 @@ services:
       - INIT_DAEMON_STEP=setup_spark
     volumes:
       - ./spark/jobs:/opt/spark-jobs
+    restart: unless-stopped
 
   spark-worker:
     build:
@@ -90,27 +72,8 @@ services:
       - SPARK_WORKER_CORES=2
     volumes:
       - ./spark/jobs:/opt/spark-jobs
-
-  spark-etl:
-    build:
-      context: ./spark
-      target: master
-    container_name: spark-etl
-    depends_on:
-      spark-master:
-        condition: service_started
-      spark-worker:
-        condition: service_started
-      hdfs-init:
-        condition: service_completed_successfully
-    env_file:
-      - ./hadoop.env
-    volumes:
-      - ./spark/jobs:/opt/spark-jobs
-    command: bash /opt/spark-jobs/run-etl.sh
-    restart: "no"
+    restart: unless-stopped
 
 volumes:
-  mysql_data:
   namenode_data:
   datanode_data:

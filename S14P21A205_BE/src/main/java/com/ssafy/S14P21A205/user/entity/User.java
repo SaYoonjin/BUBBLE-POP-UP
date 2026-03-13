@@ -69,6 +69,10 @@ public class User {
         this.nickname = nickname;
     }
 
+    public void usePoints(int points) {
+        this.point -= points;
+    }
+
     public enum UserRole {
         GENERAL,
         ADMIN
