@@ -67,7 +67,7 @@ bootstrap-monitoring-server:
   before_script:
     - apk add --no-cache openssh-client bash rsync
     - mkdir -p ~/.ssh
-    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/id_rsa
+    - printf '%s' "${MONITOR_SSH_PRIVATE_KEY:-$SSH_PRIVATE_KEY}" | tr -d '\r' > ~/.ssh/id_rsa
     - chmod 600 ~/.ssh/id_rsa
     - ssh-keyscan -H "$MONITOR_SERVER_IP" >> ~/.ssh/known_hosts
   script:
@@ -133,7 +133,7 @@ deploy-monitoring:
   before_script:
     - apk add --no-cache openssh-client bash rsync
     - mkdir -p ~/.ssh
-    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/id_rsa
+    - printf '%s' "${MONITOR_SSH_PRIVATE_KEY:-$SSH_PRIVATE_KEY}" | tr -d '\r' > ~/.ssh/id_rsa
     - chmod 600 ~/.ssh/id_rsa
     - ssh-keyscan -H "$MONITOR_SERVER_IP" >> ~/.ssh/known_hosts
   script:
