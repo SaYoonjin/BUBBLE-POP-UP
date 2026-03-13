@@ -1,6 +1,5 @@
 #!/bin/bash
-echo "Waiting for HDFS data upload..."
-sleep 40
+echo "Starting ETL jobs..."
 
 if curl -sf "http://namenode:9870/webhdfs/v1/processed/population/_SUCCESS?op=GETFILESTATUS" > /dev/null 2>&1; then
   echo "Processed data already exists. Skipping ETL."

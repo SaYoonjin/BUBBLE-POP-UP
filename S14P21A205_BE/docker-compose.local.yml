@@ -46,8 +46,6 @@ services:
   hdfs-init:
     image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
     container_name: hdfs-init
-    profiles:
-      - hdfs-init
     depends_on:
       - namenode
       - datanode
@@ -101,8 +99,8 @@ services:
         condition: service_started
       spark-worker:
         condition: service_started
-      namenode:
-        condition: service_started
+      hdfs-init:
+        condition: service_completed_successfully
     env_file:
       - ./hadoop.env
     volumes:
