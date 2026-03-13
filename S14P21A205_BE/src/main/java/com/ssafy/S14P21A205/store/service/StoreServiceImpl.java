@@ -45,6 +45,16 @@ public class StoreServiceImpl implements StoreService {
         );
     }
 
+    /**
+     * 매장 위치 변경
+     * 1. userId로 매장 조회
+     * 2. RENT 할인 아이템 보유 여부 확인
+     * 3. 변경할 지역 조회
+     * 4. 현재 지역과 동일한지 검증
+     * 5. 할인 적용 임대료 계산
+     * 6. Redis 잔액 차감
+     * 7. 매장 위치 변경
+     */
     @Override
     @Transactional
     public UpdateStoreLocationResponse updateStoreLocation(Integer userId, UpdateStoreLocationRequest request) {
@@ -71,6 +81,11 @@ public class StoreServiceImpl implements StoreService {
         );
     }
 
+    /**
+     * 지역 목록 조회
+     * - 전체 지역 목록 반환
+     * - RENT 할인 아이템이 있으면 할인율도 함께 표시
+     */
     @Override
     public LocationListResponse getLocations(Integer userId) {
         Store store = getStoreByUserId(userId);
@@ -89,6 +104,11 @@ public class StoreServiceImpl implements StoreService {
         );
     }
 
+    /**
+     * 메뉴 목록 조회
+     * - 전체 메뉴 목록 반환
+     * - INGREDIENT 할인 아이템이 있으면 할인율도 함께 표시
+     */
     @Override
     public MenuListResponse getMenus(Integer userId) {
         Store store = getStoreByUserId(userId);
@@ -109,6 +129,12 @@ public class StoreServiceImpl implements StoreService {
                 .build();
     }
 
+    /**
+     * Redis에서 매장 잔액 차감
+     * - 잔액 정보가 없으면 예외
+     * - 잔액 부족 시 예외
+     * - 차감 후 Redis에 반영
+     */
     private Integer deductBalance(Long storeId, Integer amount) {
         String key = generateBalanceKey(storeId);
         String value = stringRedisTemplate.opsForValue().get(key);
@@ -139,39 +165,21 @@ public class StoreServiceImpl implements StoreService {
     }
 
     private BigDecimal getDisplayedRentDiscountRate(Long storeId) {
-        return normalizeDiscountRate(
-                storeRepository.findPurchasedDiscountRateByStoreIdAndCategory(storeId, ItemCategory.RENT)
-                        .orElse(BigDecimal.ZERO)
-        );
+        return storeRepository.findPurchasedDiscountRateByStoreIdAndCategory(storeId, ItemCategory.RENT)
+                .orElse(BigDecimal.ONE);
     }
 
     private BigDecimal getDisplayedIngredientDiscountRate(Long storeId) {
-        return normalizeDiscountRate(
-                storeRepository.findPurchasedDiscountRateByStoreIdAndCategory(storeId, ItemCategory.INGREDIENT)
-                        .orElse(BigDecimal.ZERO)
-        );
+        return storeRepository.findPurchasedDiscountRateByStoreIdAndCategory(storeId, ItemCategory.INGREDIENT)
+                .orElse(BigDecimal.ONE);
     }
 
     private Integer applyDiscount(Integer amount, BigDecimal discountMultiplier) {
-        BigDecimal normalizedDiscountMultiplier = normalizeDiscountRate(discountMultiplier);
-
         BigDecimal discountedAmount = BigDecimal.valueOf(amount)
-                .multiply(normalizedDiscountMultiplier)
+                .multiply(discountMultiplier)
                 .setScale(0, RoundingMode.HALF_UP);
 
         return discountedAmount.intValue();
-    }
-
-    private BigDecimal normalizeDiscountRate(BigDecimal discountRate) {
-        if (discountRate == null || discountRate.signum() <= 0) {
-            return BigDecimal.ZERO;
-        }
-
-        if (discountRate.compareTo(BigDecimal.ONE) > 0) {
-            return discountRate.movePointLeft(2);
-        }
-
-        return discountRate;
     }
 
     private Store getStoreByUserId(Integer userId) {
