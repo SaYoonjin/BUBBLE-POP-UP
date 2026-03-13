@@ -16,6 +16,10 @@ public class OrderController implements OrderControllerDoc {
 
     private final OrderService orderService;
 
+    /**
+     * 현재 판매가 조회 api
+     * userId로 매장을 조회한 뒤 현재 판매 메뉴의 가격/재고 정보를 반환
+     */
     @Override
     @GetMapping
     public ResponseEntity<CurrentOrderResponse> getCurrentOrder(Authentication authentication) {
@@ -23,6 +27,7 @@ public class OrderController implements OrderControllerDoc {
         return ResponseEntity.ok(orderService.getCurrentOrder(userId));
     }
 
+    // Authentication 객체에서 userId 추출
     private Integer extractUserId(Authentication authentication) {
         if (authentication == null || authentication.getName() == null) {
             throw new RuntimeException("인증 정보가 없습니다.");

@@ -17,11 +17,20 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class OrderServiceImpl implements OrderService {
 
+    // Redis에 저장된 재고 조회 시 사용하는 key prefix
     private static final String STOCK_KEY_PREFIX = "stock:";
 
     private final StoreRepository storeRepository;
     private final StringRedisTemplate stringRedisTemplate;
 
+    /**
+     * 현재 판매가 조회
+     * 1. userId로 매장 조회
+     * 2. 매장에서 판매 중인 메뉴 조회
+     * 3. 원재료 할인 아이템 구매 여부 확인
+     * 4. 할인율을 적용한 원가 계산
+     * 5. Redis에서 현재 재고 조회
+     */
     @Override
     public CurrentOrderResponse getCurrentOrder(Integer userId) {
         Store store = getStoreByUserId(userId);
@@ -47,10 +56,8 @@ public class OrderServiceImpl implements OrderService {
     }
 
     private BigDecimal getIngredientDiscountRate(Long storeId) {
-        return normalizeDiscountRate(
-                storeRepository.findPurchasedDiscountRateByStoreIdAndCategory(storeId, ItemCategory.INGREDIENT)
-                        .orElse(BigDecimal.ZERO)
-        );
+        return storeRepository.findPurchasedDiscountRateByStoreIdAndCategory(storeId, ItemCategory.INGREDIENT)
+                .orElse(BigDecimal.ONE);
     }
 
     private Integer applyDiscount(Integer originalPrice, BigDecimal discountRate) {
@@ -58,26 +65,13 @@ public class OrderServiceImpl implements OrderService {
             return originalPrice;
         }
 
-        BigDecimal discountMultiplier = BigDecimal.ONE.subtract(discountRate);
-
         return BigDecimal.valueOf(originalPrice)
-                .multiply(discountMultiplier)
+                .multiply(discountRate)
                 .setScale(0, RoundingMode.HALF_UP)
                 .intValue();
     }
 
-    private BigDecimal normalizeDiscountRate(BigDecimal discountRate) {
-        if (discountRate == null || discountRate.signum() <= 0) {
-            return BigDecimal.ZERO;
-        }
-
-        if (discountRate.compareTo(BigDecimal.ONE) > 0) {
-            return discountRate.movePointLeft(2);
-        }
-
-        return discountRate;
-    }
-
+    // Redis에서 현재 매장 재고 조회
     private Integer getStock(Long storeId) {
         String key = generateStockKey(storeId);
         String value = stringRedisTemplate.opsForValue().get(key);
@@ -89,6 +83,10 @@ public class OrderServiceImpl implements OrderService {
         return Integer.valueOf(value);
     }
 
+    /**
+     * Redis 재고 조회 key 생성
+     * 형식: stock:{storeId}
+     */
     private String generateStockKey(Long storeId) {
         return STOCK_KEY_PREFIX + storeId;
     }
