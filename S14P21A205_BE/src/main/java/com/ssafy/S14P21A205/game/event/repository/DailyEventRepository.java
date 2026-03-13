@@ -9,4 +9,7 @@ public interface DailyEventRepository extends JpaRepository<DailyEvent, Long> {
 
     @EntityGraph(attributePaths = {"event"})
     List<DailyEvent> findBySeasonIdAndDayOrderByIdAsc(Long seasonId, Integer day);
+
+    @EntityGraph(attributePaths = {"event"})
+    List<DailyEvent> findBySeasonIdAndDayBetweenOrderByDayAscIdAsc(Long seasonId, Integer startDay, Integer endDay);
 }

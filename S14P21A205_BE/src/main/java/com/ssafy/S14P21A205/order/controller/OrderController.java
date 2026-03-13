@@ -1,13 +1,15 @@
 package com.ssafy.S14P21A205.order.controller;
 
 import com.ssafy.S14P21A205.order.dto.CurrentOrderResponse;
+import com.ssafy.S14P21A205.order.dto.RegularOrderRequest;
+import com.ssafy.S14P21A205.order.dto.RegularOrderResponse;
 import com.ssafy.S14P21A205.order.service.OrderService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/orders")
@@ -25,6 +27,18 @@ public class OrderController implements OrderControllerDoc {
     public ResponseEntity<CurrentOrderResponse> getCurrentOrder(Authentication authentication) {
         Integer userId = extractUserId(authentication);
         return ResponseEntity.ok(orderService.getCurrentOrder(userId));
+    }
+
+    // 정규 발주 api
+    @Override
+    @PostMapping("/regular")
+    public ResponseEntity<RegularOrderResponse> createRegularOrder(
+            Authentication authentication,
+            @Valid @RequestBody RegularOrderRequest request
+    ) {
+        Integer userId = extractUserId(authentication);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(orderService.createRegularOrder(userId, request));
     }
 
     // Authentication 객체에서 userId 추출
