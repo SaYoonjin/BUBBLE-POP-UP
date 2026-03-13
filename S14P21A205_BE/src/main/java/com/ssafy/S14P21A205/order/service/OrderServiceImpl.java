@@ -93,10 +93,15 @@ public class OrderServiceImpl implements OrderService {
 
         Menu menu = getMenuById(request.menuId());
         boolean sameMenu = Objects.equals(store.getMenu().getId(), menu.getId());
+        Integer sellingPrice = resolveSellingPrice(request.price(), store.getPrice(), menu.getOriginPrice());
 
         BigDecimal discountRate = getIngredientDiscountRate(storeId);
         Integer costPrice = resolveCostPrice(menu, discountRate);
         Integer totalCost = Math.multiplyExact(costPrice, request.quantity());
+
+        if (!Objects.equals(store.getPrice(), sellingPrice)) {
+            store.changePrice(sellingPrice);
+        }
 
         deductBalance(storeId, totalCost);
         updateStock(storeId, request.quantity(), sameMenu);
@@ -135,6 +140,16 @@ public class OrderServiceImpl implements OrderService {
 
     private Integer resolveCostPrice(Menu menu, BigDecimal discountRate) {
         return applyDiscount(menu.getOriginPrice(), discountRate);
+    }
+
+    private Integer resolveSellingPrice(Integer requestedPrice, Integer currentStorePrice, Integer defaultPrice) {
+        if (requestedPrice != null) {
+            return requestedPrice;
+        }
+        if (currentStorePrice != null) {
+            return currentStorePrice;
+        }
+        return defaultPrice;
     }
 
     private Integer applyDiscount(Integer originalPrice, BigDecimal discountRate) {
