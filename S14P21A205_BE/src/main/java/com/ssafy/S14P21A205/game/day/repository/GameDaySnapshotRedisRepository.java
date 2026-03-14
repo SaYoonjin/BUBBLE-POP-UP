@@ -3,7 +3,11 @@ package com.ssafy.S14P21A205.game.day.repository;
 import com.ssafy.S14P21A205.exception.BaseException;
 import com.ssafy.S14P21A205.exception.ErrorCode;
 import com.ssafy.S14P21A205.game.day.dto.GameDaySnapshot;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Repository;
@@ -35,6 +39,34 @@ public class GameDaySnapshotRedisRepository {
 
         try {
             return Optional.of(objectMapper.readValue(payload, GameDaySnapshot.class));
+        } catch (Exception e) {
+            throw new BaseException(ErrorCode.INTERNAL_SERVER_ERROR, e);
+        }
+    }
+
+    public List<GameDaySnapshot> findAllBySeasonIdAndDay(Long seasonId, Integer day) {
+        Set<String> keys = stringRedisTemplate.keys("%s:*:%d:%d".formatted(KEY_PREFIX, seasonId, day));
+        if (keys == null || keys.isEmpty()) {
+            return List.of();
+        }
+
+        try {
+            List<String> sortedKeys = keys.stream()
+                    .sorted(Comparator.naturalOrder())
+                    .toList();
+            List<String> payloads = stringRedisTemplate.opsForValue().multiGet(sortedKeys);
+            if (payloads == null || payloads.isEmpty()) {
+                return List.of();
+            }
+
+            List<GameDaySnapshot> snapshots = new ArrayList<>();
+            for (String payload : payloads) {
+                if (!StringUtils.hasText(payload)) {
+                    continue;
+                }
+                snapshots.add(objectMapper.readValue(payload, GameDaySnapshot.class));
+            }
+            return snapshots;
         } catch (Exception e) {
             throw new BaseException(ErrorCode.INTERNAL_SERVER_ERROR, e);
         }
