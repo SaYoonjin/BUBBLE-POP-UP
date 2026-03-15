@@ -16,7 +16,7 @@ public record PurchaseItemResponse(
         return PurchaseItemResponse.builder()
                 .itemId(item.getId())
                 .itemName(item.getItemName())
-                .category(item.getCategory().name() + "_DISCOUNT")
+                .category(item.getCategory().name())
                 .discountRate(discountRate)
                 .usedPoints(item.getPoint())
                 .build();

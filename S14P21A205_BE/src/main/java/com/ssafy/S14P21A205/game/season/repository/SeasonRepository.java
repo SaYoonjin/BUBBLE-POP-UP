@@ -7,5 +7,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface SeasonRepository extends JpaRepository<Season, Long> {
 
-    Optional<Season> findByStatus(SeasonStatus status);
+    // 특정 상태(IN_PROGRESS, FINISHED)의 가장 최근 시즌 1개 조회
+    Optional<Season> findFirstByStatusOrderByIdDesc(SeasonStatus status);
 }

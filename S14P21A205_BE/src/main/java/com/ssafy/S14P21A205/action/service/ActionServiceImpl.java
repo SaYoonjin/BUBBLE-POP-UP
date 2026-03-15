@@ -55,7 +55,7 @@ public class ActionServiceImpl implements ActionService {
     }
 
     private int getCurrentDay() {
-        Season season = seasonRepository.findByStatus(SeasonStatus.IN_PROGRESS)
+        Season season = seasonRepository.findFirstByStatusOrderByIdDesc(SeasonStatus.IN_PROGRESS)
                 .orElseThrow(() -> new BaseException(ErrorCode.SEASON_NOT_FOUND));
         return season.getCurrentDay();
     }

@@ -1,9 +1,10 @@
 package com.ssafy.S14P21A205.store.repository;
 
-import com.ssafy.S14P21A205.shop.entity.ItemCategory;
 import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
+import com.ssafy.S14P21A205.shop.entity.ItemCategory;
 import com.ssafy.S14P21A205.store.entity.Store;
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -18,6 +19,9 @@ public interface StoreRepository extends JpaRepository<Store, Long> {
     Optional<Store> findFirstByUser_IdOrderBySeason_IdDescIdDesc(Integer userId);
 
     Optional<Store> findByUser_Id(Integer userId);
+
+    @EntityGraph(attributePaths = {"user", "location", "menu", "season"})
+    List<Store> findBySeason_IdOrderByIdAsc(Long seasonId);
 
     @Query("""
             select item.discountRate

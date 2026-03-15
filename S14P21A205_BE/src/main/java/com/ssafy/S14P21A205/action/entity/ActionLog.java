@@ -30,6 +30,7 @@ public class ActionLog {
     @JoinColumn(name = "store_id", nullable = false)
     private Store store;
 
+    @Id
     @Column(name = "game_day", nullable = false)
     private Integer gameDay;
 
