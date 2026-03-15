@@ -10,6 +10,7 @@ import com.ssafy.S14P21A205.auth.service.AuthService;
 import com.ssafy.S14P21A205.auth.service.JwtTokenService;
 import com.ssafy.S14P21A205.game.day.repository.GameDayStoreStateRedisRepository;
 import com.ssafy.S14P21A205.game.day.dto.GameDayStartResponse;
+import com.ssafy.S14P21A205.game.day.service.GameDayReportService;
 import com.ssafy.S14P21A205.game.day.service.GameDayStartService;
 import com.ssafy.S14P21A205.game.day.service.GameDayStateService;
 import com.ssafy.S14P21A205.order.service.OrderService;
@@ -55,6 +56,9 @@ class SecurityConfigTests {
 
     @MockitoBean
     private GameDayStateService gameDayStateService;
+
+    @MockitoBean
+    private GameDayReportService gameDayReportService;
 
     @MockitoBean
     private ShopService shopService;

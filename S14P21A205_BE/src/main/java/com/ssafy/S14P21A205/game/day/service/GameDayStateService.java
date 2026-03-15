@@ -89,6 +89,7 @@ public class GameDayStateService {
                 resolveEvents(store.getSeason().getId(), day, totalDays, state.startedAt(), effectiveNow);
 
         CalculatedGameState calculatedState = calculateGameState(
+                store,
                 state,
                 day,
                 currentTimeline,
@@ -342,6 +343,7 @@ public class GameDayStateService {
     }
 
     private CalculatedGameState calculateGameState(
+            Store store,
             GameDayLiveState state,
             int day,
             SeasonTimeline.DayTimeline currentTimeline,
@@ -382,7 +384,8 @@ public class GameDayStateService {
         long actualSoldUnits = Math.min(demandUnits, totalAvailableStock);
         int remainingStock = (int) Math.max(0L, totalAvailableStock - actualSoldUnits);
         long cumulativeSales = Math.multiplyExact(actualSoldUnits, state.salePrice().longValue());
-        long cumulativeTotalCost = valueOf(dailyStartOrder == null ? null : dailyStartOrder.getTotalCost())
+        long cumulativeTotalCost = valueOf(store.getLocation() == null ? null : store.getLocation().getRent())
+                + valueOf(dailyStartOrder == null ? null : dailyStartOrder.getTotalCost())
                 + actionUsage.totalCost()
                 + emergencyOrderState.totalCost();
         long cash = state.startResponse().initialBalance()

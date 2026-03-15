@@ -138,6 +138,7 @@ class GameDayStateServiceTests {
         verify(gameDayStoreStateRedisRepository).saveStateAndTickLog(org.mockito.ArgumentMatchers.eq(15L), org.mockito.ArgumentMatchers.eq(1), stateCaptor.capture());
         assertThat(stateCaptor.getValue().purchaseCursor()).isEqualTo(4);
         assertThat(stateCaptor.getValue().cumulativeSales()).isEqualTo(2_000L);
+        assertThat(stateCaptor.getValue().cumulativeTotalCost()).isEqualTo(300L);
     }
 
     @Test
@@ -224,6 +225,7 @@ class GameDayStateServiceTests {
     ) {
         Location location = instantiate(Location.class);
         ReflectionTestUtils.setField(location, "id", locationId);
+        ReflectionTestUtils.setField(location, "rent", 300);
 
         Menu menu = instantiate(Menu.class);
         ReflectionTestUtils.setField(menu, "id", menuId);
