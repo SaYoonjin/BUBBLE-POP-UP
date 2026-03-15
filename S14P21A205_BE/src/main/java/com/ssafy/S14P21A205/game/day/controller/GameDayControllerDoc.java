@@ -48,7 +48,7 @@ public interface GameDayControllerDoc {
 
     @Operation(
             summary = "현재 영업 상태를 조회합니다.",
-            description = "Redis snapshot을 기준으로 현재 시점까지 authoritative game state를 계산해 반환합니다.",
+            description = "Redis state를 기준으로 현재 시점까지 authoritative game state를 계산해 반환합니다.",
             security = @SecurityRequirement(name = "bearerAuth")
     )
     @ApiResponses({
@@ -64,7 +64,7 @@ public interface GameDayControllerDoc {
             ),
             @ApiResponse(
                     responseCode = "404",
-                    description = "Active season or snapshot not found",
+                    description = "Active season or game day state not found",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))
             )
     })

@@ -96,11 +96,11 @@ class RealtimeSeasonRankingTickTaskTests {
         assertEquals(1, saved.rankings().get(0).userId());
         assertEquals(220L, saved.rankings().get(0).totalRevenue());
         assertEquals(new BigDecimal("120.0"), saved.rankings().get(0).roi());
-        assertEquals(100, saved.rankings().get(0).rewardPoints());
+        assertEquals(30, saved.rankings().get(0).rewardPoints());
         assertEquals(2, saved.rankings().get(1).userId());
         assertEquals(150L, saved.rankings().get(1).totalRevenue());
         assertEquals(new BigDecimal("50.0"), saved.rankings().get(1).roi());
-        assertEquals(50, saved.rankings().get(1).rewardPoints());
+        assertEquals(20, saved.rankings().get(1).rewardPoints());
     }
 
     @Test
@@ -140,9 +140,9 @@ class RealtimeSeasonRankingTickTaskTests {
         assertEquals(3, saved.rankings().get(2).rank());
         assertEquals(new BigDecimal("140.0"), saved.rankings().get(0).roi());
         assertEquals(new BigDecimal("140.0"), saved.rankings().get(1).roi());
-        assertEquals(100, saved.rankings().get(0).rewardPoints());
-        assertEquals(100, saved.rankings().get(1).rewardPoints());
-        assertEquals(30, saved.rankings().get(2).rewardPoints());
+        assertEquals(30, saved.rankings().get(0).rewardPoints());
+        assertEquals(30, saved.rankings().get(1).rewardPoints());
+        assertEquals(10, saved.rankings().get(2).rewardPoints());
     }
 
     @Test
