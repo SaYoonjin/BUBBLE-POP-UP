@@ -195,7 +195,7 @@ public class RealtimeSeasonRankingTickTask implements GameTickTask {
         }
         return todayStatsByStoreId;
     }
-    // Load today's live revenue/cost snapshot from Redis for a single store.
+    // Load today's live revenue/cost state from Redis for a single store.
     private LiveDayStats calculateLiveDayStats(Long storeId, int currentDay) {
         return gameDayStoreStateRedisRepository.find(storeId, currentDay)
                 .map(this::toLiveDayStats)

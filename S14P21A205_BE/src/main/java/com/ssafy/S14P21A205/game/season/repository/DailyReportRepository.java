@@ -8,8 +8,10 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface DailyReportRepository extends JpaRepository<DailyReport, Long> {
 
-    // 특정 가게의 특정 day 일일 리포트 1건 조회
+    @EntityGraph(attributePaths = {"store", "store.season", "store.location", "store.menu"})
     Optional<DailyReport> findByStoreIdAndDay(Long storeId, Integer day);
+
+    boolean existsByStoreIdAndDay(Long storeId, Integer day);
 
     @EntityGraph(attributePaths = {"store", "store.user", "store.location", "store.menu", "store.season"})
     List<DailyReport> findByStore_Season_IdAndDayLessThanOrderByStore_IdAscDayAsc(Long seasonId, Integer day);

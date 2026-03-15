@@ -2,9 +2,9 @@ package com.ssafy.S14P21A205.game.day.service;
 
 import com.ssafy.S14P21A205.exception.BaseException;
 import com.ssafy.S14P21A205.exception.ErrorCode;
-import com.ssafy.S14P21A205.game.day.dto.GameDaySnapshot;
+import com.ssafy.S14P21A205.game.day.dto.GameDayLiveState;
 import com.ssafy.S14P21A205.game.day.dto.GameDayStartResponse;
-import com.ssafy.S14P21A205.game.day.repository.GameDaySnapshotRedisRepository;
+import com.ssafy.S14P21A205.game.day.repository.GameDayStoreStateRedisRepository;
 import com.ssafy.S14P21A205.game.environment.entity.Population;
 import com.ssafy.S14P21A205.game.environment.entity.Traffic;
 import com.ssafy.S14P21A205.game.environment.entity.Weather;
@@ -36,7 +36,6 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Random;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Function;
 import lombok.RequiredArgsConstructor;
@@ -66,7 +65,7 @@ public class GameDayStartService {
     private final WeatherRepository weatherRepository;
     private final DailyEventRepository dailyEventRepository;
     private final OrderRepository orderRepository;
-    private final GameDaySnapshotRedisRepository gameDaySnapshotRedisRepository;
+    private final GameDayStoreStateRedisRepository gameDayStoreStateRedisRepository;
 
     private Clock clock = Clock.systemDefaultZone();
 
@@ -76,11 +75,11 @@ public class GameDayStartService {
         Store store = getActiveStore(user.getId());
 
         int day = resolveCurrentDay(store.getSeason());
-        GameDaySnapshot existingSnapshot = gameDaySnapshotRedisRepository
-                .find(user.getId(), store.getSeason().getId(), day)
+        GameDayLiveState existingState = gameDayStoreStateRedisRepository
+                .find(store.getId(), day)
                 .orElse(null);
-        if (existingSnapshot != null) {
-            return existingSnapshot.response();
+        if (existingState != null && existingState.startResponse() != null) {
+            return existingState.startResponse();
         }
 
         Order existingOrder = orderRepository.findDailyStartOrder(store.getId(), day).orElse(null);
@@ -104,7 +103,7 @@ public class GameDayStartService {
                 startingState.initialStock()
         );
 
-        writeSnapshot(user.getId(), store, day, startingState, response);
+        writeInitialState(store, day, startingState, response);
         return response;
     }
 
@@ -128,7 +127,7 @@ public class GameDayStartService {
         int carriedBalance;
         int carriedStock;
         if (day == 1) {
-            carriedBalance = INITIAL_CAPITAL - Math.multiplyExact(store.getLocation().getRent(), store.getSeason().getTotalDays());
+            carriedBalance = INITIAL_CAPITAL;
             carriedStock = 0;
         } else {
             DailyReport previousDay = dailyReportRepository.findByStoreIdAndDay(store.getId(), day - 1)
@@ -137,23 +136,26 @@ public class GameDayStartService {
             carriedStock = previousDay.getStockRemaining();
         }
 
-        int initialBalance = carriedBalance - orderCost;
+        int dailyRent = store.getLocation().getRent();
+        int balanceAfterDailyRent = carriedBalance - dailyRent;
+        int initialBalance = balanceAfterDailyRent - orderCost;
         if (initialBalance < 0) {
-            int maxAffordableOrderCount = carriedBalance / store.getMenu().getOriginPrice();
+            int maxAffordableOrderCount = Math.max(0, balanceAfterDailyRent / store.getMenu().getOriginPrice());
             throw new BaseException(
                     ErrorCode.INVALID_INPUT_VALUE,
-                    "Insufficient balance for the existing regular order. "
-                            + "maxOrderCount=%d, existingOrderCount=%d, balanceBeforeOrder=%d, originPrice=%d"
+                    "Insufficient balance for today's fixed costs. "
+                            + "maxOrderCount=%d, existingOrderCount=%d, balanceBeforeOrder=%d, dailyRent=%d, originPrice=%d"
                             .formatted(
                                     maxAffordableOrderCount,
                                     orderCount,
                                     carriedBalance,
+                                    dailyRent,
                                     store.getMenu().getOriginPrice()
                             )
             );
         }
 
-        return new StartingState(initialBalance, Math.addExact(carriedStock, orderCount), orderCount);
+        return new StartingState(initialBalance, Math.addExact(carriedStock, orderCount), orderCount, orderCost);
     }
 
     private DaySchedule buildDaySchedule(Long locationId, int day) {
@@ -282,54 +284,54 @@ public class GameDayStartService {
         return eventSchedule;
     }
 
-    private void writeSnapshot(
-            Integer userId,
+    private void writeInitialState(
             Store store,
             int day,
             StartingState startingState,
             GameDayStartResponse response
     ) {
-        long dailySeed = ThreadLocalRandom.current().nextLong(1, Long.MAX_VALUE);
-        List<Integer> purchaseList = buildPurchaseList(dailySeed, response.hourlySchedule());
+        List<Integer> purchaseList = buildPurchaseList(response.hourlySchedule());
         LocalDateTime startedAt = LocalDateTime.now(clock);
-        gameDaySnapshotRedisRepository.save(
-                userId,
-                store.getSeason().getId(),
+        gameDayStoreStateRedisRepository.save(
+                store.getId(),
                 day,
-                new GameDaySnapshot(
-                        store.getId(),
-                        store.getSeason().getId(),
-                        day,
-                        store.getLocation().getId(),
-                        store.getMenu().getId(),
-                        store.getPrice(),
-                        startingState.orderCount(),
-                        dailySeed,
+                new GameDayLiveState(
+                        startedAt,
                         purchaseList,
                         0,
                         response,
-                        startedAt,
+                        0,
+                        0,
+                        normalizeCaptureRate(response.captureRate()),
+                        store.getPrice(),
+                        0,
+                        0,
+                        0L,
+                        0,
+                        0,
+                        0L,
+                        (long) startingState.orderCost(),
+                        (long) startingState.initialBalance(),
+                        startingState.initialStock(),
                         startedAt
                 )
         );
     }
 
-    private List<Integer> buildPurchaseList(long dailySeed, Map<String, GameDayStartResponse.HourlySchedule> hourlySchedule) {
+    private List<Integer> buildPurchaseList(Map<String, GameDayStartResponse.HourlySchedule> hourlySchedule) {
         int expectedCustomerCount = 0;
         for (GameDayStartResponse.HourlySchedule schedule : hourlySchedule.values()) {
             expectedCustomerCount += schedule.population();
         }
 
-        Random random = new Random(dailySeed);
         List<Integer> purchaseList = new ArrayList<>(expectedCustomerCount);
         for (int i = 0; i < expectedCustomerCount; i++) {
-            purchaseList.add(drawPurchaseQuantity(random));
+            purchaseList.add(drawPurchaseQuantity(ThreadLocalRandom.current().nextInt(100)));
         }
         return purchaseList;
     }
 
-    private int drawPurchaseQuantity(Random random) {
-        int roll = random.nextInt(100);
+    private int drawPurchaseQuantity(int roll) {
         int cumulative = 0;
         for (int quantity = 0; quantity < PURCHASE_QUANTITY_WEIGHTS.length; quantity++) {
             cumulative += PURCHASE_QUANTITY_WEIGHTS[quantity];
@@ -355,6 +357,13 @@ public class GameDayStartService {
         return value.setScale(2, RoundingMode.HALF_UP);
     }
 
+    private BigDecimal normalizeCaptureRate(BigDecimal value) {
+        if (value == null) {
+            return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        }
+        return value.max(BigDecimal.ZERO).setScale(2, RoundingMode.HALF_UP);
+    }
+
     private String formatHour(int hour) {
         return LocalTime.of(hour % 24, 0).format(TIME_FORMATTER);
     }
@@ -362,7 +371,8 @@ public class GameDayStartService {
     private record StartingState(
             int initialBalance,
             int initialStock,
-            int orderCount
+            int orderCount,
+            int orderCost
     ) {
     }
 

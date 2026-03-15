@@ -1,6 +1,7 @@
 package com.ssafy.S14P21A205.game.day.controller;
 
 import com.ssafy.S14P21A205.exception.ErrorResponse;
+import com.ssafy.S14P21A205.game.day.dto.GameDayReportResponse;
 import com.ssafy.S14P21A205.game.day.dto.GameDayStartResponse;
 import com.ssafy.S14P21A205.game.day.dto.GameStateResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -14,11 +15,11 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 
-@Tag(name = "Game Day API", description = "Game day start API")
+@Tag(name = "Game Day API", description = "Game day APIs")
 public interface GameDayControllerDoc {
 
     @Operation(
-            summary = "n번째 날의 영업을 시작합니다.",
+            summary = "Start the current business day",
             description = "Initialize today's business state for the active season.",
             security = @SecurityRequirement(name = "bearerAuth")
     )
@@ -47,8 +48,8 @@ public interface GameDayControllerDoc {
     ResponseEntity<GameDayStartResponse> startDay(@Parameter(hidden = true) Authentication authentication);
 
     @Operation(
-            summary = "현재 영업 상태를 조회합니다.",
-            description = "Redis snapshot을 기준으로 현재 시점까지 authoritative game state를 계산해 반환합니다.",
+            summary = "Get the current business state",
+            description = "Calculate and return the authoritative game state from Redis state.",
             security = @SecurityRequirement(name = "bearerAuth")
     )
     @ApiResponses({
@@ -64,11 +65,46 @@ public interface GameDayControllerDoc {
             ),
             @ApiResponse(
                     responseCode = "404",
-                    description = "Active season or snapshot not found",
+                    description = "Active season or game day state not found",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))
             )
     })
-    ResponseEntity<GameStateResponse> getGameState(
-            @Parameter(hidden = true) Authentication authentication
+    ResponseEntity<GameStateResponse> getGameState(@Parameter(hidden = true) Authentication authentication);
+
+    @Operation(
+            summary = "Get a day report",
+            description = "Return the stored business report for the requested day.",
+            security = @SecurityRequirement(name = "bearerAuth")
+    )
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "Day report success",
+                    content = @Content(schema = @Schema(implementation = GameDayReportResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "Invalid day",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "401",
+                    description = "Authentication required",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "403",
+                    description = "Not participating in a season",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "404",
+                    description = "Day report not found",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            )
+    })
+    ResponseEntity<GameDayReportResponse> getDayReport(
+            @Parameter(hidden = true) Authentication authentication,
+            @Parameter(description = "Day number to read (1-7)") Integer day
     );
 }

@@ -35,6 +35,12 @@ public class DailyReport {
     @Column(nullable = false)
     private Integer day;
 
+    @Column(name = "location_name", length = 50)
+    private String locationName;
+
+    @Column(name = "menu_name", length = 50)
+    private String menuName;
+
     @Column(nullable = false)
     private Integer revenue;
 
@@ -68,4 +74,70 @@ public class DailyReport {
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
+
+    private DailyReport(
+            Store store,
+            Integer day,
+            String locationName,
+            String menuName,
+            Integer revenue,
+            Integer totalCost,
+            Integer netProfit,
+            Integer visitors,
+            Integer salesCount,
+            Integer stockRemaining,
+            Integer consecutiveDeficitDays,
+            Boolean isBankrupt,
+            Integer balance,
+            BigDecimal captureRate
+    ) {
+        this.store = store;
+        this.day = day;
+        this.locationName = locationName;
+        this.menuName = menuName;
+        this.revenue = revenue;
+        this.totalCost = totalCost;
+        this.netProfit = netProfit;
+        this.visitors = visitors;
+        this.salesCount = salesCount;
+        this.stockRemaining = stockRemaining;
+        this.consecutiveDeficitDays = consecutiveDeficitDays;
+        this.isBankrupt = isBankrupt;
+        this.balance = balance;
+        this.captureRate = captureRate;
+    }
+
+    public static DailyReport create(
+            Store store,
+            Integer day,
+            String locationName,
+            String menuName,
+            Integer revenue,
+            Integer totalCost,
+            Integer netProfit,
+            Integer visitors,
+            Integer salesCount,
+            Integer stockRemaining,
+            Integer consecutiveDeficitDays,
+            Boolean isBankrupt,
+            Integer balance,
+            BigDecimal captureRate
+    ) {
+        return new DailyReport(
+                store,
+                day,
+                locationName,
+                menuName,
+                revenue,
+                totalCost,
+                netProfit,
+                visitors,
+                salesCount,
+                stockRemaining,
+                consecutiveDeficitDays,
+                isBankrupt,
+                balance,
+                captureRate
+        );
+    }
 }
