@@ -55,8 +55,39 @@ public class Store {
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
+    private Store(
+            User user,
+            Location location,
+            Menu menu,
+            Season season,
+            String storeName,
+            Integer price
+    ) {
+        this.user = user;
+        this.location = location;
+        this.menu = menu;
+        this.season = season;
+        this.storeName = storeName;
+        this.price = price;
+    }
+
+    public static Store create(
+            User user,
+            Location location,
+            Menu menu,
+            Season season,
+            String storeName,
+            Integer price
+    ) {
+        return new Store(user, location, menu, season, storeName, price);
+    }
+
     public void changeLocation(Location location) {
         this.location = location;
+    }
+
+    public void changeMenu(Menu menu) {
+        this.menu = menu;
     }
 
     public void changePrice(Integer price) {

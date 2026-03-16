@@ -1,6 +1,6 @@
 package com.ssafy.S14P21A205.shop.entity;
 
-import com.ssafy.S14P21A205.store.entity.Store;
+import com.ssafy.S14P21A205.user.entity.User;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -27,19 +27,23 @@ public class ItemUser {
 
     @Id
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "store_id", nullable = false)
-    private Store store;
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user;
 
     @Column(name = "is_purchased", nullable = false)
     private Boolean isPurchased;
 
-    private ItemUser(Item item, Store store, Boolean isPurchased) {
+    private ItemUser(Item item, User user, Boolean isPurchased) {
         this.item = item;
-        this.store = store;
+        this.user = user;
         this.isPurchased = isPurchased;
     }
 
-    public static ItemUser purchase(Item item, Store store) {
-        return new ItemUser(item, store, true);
+    public static ItemUser purchase(Item item, User user) {
+        return new ItemUser(item, user, true);
+    }
+
+    public void markPurchased() {
+        this.isPurchased = true;
     }
 }

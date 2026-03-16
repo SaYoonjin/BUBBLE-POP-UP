@@ -42,17 +42,15 @@ import org.springframework.transaction.annotation.Transactional;
 public class ActionServiceImpl implements ActionService {
 
     private static final BigDecimal EMERGENCY_COST_MULTIPLIER = new BigDecimal("1.5");
-    // TODO(지원) : 긴급발주 도착 시간 고정 30초. TrafficStatus 기반으로 교통량에 따라 동적 계산으로 변경 필요.
+    // TODO: Replace fixed 30-second emergency delivery time with traffic-based calculation.
     private static final int EMERGENCY_DELIVERY_SECONDS = 30;
 
-    // 가격 구간 판정 기준 (평균가 대비 ±10%)
     private static final BigDecimal PRICE_RANGE_UPPER = new BigDecimal("1.10");
     private static final BigDecimal PRICE_RANGE_LOWER = new BigDecimal("0.90");
     private static final BigDecimal MULTIPLIER_ABOVE = new BigDecimal("0.80");
     private static final BigDecimal MULTIPLIER_AVERAGE = new BigDecimal("1.00");
     private static final BigDecimal MULTIPLIER_BELOW = new BigDecimal("1.20");
 
-    // 나눔 유입률 보너스: 5개 단위당 0.01
     private static final BigDecimal DONATION_BONUS_PER_UNIT = new BigDecimal("0.01");
     private static final int DONATION_UNIT_SIZE = 5;
 
@@ -63,8 +61,6 @@ public class ActionServiceImpl implements ActionService {
     private final StoreRepository storeRepository;
     private final SeasonRepository seasonRepository;
     private final OrderRepository orderRepository;
-
-    // ── GET API ──
 
     @Override
     public ActionStatusResponse getActionStatus(Integer userId) {
@@ -79,8 +75,6 @@ public class ActionServiceImpl implements ActionService {
         List<Action> promotions = actionRepository.findByCategory(ActionCategory.PROMOTION);
         return PromotionPriceResponse.from(promotions);
     }
-
-    // ── POST API ──
 
     @Override
     @Transactional
@@ -97,7 +91,6 @@ public class ActionServiceImpl implements ActionService {
 
         validateBalance(store.getId(), day, action.getCost());
 
-        // inflow_rate에 곱하기 반영 (captureRate 0.10 → ×1.10)
         BigDecimal multiplier = BigDecimal.ONE.add(action.getCaptureRate());
         applyInflowRateMultiplier(store.getId(), day, multiplier);
 
@@ -107,7 +100,7 @@ public class ActionServiceImpl implements ActionService {
         return new ActionResponse(
                 "PROMOTION_" + request.promotionType().name(),
                 action.getCost(),
-                "홍보가 실행되었습니다."
+                "Promotion has been executed."
         );
     }
 
@@ -122,7 +115,6 @@ public class ActionServiceImpl implements ActionService {
         Action action = findSingleAction(ActionCategory.DISCOUNT);
         validateBalance(store.getId(), day, action.getCost());
 
-        // 새 판매가 계산 (현재가 - 할인금액)
         int previousPrice = store.getPrice();
         int newPrice = previousPrice - request.discountValue();
 
@@ -130,22 +122,16 @@ public class ActionServiceImpl implements ActionService {
             throw new BaseException(ErrorCode.INVALID_INPUT_VALUE);
         }
 
-        // Store 판매가 영구 변경
         store.changePrice(newPrice);
 
-        // TODO(지원) : 평균가를 menu.originPrice로 임시 사용 중. 같은 시즌·같은 메뉴를 파는 전체 store의 판매가 평균으로 교체 필요.
-        //  Day Start에서 평균가를 계산해서 state Hash에 저장하거나, 여기서 쿼리로 조회하는 방식으로 변경.
         int averagePrice = store.getMenu().getOriginPrice();
         PriceRange priceRange = determinePriceRange(newPrice, averagePrice);
 
-        // state Hash의 sale_price 즉시 갱신
         gameDayStoreStateRedisRepository.updateField(
                 store.getId(), day, "sale_price", String.valueOf(newPrice));
 
-        // inflow_rate에 가격구간 배수 곱하기 반영
         applyInflowRateMultiplier(store.getId(), day, priceRange.multiplier);
 
-        // actionValue에 가격구간 배수 저장 (이력용)
         actionLogRepository.save(new ActionLog(action, store, day, priceRange.multiplier));
         gameStateRedisRepository.markActionUsed(store.getId(), day, "discount");
 
@@ -154,7 +140,7 @@ public class ActionServiceImpl implements ActionService {
                 newPrice,
                 priceRange.label,
                 priceRange.multiplier,
-                "할인 이벤트가 실행되었습니다. 판매가가 " + previousPrice + "원 → " + newPrice + "원으로 변경됩니다."
+                "Discount event executed. Price changed from " + previousPrice + " to " + newPrice + "."
         );
     }
 
@@ -168,7 +154,6 @@ public class ActionServiceImpl implements ActionService {
 
         Action action = findSingleAction(ActionCategory.DONATION);
 
-        // 재고 검증: 나눔 수량만큼 있어야 함
         GameDayLiveState state = gameDayStoreStateRedisRepository.find(store.getId(), day)
                 .orElseThrow(() -> new BaseException(ErrorCode.GAME_STATE_NOT_FOUND));
         int currentStock = state.stock() == null ? 0 : state.stock();
@@ -176,29 +161,25 @@ public class ActionServiceImpl implements ActionService {
             throw new BaseException(ErrorCode.INSUFFICIENT_STOCK);
         }
 
-        // 유입률 보너스 계산: 5개 단위당 0.01
         int bonusUnits = request.quantity() / DONATION_UNIT_SIZE;
         BigDecimal captureRateBonus = DONATION_BONUS_PER_UNIT
                 .multiply(BigDecimal.valueOf(bonusUnits))
                 .setScale(2, RoundingMode.HALF_UP);
 
-        // state Hash의 stock 즉시 차감
         int newStock = currentStock - request.quantity();
         gameDayStoreStateRedisRepository.updateField(
                 store.getId(), day, "stock", String.valueOf(newStock));
 
-        // inflow_rate에 나눔 보너스 곱하기 반영 (보너스 0.05 → ×1.05)
         BigDecimal multiplier = BigDecimal.ONE.add(captureRateBonus);
         applyInflowRateMultiplier(store.getId(), day, multiplier);
 
-        // actionValue에 유입률 보너스 저장 (이력용)
         actionLogRepository.save(new ActionLog(action, store, day, captureRateBonus));
         gameStateRedisRepository.markActionUsed(store.getId(), day, "donation");
 
         return new DonationResponse(
                 request.quantity(),
                 captureRateBonus,
-                request.quantity() + "개를 나눔하였습니다. 유입률 +" + captureRateBonus + " 보너스."
+                request.quantity() + " items donated. Inflow bonus +" + captureRateBonus + "."
         );
     }
 
@@ -234,14 +215,12 @@ public class ActionServiceImpl implements ActionService {
                 request.quantity(),
                 totalCost,
                 arrivedTime,
-                "긴급 발주가 접수되었습니다."
+                "Emergency order has been placed."
         );
     }
 
-    // ── 공통 헬퍼 ──
-
     private Store findStore(Integer userId) {
-        return storeRepository.findByUser_Id(userId)
+        return storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(userId, SeasonStatus.IN_PROGRESS)
                 .orElseThrow(() -> new BaseException(ErrorCode.STORE_NOT_FOUND));
     }
 
@@ -274,8 +253,6 @@ public class ActionServiceImpl implements ActionService {
         }
     }
 
-    // ── 유입률 헬퍼 ──
-
     private void applyInflowRateMultiplier(Long storeId, int day, BigDecimal multiplier) {
         GameDayLiveState state = gameDayStoreStateRedisRepository.find(storeId, day)
                 .orElseThrow(() -> new BaseException(ErrorCode.GAME_STATE_NOT_FOUND));
@@ -283,8 +260,6 @@ public class ActionServiceImpl implements ActionService {
         BigDecimal newRate = currentRate.multiply(multiplier).setScale(4, RoundingMode.HALF_UP);
         gameDayStoreStateRedisRepository.updateField(storeId, day, "inflow_rate", newRate.toPlainString());
     }
-
-    // ── 할인 헬퍼 ──
 
     private PriceRange determinePriceRange(int sellingPrice, int averagePrice) {
         BigDecimal ratio = BigDecimal.valueOf(sellingPrice)

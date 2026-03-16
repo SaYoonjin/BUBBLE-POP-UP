@@ -1,8 +1,11 @@
 package com.ssafy.S14P21A205.store.service;
 
+import com.ssafy.S14P21A205.exception.BaseException;
+import com.ssafy.S14P21A205.exception.ErrorCode;
 import com.ssafy.S14P21A205.game.day.repository.GameDayStoreStateRedisRepository;
+import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
 import com.ssafy.S14P21A205.shop.entity.ItemCategory;
-import com.ssafy.S14P21A205.shop.entity.Menu;
+import com.ssafy.S14P21A205.shop.repository.ItemUserRepository;
 import com.ssafy.S14P21A205.store.dto.LocationListResponse;
 import com.ssafy.S14P21A205.store.dto.LocationResponse;
 import com.ssafy.S14P21A205.store.dto.MenuListResponse;
@@ -28,6 +31,7 @@ public class StoreServiceImpl implements StoreService {
     private final StoreRepository storeRepository;
     private final LocationRepository locationRepository;
     private final MenuRepository menuRepository;
+    private final ItemUserRepository itemUserRepository;
     private final GameDayStoreStateRedisRepository gameDayStoreStateRedisRepository;
 
     @Override
@@ -50,10 +54,10 @@ public class StoreServiceImpl implements StoreService {
         int currentDay = resolveCurrentDay(store.getSeason().getCurrentDay());
 
         Location location = locationRepository.findById(request.locationId())
-                .orElseThrow(() -> new RuntimeException("Location not found."));
+                .orElseThrow(() -> new RuntimeException("Location was not found."));
 
         if (store.getLocation().getId().equals(location.getId())) {
-            throw new RuntimeException("Store is already located here.");
+            throw new RuntimeException("The store is already using this location.");
         }
 
         Integer updatedBalance = deductBalance(storeId, currentDay, location.getInteriorCost());
@@ -67,9 +71,8 @@ public class StoreServiceImpl implements StoreService {
 
     @Override
     public LocationListResponse getLocations(Integer userId) {
-        Store store = getStoreByUserId(userId);
-        Long storeId = store.getId();
-        float discount = getDisplayedRentDiscountRate(storeId).floatValue();
+        getStoreByUserId(userId);
+        float discount = getDisplayedRentDiscountRate(userId).floatValue();
 
         return new LocationListResponse(
                 locationRepository.findAllByOrderByIdAsc().stream()
@@ -86,9 +89,8 @@ public class StoreServiceImpl implements StoreService {
 
     @Override
     public MenuListResponse getMenus(Integer userId) {
-        Store store = getStoreByUserId(userId);
-        Long storeId = store.getId();
-        float discount = getDisplayedIngredientDiscountRate(storeId).floatValue();
+        getStoreByUserId(userId);
+        float discount = getDisplayedIngredientDiscountRate(userId).floatValue();
 
         List<MenuListResponse.MenuInfo> menuInfos = menuRepository.findAllByOrderByIdAsc().stream()
                 .map(menu -> MenuListResponse.MenuInfo.builder()
@@ -106,10 +108,10 @@ public class StoreServiceImpl implements StoreService {
 
     private Integer deductBalance(Long storeId, int day, Integer amount) {
         long currentBalance = gameDayStoreStateRedisRepository.findBalance(storeId, day)
-                .orElseThrow(() -> new RuntimeException("Balance info not found."));
+                .orElseThrow(() -> new RuntimeException("Balance information was not found."));
 
         if (currentBalance < amount) {
-            throw new RuntimeException("Insufficient balance.");
+            throw new RuntimeException("Balance is insufficient.");
         }
 
         long updatedBalance = currentBalance - amount;
@@ -117,13 +119,13 @@ public class StoreServiceImpl implements StoreService {
         return Math.toIntExact(updatedBalance);
     }
 
-    private BigDecimal getDisplayedRentDiscountRate(Long storeId) {
-        return storeRepository.findPurchasedDiscountRateByStoreIdAndCategory(storeId, ItemCategory.RENT)
+    private BigDecimal getDisplayedRentDiscountRate(Integer userId) {
+        return itemUserRepository.findPurchasedDiscountRateByUserIdAndCategory(userId, ItemCategory.RENT)
                 .orElse(BigDecimal.ONE);
     }
 
-    private BigDecimal getDisplayedIngredientDiscountRate(Long storeId) {
-        return storeRepository.findPurchasedDiscountRateByStoreIdAndCategory(storeId, ItemCategory.INGREDIENT)
+    private BigDecimal getDisplayedIngredientDiscountRate(Integer userId) {
+        return itemUserRepository.findPurchasedDiscountRateByUserIdAndCategory(userId, ItemCategory.INGREDIENT)
                 .orElse(BigDecimal.ONE);
     }
 
@@ -132,7 +134,7 @@ public class StoreServiceImpl implements StoreService {
     }
 
     private Store getStoreByUserId(Integer userId) {
-        return storeRepository.findByUser_Id(userId)
-                .orElseThrow(() -> new RuntimeException("Store not found."));
+        return storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(userId, SeasonStatus.IN_PROGRESS)
+                .orElseThrow(() -> new BaseException(ErrorCode.STORE_NOT_FOUND));
     }
 }

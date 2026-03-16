@@ -74,6 +74,9 @@ public class GameDayReportService {
                 ? null
                 : dailyReportRepository.findByStoreIdAndDay(store.getId(), day - 1).orElse(null);
         int consecutiveDeficitDays = calculateConsecutiveDeficitDays(previousDayReport, netProfit);
+        boolean isBankrupt = consecutiveDeficitDays >= 3;
+        // TODO: 파산했을 때, 아이템 is_purchased 값을 false로 바꾸는 로직 추가 필요
+        // and reset purchased items for the bankrupt user here.
 
         dailyReportRepository.save(DailyReport.create(
                 store,
@@ -87,7 +90,7 @@ public class GameDayReportService {
                 defaultInt(state.cumulativePurchaseCount()),
                 defaultInt(state.stock()),
                 consecutiveDeficitDays,
-                consecutiveDeficitDays >= 3,
+                isBankrupt,
                 safeToInt(valueOf(state.balance())),
                 normalizeCaptureRate(resolveCaptureRate(state))
         ));

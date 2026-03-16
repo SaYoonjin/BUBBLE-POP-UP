@@ -20,4 +20,9 @@ public interface SeasonRankingRecordRepository extends JpaRepository<SeasonRanki
 
     @EntityGraph(attributePaths = {"store", "store.user", "store.location", "store.menu", "store.season"})
     Optional<SeasonRankingRecord> findByStore_Season_IdAndStore_User_Id(Long seasonId, Integer userId);
+
+    @EntityGraph(attributePaths = {"store", "store.user", "store.location", "store.menu", "store.season"})
+    Optional<SeasonRankingRecord> findFirstByStore_Season_IdAndStore_User_IdOrderByIdDesc(Long seasonId, Integer userId);
+
+    boolean existsByStore_Id(Long storeId);
 }

@@ -1,6 +1,9 @@
 package com.ssafy.S14P21A205.order.service;
 
+import com.ssafy.S14P21A205.exception.BaseException;
+import com.ssafy.S14P21A205.exception.ErrorCode;
 import com.ssafy.S14P21A205.game.day.repository.GameDayStoreStateRedisRepository;
+import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
 import com.ssafy.S14P21A205.game.season.repository.DailyReportRepository;
 import com.ssafy.S14P21A205.order.dto.CurrentOrderResponse;
 import com.ssafy.S14P21A205.order.dto.RegularOrderRequest;
@@ -9,10 +12,10 @@ import com.ssafy.S14P21A205.order.entity.Order;
 import com.ssafy.S14P21A205.order.repository.OrderRepository;
 import com.ssafy.S14P21A205.shop.entity.ItemCategory;
 import com.ssafy.S14P21A205.shop.entity.Menu;
+import com.ssafy.S14P21A205.shop.repository.ItemUserRepository;
 import com.ssafy.S14P21A205.store.entity.Store;
 import com.ssafy.S14P21A205.store.repository.MenuRepository;
 import com.ssafy.S14P21A205.store.repository.StoreRepository;
-import jakarta.persistence.EntityManager;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.Objects;
@@ -34,18 +37,16 @@ public class OrderServiceImpl implements OrderService {
     private final OrderRepository orderRepository;
     private final DailyReportRepository dailyReportRepository;
     private final GameDayStoreStateRedisRepository gameDayStoreStateRedisRepository;
-    private final EntityManager entityManager;
+    private final ItemUserRepository itemUserRepository;
 
     @Override
     public CurrentOrderResponse getCurrentOrder(Integer userId) {
         Store store = getStoreByUserId(userId);
         Long storeId = store.getId();
-
-        // currentDay가 null 또는 0이면 정규 발주 기준상 1일차로 간주
         int currentDay = resolveRegularOrderDay(store.getSeason().getCurrentDay());
         Menu menu = store.getMenu();
 
-        BigDecimal ingredientDiscountRate = getIngredientDiscountRate(storeId);
+        BigDecimal ingredientDiscountRate = getIngredientDiscountRate(store.getUser().getId());
         Integer discountedCostPrice = applyDiscount(menu.getOriginPrice(), ingredientDiscountRate);
         Integer stock = resolveStock(storeId, currentDay);
 
@@ -74,7 +75,7 @@ public class OrderServiceImpl implements OrderService {
         boolean sameMenu = Objects.equals(store.getMenu().getId(), menu.getId());
         Integer sellingPrice = resolveSellingPrice(request.price(), store.getPrice(), menu.getOriginPrice());
 
-        BigDecimal discountRate = getIngredientDiscountRate(storeId);
+        BigDecimal discountRate = getIngredientDiscountRate(store.getUser().getId());
         Integer costPrice = resolveCostPrice(menu, discountRate);
         Integer totalCost = Math.multiplyExact(costPrice, request.quantity());
 
@@ -89,8 +90,7 @@ public class OrderServiceImpl implements OrderService {
         );
 
         if (!sameMenu) {
-            entityManager.flush();
-            updateStoreMenu(storeId, menu.getId());
+            store.changeMenu(menu);
         }
 
         return RegularOrderResponse.builder()
@@ -104,17 +104,17 @@ public class OrderServiceImpl implements OrderService {
     }
 
     private Store getStoreByUserId(Integer userId) {
-        return storeRepository.findByUser_Id(userId)
-                .orElseThrow(() -> new RuntimeException("Store not found."));
+        return storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(userId, SeasonStatus.IN_PROGRESS)
+                .orElseThrow(() -> new BaseException(ErrorCode.STORE_NOT_FOUND));
     }
 
     private Menu getMenuById(Integer menuId) {
         return menuRepository.findById(Long.valueOf(menuId))
-                .orElseThrow(() -> new RuntimeException("Menu not found."));
+                .orElseThrow(() -> new RuntimeException("Menu was not found."));
     }
 
-    private BigDecimal getIngredientDiscountRate(Long storeId) {
-        return storeRepository.findPurchasedDiscountRateByStoreIdAndCategory(storeId, ItemCategory.INGREDIENT)
+    private BigDecimal getIngredientDiscountRate(Integer userId) {
+        return itemUserRepository.findPurchasedDiscountRateByUserIdAndCategory(userId, ItemCategory.INGREDIENT)
                 .orElse(BigDecimal.ONE);
     }
 
@@ -122,12 +122,6 @@ public class OrderServiceImpl implements OrderService {
         return applyDiscount(menu.getOriginPrice(), discountRate);
     }
 
-    /**
-     * 판매가 결정 우선순위
-     * 1. 요청값
-     * 2. 현재 매장 판매가
-     * 3. 메뉴 기본 가격
-     */
     private Integer resolveSellingPrice(Integer requestedPrice, Integer currentStorePrice, Integer defaultPrice) {
         if (requestedPrice != null) {
             return requestedPrice;
@@ -208,12 +202,5 @@ public class OrderServiceImpl implements OrderService {
                 .orElse(0);
 
         return Math.addExact(carriedStock, orderedStock);
-    }
-
-    private void updateStoreMenu(Long storeId, Long menuId) {
-        entityManager.createNativeQuery("UPDATE store SET menu_id = :menuId WHERE store_id = :storeId")
-                .setParameter("menuId", menuId)
-                .setParameter("storeId", storeId)
-                .executeUpdate();
     }
 }
