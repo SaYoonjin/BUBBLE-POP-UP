@@ -1,0 +1,130 @@
+package com.ssafy.S14P21A205.game.day.resolver;
+
+import com.ssafy.S14P21A205.game.day.dto.GameStateResponse;
+import com.ssafy.S14P21A205.game.day.service.SeasonTimeline;
+import com.ssafy.S14P21A205.game.event.entity.DailyEvent;
+import com.ssafy.S14P21A205.game.event.entity.EventStartTime;
+import com.ssafy.S14P21A205.game.event.entity.RandomEvent;
+import com.ssafy.S14P21A205.game.event.repository.DailyEventRepository;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Component;
+
+@Component
+@RequiredArgsConstructor
+public class EventEffectResolver {
+
+    private static final BigDecimal DECIMAL_ONE = new BigDecimal("1.00");
+
+    private final DailyEventRepository dailyEventRepository;
+    private final SeasonTimeline seasonTimeline = new SeasonTimeline();
+
+    public EventEffect resolve(
+            Long seasonId,
+            int currentDay,
+            int totalDays,
+            LocalDateTime currentDayStart,
+            LocalDateTime effectiveNow
+    ) {
+        // TODO: Extend this resolver when event cost/festival-style modifiers are added to live gameplay.
+        List<DailyEvent> dailyEvents = dailyEventRepository.findBySeasonIdAndDayBetweenOrderByDayAscIdAsc(
+                seasonId,
+                1,
+                currentDay
+        );
+
+        long capitalChange = 0L;
+        int stockChange = 0;
+        BigDecimal populationEventMultiplier = DECIMAL_ONE;
+        List<GameStateResponse.AppliedEvent> appliedEvents = new ArrayList<>();
+
+        for (DailyEvent dailyEvent : dailyEvents) {
+            int appliedDay = resolveAppliedDay(dailyEvent);
+            if (appliedDay < 1 || appliedDay > currentDay) {
+                continue;
+            }
+
+            LocalDateTime appliedAt = seasonTimeline.resolveAppliedAt(
+                    currentDayStart,
+                    currentDay,
+                    totalDays,
+                    appliedDay,
+                    dailyEvent.getApplyOffsetSeconds()
+            );
+            if (appliedAt.isAfter(effectiveNow)) {
+                continue;
+            }
+
+            LocalDateTime endedAt = seasonTimeline.resolveEndedAt(
+                    currentDayStart,
+                    currentDay,
+                    totalDays,
+                    appliedDay,
+                    dailyEvent.getExpireOffsetSeconds(),
+                    dailyEvent.getEvent().getEndTime()
+            );
+            ResolvedEvent resolvedEvent = new ResolvedEvent(dailyEvent, appliedDay, appliedAt, endedAt);
+            RandomEvent event = resolvedEvent.dailyEvent().getEvent();
+
+            if (resolvedEvent.appliedDay() == currentDay) {
+                capitalChange += event.getCapitalFlat() == null ? 0L : event.getCapitalFlat();
+                stockChange += toWholeNumber(event.getStockFlat());
+            }
+
+            if (resolvedEvent.isActiveAt(effectiveNow)) {
+                populationEventMultiplier = populationEventMultiplier.multiply(normalizeRate(event.getPopulationRate()));
+                appliedEvents.add(new GameStateResponse.AppliedEvent(
+                        event.getEventType(),
+                        event.getEventType(),
+                        resolvedEvent.dailyEvent().getNewsTitle(),
+                        resolvedEvent.appliedAt()
+                ));
+            }
+        }
+
+        return new EventEffect(capitalChange, stockChange, populationEventMultiplier, appliedEvents);
+    }
+
+    private int resolveAppliedDay(DailyEvent dailyEvent) {
+        return dailyEvent.getEvent().getStartTime() == EventStartTime.NEXT_DAY
+                ? dailyEvent.getDay() + 1
+                : dailyEvent.getDay();
+    }
+
+    private int toWholeNumber(BigDecimal value) {
+        if (value == null) {
+            return 0;
+        }
+        return value.setScale(0, RoundingMode.HALF_UP).intValue();
+    }
+
+    private BigDecimal normalizeRate(BigDecimal value) {
+        if (value == null || value.signum() <= 0) {
+            return DECIMAL_ONE;
+        }
+        return value.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private record ResolvedEvent(
+            DailyEvent dailyEvent,
+            int appliedDay,
+            LocalDateTime appliedAt,
+            LocalDateTime endedAt
+    ) {
+        private boolean isActiveAt(LocalDateTime now) {
+            return endedAt == null || now.isBefore(endedAt);
+        }
+    }
+
+    public record EventEffect(
+            long capitalChange,
+            int stockChange,
+            BigDecimal populationEventMultiplier,
+            List<GameStateResponse.AppliedEvent> appliedEvents
+    ) {
+    }
+}

@@ -1,9 +1,9 @@
-package com.ssafy.S14P21A205.game.day.repository;
+package com.ssafy.S14P21A205.game.day.state.repository;
 
 import com.ssafy.S14P21A205.exception.BaseException;
 import com.ssafy.S14P21A205.exception.ErrorCode;
-import com.ssafy.S14P21A205.game.day.dto.GameDayLiveState;
 import com.ssafy.S14P21A205.game.day.dto.GameDayStartResponse;
+import com.ssafy.S14P21A205.game.day.state.GameDayLiveState;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Arrays;

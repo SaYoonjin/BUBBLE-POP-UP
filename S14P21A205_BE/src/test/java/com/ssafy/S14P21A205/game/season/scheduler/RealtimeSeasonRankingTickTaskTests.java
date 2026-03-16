@@ -11,8 +11,9 @@ import static org.mockito.Mockito.when;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
-import com.ssafy.S14P21A205.game.day.dto.GameDayLiveState;
-import com.ssafy.S14P21A205.game.day.repository.GameDayStoreStateRedisRepository;
+import com.ssafy.S14P21A205.game.day.policy.ProfitPolicy;
+import com.ssafy.S14P21A205.game.day.state.GameDayLiveState;
+import com.ssafy.S14P21A205.game.day.state.repository.GameDayStoreStateRedisRepository;
 import com.ssafy.S14P21A205.game.season.dto.CurrentSeasonTopRankingsResponse;
 import com.ssafy.S14P21A205.game.season.entity.DailyReport;
 import com.ssafy.S14P21A205.game.season.entity.Season;
@@ -45,13 +46,15 @@ class RealtimeSeasonRankingTickTaskTests {
     private final DailyReportRepository dailyReportRepository = mock(DailyReportRepository.class);
     private final GameDayStoreStateRedisRepository gameDayStoreStateRedisRepository = mock(GameDayStoreStateRedisRepository.class);
     private final SeasonRankingRedisRepository seasonRankingRedisRepository = mock(SeasonRankingRedisRepository.class);
+    private final ProfitPolicy profitPolicy = new ProfitPolicy();
 
     private final RealtimeSeasonRankingTickTask scheduler = new RealtimeSeasonRankingTickTask(
             seasonRepository,
             storeRepository,
             dailyReportRepository,
             gameDayStoreStateRedisRepository,
-            seasonRankingRedisRepository
+            seasonRankingRedisRepository,
+            profitPolicy
     );
 
     @Test
@@ -316,3 +319,5 @@ class RealtimeSeasonRankingTickTaskTests {
         listAppender.stop();
     }
 }
+
+

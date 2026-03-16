@@ -11,7 +11,12 @@ import com.ssafy.S14P21A205.action.service.ActionService;
 import com.ssafy.S14P21A205.auth.service.AuthService;
 import com.ssafy.S14P21A205.auth.service.JwtTokenService;
 import com.ssafy.S14P21A205.game.day.dto.GameDayStartResponse;
-import com.ssafy.S14P21A205.game.day.repository.GameDayStoreStateRedisRepository;
+import com.ssafy.S14P21A205.game.day.policy.CaptureRatePolicy;
+import com.ssafy.S14P21A205.game.day.resolver.EventScheduleResolver;
+import com.ssafy.S14P21A205.game.day.resolver.EventEffectResolver;
+import com.ssafy.S14P21A205.game.day.policy.PopulationPolicy;
+import com.ssafy.S14P21A205.game.day.policy.RentPolicy;
+import com.ssafy.S14P21A205.game.day.state.repository.GameDayStoreStateRedisRepository;
 import com.ssafy.S14P21A205.game.day.service.GameDayReportService;
 import com.ssafy.S14P21A205.game.day.service.GameDayStartService;
 import com.ssafy.S14P21A205.game.day.service.GameDayStateService;
@@ -67,6 +72,21 @@ class SecurityConfigTests {
 
     @MockitoBean
     private GameDayStartService gameDayStartService;
+
+    @MockitoBean
+    private RentPolicy rentPolicy;
+
+    @MockitoBean
+    private PopulationPolicy populationPolicy;
+
+    @MockitoBean
+    private CaptureRatePolicy captureRatePolicy;
+
+    @MockitoBean
+    private EventScheduleResolver eventScheduleResolver;
+
+    @MockitoBean
+    private EventEffectResolver eventEffectResolver;
 
     @MockitoBean
     private GameDayStateService gameDayStateService;

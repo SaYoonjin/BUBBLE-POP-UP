@@ -1,7 +1,8 @@
 package com.ssafy.S14P21A205.game.season.scheduler;
 
-import com.ssafy.S14P21A205.game.day.dto.GameDayLiveState;
-import com.ssafy.S14P21A205.game.day.repository.GameDayStoreStateRedisRepository;
+import com.ssafy.S14P21A205.game.day.policy.ProfitPolicy;
+import com.ssafy.S14P21A205.game.day.state.GameDayLiveState;
+import com.ssafy.S14P21A205.game.day.state.repository.GameDayStoreStateRedisRepository;
 import com.ssafy.S14P21A205.game.scheduler.GameTickTask;
 import com.ssafy.S14P21A205.game.season.dto.CurrentSeasonTopRankingItemResponse;
 import com.ssafy.S14P21A205.game.season.dto.CurrentSeasonTopRankingsResponse;
@@ -14,7 +15,6 @@ import com.ssafy.S14P21A205.game.season.repository.SeasonRepository;
 import com.ssafy.S14P21A205.store.entity.Store;
 import com.ssafy.S14P21A205.store.repository.StoreRepository;
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -36,8 +36,6 @@ import org.springframework.transaction.annotation.Transactional;
 public class RealtimeSeasonRankingTickTask implements GameTickTask {
 
     private static final Logger log = LoggerFactory.getLogger(RealtimeSeasonRankingTickTask.class);
-    private static final BigDecimal ZERO_ROI = new BigDecimal("0.0");
-    private static final BigDecimal HUNDRED = new BigDecimal("100");
     private static final DateTimeFormatter REFRESHED_AT_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
 
     private final SeasonRepository seasonRepository;
@@ -45,6 +43,7 @@ public class RealtimeSeasonRankingTickTask implements GameTickTask {
     private final DailyReportRepository dailyReportRepository;
     private final GameDayStoreStateRedisRepository gameDayStoreStateRedisRepository;
     private final SeasonRankingRedisRepository seasonRankingRedisRepository;
+    private final ProfitPolicy profitPolicy;
 
     private Clock clock = Clock.systemDefaultZone();
 
@@ -96,7 +95,12 @@ public class RealtimeSeasonRankingTickTask implements GameTickTask {
 
                 long totalRevenue = pastStats.totalRevenue() + todayStats.totalRevenue();
                 long totalCost = pastStats.totalCost() + todayStats.totalCost();
-                candidates.add(new LiveRankingCandidate(store, totalRevenue, totalCost, calculateRoi(totalRevenue, totalCost)));
+                candidates.add(new LiveRankingCandidate(
+                        store,
+                        totalRevenue,
+                        totalCost,
+                        profitPolicy.calculateRoi(totalRevenue, totalCost)
+                ));
             }
             // 정렬
             // 1) ROI 내림차순   2) userId 오름차순   3)storeId 오름차순
@@ -229,16 +233,6 @@ public class RealtimeSeasonRankingTickTask implements GameTickTask {
         };
     }
 
-    private BigDecimal calculateRoi(long totalRevenue, long totalCost) {
-        if (totalCost <= 0L) {
-            return ZERO_ROI;
-        }
-
-        return BigDecimal.valueOf(totalRevenue - totalCost)
-                .multiply(HUNDRED)
-                .divide(BigDecimal.valueOf(totalCost), 1, RoundingMode.HALF_UP);
-    }
-
     private long valueOf(Integer value) {
         return value == null ? 0L : value.longValue();
     }
@@ -297,3 +291,5 @@ public class RealtimeSeasonRankingTickTask implements GameTickTask {
         }
     }
 }
+
+

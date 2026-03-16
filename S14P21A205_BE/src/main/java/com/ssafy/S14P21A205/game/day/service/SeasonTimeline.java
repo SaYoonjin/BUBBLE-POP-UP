@@ -6,10 +6,10 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 
-final class SeasonTimeline {
+public final class SeasonTimeline {
 
-    static final int BUSINESS_OPEN_HOUR = 10;
-    static final int BUSINESS_CLOSE_HOUR = 22;
+    public static final int BUSINESS_OPEN_HOUR = 10;
+    public static final int BUSINESS_CLOSE_HOUR = 22;
     static final int REALTIME_SEGMENT_COUNT = 3;
 
     private static final Duration PREP_DURATION = Duration.ofSeconds(50);
@@ -19,7 +19,7 @@ final class SeasonTimeline {
     private static final int GAME_BUSINESS_DURATION_MINUTES = (BUSINESS_CLOSE_HOUR - BUSINESS_OPEN_HOUR) * 60;
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
 
-    DayTimeline currentDay(LocalDateTime currentDayStart, int currentDay, int totalDays) {
+    public DayTimeline currentDay(LocalDateTime currentDayStart, int currentDay, int totalDays) {
         return day(currentDayStart, currentDay, totalDays, currentDay);
     }
 
@@ -33,12 +33,18 @@ final class SeasonTimeline {
         return new DayTimeline(targetDayStart, businessStart, businessEnd, reportEnd, seasonPlayableEnd);
     }
 
-    LocalDateTime resolveAppliedAt(LocalDateTime currentDayStart, int currentDay, int totalDays, int appliedDay, Integer offsetSeconds) {
+    public LocalDateTime resolveAppliedAt(
+            LocalDateTime currentDayStart,
+            int currentDay,
+            int totalDays,
+            int appliedDay,
+            Integer offsetSeconds
+    ) {
         DayTimeline appliedDayTimeline = day(currentDayStart, currentDay, totalDays, appliedDay);
         return appliedDayTimeline.businessStart().plusSeconds(normalizeOffsetSeconds(offsetSeconds));
     }
 
-    LocalDateTime resolveEndedAt(
+    public LocalDateTime resolveEndedAt(
             LocalDateTime currentDayStart,
             int currentDay,
             int totalDays,
@@ -55,13 +61,13 @@ final class SeasonTimeline {
                 : appliedDayTimeline.businessEnd();
     }
 
-    String formatGameTime(Integer offsetSeconds) {
+    public String formatGameTime(Integer offsetSeconds) {
         long boundedOffsetSeconds = Math.max(0L, Math.min(normalizeOffsetSeconds(offsetSeconds), BUSINESS_DURATION.toSeconds()));
         long gameMinutes = boundedOffsetSeconds * GAME_BUSINESS_DURATION_MINUTES / BUSINESS_DURATION.toSeconds();
         return LocalTime.of(BUSINESS_OPEN_HOUR, 0).plusMinutes(gameMinutes).format(TIME_FORMATTER);
     }
 
-    Duration businessDuration() {
+    public Duration businessDuration() {
         return BUSINESS_DURATION;
     }
 
@@ -81,7 +87,7 @@ final class SeasonTimeline {
         return offsetSeconds == null ? 0 : Math.max(0, offsetSeconds);
     }
 
-    record DayTimeline(
+    public record DayTimeline(
             LocalDateTime dayStart,
             LocalDateTime businessStart,
             LocalDateTime businessEnd,

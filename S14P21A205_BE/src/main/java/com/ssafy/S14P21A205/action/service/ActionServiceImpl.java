@@ -20,8 +20,8 @@ import com.ssafy.S14P21A205.game.environment.entity.Traffic;
 import com.ssafy.S14P21A205.game.environment.entity.TrafficStatus;
 import com.ssafy.S14P21A205.game.environment.repository.TrafficRepository;
 import com.ssafy.S14P21A205.exception.ErrorCode;
-import com.ssafy.S14P21A205.game.day.dto.GameDayLiveState;
-import com.ssafy.S14P21A205.game.day.repository.GameDayStoreStateRedisRepository;
+import com.ssafy.S14P21A205.game.day.state.GameDayLiveState;
+import com.ssafy.S14P21A205.game.day.state.repository.GameDayStoreStateRedisRepository;
 import com.ssafy.S14P21A205.game.season.entity.Season;
 import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
 import com.ssafy.S14P21A205.game.season.repository.SeasonRepository;
@@ -359,3 +359,4 @@ public class ActionServiceImpl implements ActionService {
         return groups.get(index);
     }
 }
+
