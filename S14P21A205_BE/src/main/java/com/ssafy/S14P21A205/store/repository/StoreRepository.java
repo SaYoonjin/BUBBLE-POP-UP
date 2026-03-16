@@ -37,4 +37,15 @@ public interface StoreRepository extends JpaRepository<Store, Long> {
     );
 
     Optional<Store> findByUserId(Integer userId);
+
+    @Query("""
+            select coalesce(avg(s.price), 0)
+            from Store s
+            where s.season.id = :seasonId
+              and s.menu.id = :menuId
+            """)
+    int findAveragePriceBySeasonIdAndMenuId(
+            @Param("seasonId") Long seasonId,
+            @Param("menuId") Long menuId
+    );
 }

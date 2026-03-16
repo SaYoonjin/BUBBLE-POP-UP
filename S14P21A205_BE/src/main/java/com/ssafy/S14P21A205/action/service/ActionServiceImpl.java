@@ -138,9 +138,13 @@ public class ActionServiceImpl implements ActionService {
         // Store 판매가 영구 변경
         store.changePrice(newPrice);
 
-        // TODO(지원) : 평균가를 menu.originPrice로 임시 사용 중. 같은 시즌·같은 메뉴를 파는 전체 store의 판매가 평균으로 교체 필요.
-        // TODO(지원) : Day Start에서 평균가를 계산해서 state Hash에 저장하거나, 여기서 쿼리로 조회하는 방식으로 변경.
-        int averagePrice = store.getMenu().getOriginPrice();
+        // TODO(지원) : 같은 시즌·같은 메뉴를 파는 전체 store의 판매가 평균으로 가격 구간 판정
+        // TODO(지원) : 현재 할인 시점에 DB 쿼리. 기획 의도대로라면 Day Start에서 계산해서 state Hash에 저장하고 여기서 읽어야 함.
+        int averagePrice = storeRepository.findAveragePriceBySeasonIdAndMenuId(
+                store.getSeason().getId(), store.getMenu().getId());
+        if (averagePrice <= 0) {
+            averagePrice = store.getMenu().getOriginPrice();
+        }
         PriceRange priceRange = determinePriceRange(newPrice, averagePrice);
 
         // state Hash의 sale_price 즉시 갱신
