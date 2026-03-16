@@ -30,9 +30,17 @@ public class ActionLog {
     @JoinColumn(name = "store_id", nullable = false)
     private Store store;
 
+    @Id
     @Column(name = "game_day", nullable = false)
     private Integer gameDay;
 
     @Column(name = "is_used", nullable = false)
     private Boolean isUsed;
+
+    public ActionLog(Action action, Store store, Integer gameDay) {
+        this.action = action;
+        this.store = store;
+        this.gameDay = gameDay;
+        this.isUsed = true;
+    }
 }

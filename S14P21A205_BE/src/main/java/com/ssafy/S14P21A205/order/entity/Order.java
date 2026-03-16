@@ -85,6 +85,11 @@ public class Order {
         return new Order(menu, store, quantity, totalCost, orderedDay, OrderType.NORMAL, null, true);
     }
 
+    public static Order createEmergency(Menu menu, Store store, Integer quantity, Integer totalCost,
+                                         Integer orderedDay, LocalDateTime arrivedTime) {
+        return new Order(menu, store, quantity, totalCost, orderedDay, OrderType.EMERGENCY, arrivedTime, false);
+    }
+
     public void markArrived() {
         this.isArrived = true;
     }
