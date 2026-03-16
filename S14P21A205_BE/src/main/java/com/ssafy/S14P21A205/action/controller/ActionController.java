@@ -1,12 +1,19 @@
 package com.ssafy.S14P21A205.action.controller;
 
+import com.ssafy.S14P21A205.action.dto.ActionResponse;
 import com.ssafy.S14P21A205.action.dto.ActionStatusResponse;
+import com.ssafy.S14P21A205.action.dto.EmergencyOrderRequest;
+import com.ssafy.S14P21A205.action.dto.EmergencyOrderResponse;
 import com.ssafy.S14P21A205.action.dto.PromotionPriceResponse;
+import com.ssafy.S14P21A205.action.dto.PromotionRequest;
 import com.ssafy.S14P21A205.action.service.ActionService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -28,5 +35,39 @@ public class ActionController implements ActionControllerDoc {
     @Override
     public ResponseEntity<PromotionPriceResponse> getPromotionPrices() {
         return ResponseEntity.ok(actionService.getPromotionPrices());
+    }
+
+    @PostMapping("/promotion")
+    @Override
+    public ResponseEntity<ActionResponse> executePromotion(
+            Authentication authentication,
+            @Valid @RequestBody PromotionRequest request
+    ) {
+        Integer userId = Integer.parseInt(authentication.getName());
+        return ResponseEntity.ok(actionService.executePromotion(userId, request));
+    }
+
+    @PostMapping("/discount")
+    @Override
+    public ResponseEntity<ActionResponse> executeDiscount(Authentication authentication) {
+        Integer userId = Integer.parseInt(authentication.getName());
+        return ResponseEntity.ok(actionService.executeDiscount(userId));
+    }
+
+    @PostMapping("/donation")
+    @Override
+    public ResponseEntity<ActionResponse> executeDonation(Authentication authentication) {
+        Integer userId = Integer.parseInt(authentication.getName());
+        return ResponseEntity.ok(actionService.executeDonation(userId));
+    }
+
+    @PostMapping("/emergency-order")
+    @Override
+    public ResponseEntity<EmergencyOrderResponse> executeEmergencyOrder(
+            Authentication authentication,
+            @Valid @RequestBody EmergencyOrderRequest request
+    ) {
+        Integer userId = Integer.parseInt(authentication.getName());
+        return ResponseEntity.ok(actionService.executeEmergencyOrder(userId, request));
     }
 }
