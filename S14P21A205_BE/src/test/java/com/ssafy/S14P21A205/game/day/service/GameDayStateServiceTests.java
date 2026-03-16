@@ -10,10 +10,15 @@ import static org.mockito.Mockito.when;
 import com.ssafy.S14P21A205.action.repository.ActionLogRepository;
 import com.ssafy.S14P21A205.exception.BaseException;
 import com.ssafy.S14P21A205.exception.ErrorCode;
-import com.ssafy.S14P21A205.game.day.dto.GameDayLiveState;
-import com.ssafy.S14P21A205.game.day.dto.GameDayStartResponse;
+import com.ssafy.S14P21A205.game.day.policy.CaptureRatePolicy;
+import com.ssafy.S14P21A205.game.day.policy.CostPolicy;
+import com.ssafy.S14P21A205.game.day.resolver.EventEffectResolver;
+import com.ssafy.S14P21A205.game.day.policy.PopulationPolicy;
+import com.ssafy.S14P21A205.game.day.engine.StockEngine;
+import com.ssafy.S14P21A205.game.day.state.GameDayLiveState;
 import com.ssafy.S14P21A205.game.day.dto.GameStateResponse;
-import com.ssafy.S14P21A205.game.day.repository.GameDayStoreStateRedisRepository;
+import com.ssafy.S14P21A205.game.day.dto.GameDayStartResponse;
+import com.ssafy.S14P21A205.game.day.state.repository.GameDayStoreStateRedisRepository;
 import com.ssafy.S14P21A205.game.event.entity.DailyEvent;
 import com.ssafy.S14P21A205.game.event.entity.EventCategory;
 import com.ssafy.S14P21A205.game.event.entity.EventEndTime;
@@ -22,6 +27,7 @@ import com.ssafy.S14P21A205.game.event.entity.RandomEvent;
 import com.ssafy.S14P21A205.game.event.repository.DailyEventRepository;
 import com.ssafy.S14P21A205.game.season.entity.Season;
 import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
+import com.ssafy.S14P21A205.game.season.repository.DailyReportRepository;
 import com.ssafy.S14P21A205.order.entity.OrderType;
 import com.ssafy.S14P21A205.order.repository.OrderRepository;
 import com.ssafy.S14P21A205.shop.entity.Menu;
@@ -62,6 +68,9 @@ class GameDayStateServiceTests {
     private DailyEventRepository dailyEventRepository;
 
     @Mock
+    private DailyReportRepository dailyReportRepository;
+
+    @Mock
     private ActionLogRepository actionLogRepository;
 
     @Mock
@@ -74,12 +83,21 @@ class GameDayStateServiceTests {
 
     @BeforeEach
     void setUp() {
+        EventEffectResolver eventEffectResolver = new EventEffectResolver(dailyEventRepository);
+        StockEngine stockEngine = new StockEngine();
+        PopulationPolicy populationPolicy = new PopulationPolicy(null, null);
+        CaptureRatePolicy captureRatePolicy = new CaptureRatePolicy(dailyReportRepository);
+        CostPolicy costPolicy = new CostPolicy();
         gameDayStateService = new GameDayStateService(
                 userService,
                 storeRepository,
-                dailyEventRepository,
                 actionLogRepository,
                 orderRepository,
+                eventEffectResolver,
+                stockEngine,
+                populationPolicy,
+                captureRatePolicy,
+                costPolicy,
                 gameDayStoreStateRedisRepository
         );
         ReflectionTestUtils.setField(
@@ -289,3 +307,5 @@ class GameDayStateServiceTests {
         }
     }
 }
+
+

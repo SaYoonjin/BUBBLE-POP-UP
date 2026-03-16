@@ -1,5 +1,6 @@
-package com.ssafy.S14P21A205.game.day.dto;
+package com.ssafy.S14P21A205.game.day.state;
 
+import com.ssafy.S14P21A205.game.day.dto.GameDayStartResponse;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;

@@ -10,9 +10,13 @@ import static org.mockito.Mockito.when;
 
 import com.ssafy.S14P21A205.exception.BaseException;
 import com.ssafy.S14P21A205.exception.ErrorCode;
-import com.ssafy.S14P21A205.game.day.dto.GameDayLiveState;
 import com.ssafy.S14P21A205.game.day.dto.GameDayStartResponse;
-import com.ssafy.S14P21A205.game.day.repository.GameDayStoreStateRedisRepository;
+import com.ssafy.S14P21A205.game.day.policy.CaptureRatePolicy;
+import com.ssafy.S14P21A205.game.day.resolver.EventScheduleResolver;
+import com.ssafy.S14P21A205.game.day.policy.PopulationPolicy;
+import com.ssafy.S14P21A205.game.day.policy.RentPolicy;
+import com.ssafy.S14P21A205.game.day.state.GameDayLiveState;
+import com.ssafy.S14P21A205.game.day.state.repository.GameDayStoreStateRedisRepository;
 import com.ssafy.S14P21A205.game.environment.entity.Population;
 import com.ssafy.S14P21A205.game.environment.entity.Traffic;
 import com.ssafy.S14P21A205.game.environment.entity.TrafficStatus;
@@ -97,17 +101,20 @@ class GameDayStartServiceTests {
 
     @BeforeEach
     void setUp() {
+        RentPolicy rentPolicy = new RentPolicy(dailyReportRepository, stringRedisTemplate);
+        PopulationPolicy populationPolicy = new PopulationPolicy(populationRepository, trafficRepository);
+        CaptureRatePolicy captureRatePolicy = new CaptureRatePolicy(dailyReportRepository);
+        EventScheduleResolver eventScheduleResolver = new EventScheduleResolver(dailyEventRepository);
         gameDayStartService = new GameDayStartService(
                 userService,
                 storeRepository,
-                dailyReportRepository,
-                populationRepository,
-                trafficRepository,
                 weatherRepository,
-                dailyEventRepository,
                 orderRepository,
-                gameDayStoreStateRedisRepository,
-                stringRedisTemplate
+                rentPolicy,
+                populationPolicy,
+                captureRatePolicy,
+                eventScheduleResolver,
+                gameDayStoreStateRedisRepository
         );
         org.mockito.Mockito.lenient().when(stringRedisTemplate.opsForValue()).thenReturn(valueOperations);
         ReflectionTestUtils.setField(

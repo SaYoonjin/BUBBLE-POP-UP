@@ -9,9 +9,12 @@ import static org.mockito.Mockito.when;
 
 import com.ssafy.S14P21A205.exception.BaseException;
 import com.ssafy.S14P21A205.exception.ErrorCode;
-import com.ssafy.S14P21A205.game.day.dto.GameDayLiveState;
 import com.ssafy.S14P21A205.game.day.dto.GameDayReportResponse;
-import com.ssafy.S14P21A205.game.day.repository.GameDayStoreStateRedisRepository;
+import com.ssafy.S14P21A205.game.day.policy.BankruptcyPolicy;
+import com.ssafy.S14P21A205.game.day.policy.ProfitPolicy;
+import com.ssafy.S14P21A205.game.day.policy.ReputationPolicy;
+import com.ssafy.S14P21A205.game.day.state.GameDayLiveState;
+import com.ssafy.S14P21A205.game.day.state.repository.GameDayStoreStateRedisRepository;
 import com.ssafy.S14P21A205.game.environment.entity.Weather;
 import com.ssafy.S14P21A205.game.environment.entity.WeatherType;
 import com.ssafy.S14P21A205.game.environment.repository.WeatherRepository;
@@ -64,12 +67,18 @@ class GameDayReportServiceTests {
 
     @BeforeEach
     void setUp() {
+        ProfitPolicy profitPolicy = new ProfitPolicy();
+        ReputationPolicy reputationPolicy = new ReputationPolicy();
+        BankruptcyPolicy bankruptcyPolicy = new BankruptcyPolicy();
         gameDayReportService = new GameDayReportService(
                 userService,
                 storeRepository,
                 dailyReportRepository,
                 gameDayStoreStateRedisRepository,
-                weatherRepository
+                weatherRepository,
+                profitPolicy,
+                reputationPolicy,
+                bankruptcyPolicy
         );
         ReflectionTestUtils.setField(
                 gameDayReportService,
@@ -328,3 +337,5 @@ class GameDayReportServiceTests {
         }
     }
 }
+
+
