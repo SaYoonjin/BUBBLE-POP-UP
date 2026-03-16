@@ -15,6 +15,7 @@ import com.ssafy.S14P21A205.game.day.dto.GameDayStartResponse;
 import com.ssafy.S14P21A205.game.day.repository.GameDayStoreStateRedisRepository;
 import com.ssafy.S14P21A205.game.environment.entity.Population;
 import com.ssafy.S14P21A205.game.environment.entity.Traffic;
+import com.ssafy.S14P21A205.game.environment.entity.TrafficStatus;
 import com.ssafy.S14P21A205.game.environment.entity.Weather;
 import com.ssafy.S14P21A205.game.environment.entity.WeatherType;
 import com.ssafy.S14P21A205.game.environment.repository.PopulationRepository;
@@ -124,9 +125,9 @@ class GameDayStartServiceTests {
                 population(store.getLocation(), LocalDateTime.of(2026, 3, 2, 10, 0), 900)
         ));
         when(trafficRepository.findByLocationIdOrderByDateAsc(3L)).thenReturn(List.of(
-                traffic(store.getLocation(), LocalDateTime.of(2026, 3, 1, 10, 0), 100),
-                traffic(store.getLocation(), LocalDateTime.of(2026, 3, 1, 11, 0), 80),
-                traffic(store.getLocation(), LocalDateTime.of(2026, 3, 2, 10, 0), 120)
+                traffic(store.getLocation(), LocalDateTime.of(2026, 3, 1, 10, 0), TrafficStatus.CONGESTED),
+                traffic(store.getLocation(), LocalDateTime.of(2026, 3, 1, 11, 0), TrafficStatus.NORMAL),
+                traffic(store.getLocation(), LocalDateTime.of(2026, 3, 2, 10, 0), TrafficStatus.VERY_CONGESTED)
         ));
         when(weatherRepository.findAllByOrderByIdAsc()).thenReturn(List.of(sunny));
         when(dailyEventRepository.findBySeasonIdAndDayOrderByIdAsc(9L, 1)).thenReturn(List.of(dailyEvent));
@@ -138,7 +139,7 @@ class GameDayStartServiceTests {
         assertThat(response.weatherMultiplier()).isEqualByComparingTo("1.10");
         assertThat(response.captureRate()).isEqualByComparingTo("0.00");
         assertThat(response.hourlySchedule().get("10").population()).isEqualTo(500);
-        assertThat(response.hourlySchedule().get("11").trafficMultiplier()).isEqualByComparingTo("0.80");
+        assertThat(response.hourlySchedule().get("11").trafficMultiplier()).isEqualByComparingTo("0.75");
         assertThat(response.initialStock()).isEqualTo(0);
         assertThat(response.initialBalance()).isEqualTo(9_900_000);
         assertThat(response.eventSchedule()).hasSize(1);
@@ -297,7 +298,7 @@ class GameDayStartServiceTests {
         return population;
     }
 
-    private Traffic traffic(Location location, LocalDateTime dateTime, int trafficStatus) {
+    private Traffic traffic(Location location, LocalDateTime dateTime, TrafficStatus trafficStatus) {
         Traffic traffic = instantiate(Traffic.class);
         ReflectionTestUtils.setField(traffic, "location", location);
         ReflectionTestUtils.setField(traffic, "date", dateTime);
