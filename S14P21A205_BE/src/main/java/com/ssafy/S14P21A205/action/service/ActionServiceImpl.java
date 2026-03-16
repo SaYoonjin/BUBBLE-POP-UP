@@ -16,6 +16,9 @@ import com.ssafy.S14P21A205.action.entity.ActionLog;
 import com.ssafy.S14P21A205.action.repository.ActionLogRepository;
 import com.ssafy.S14P21A205.action.repository.ActionRepository;
 import com.ssafy.S14P21A205.exception.BaseException;
+import com.ssafy.S14P21A205.game.environment.entity.Traffic;
+import com.ssafy.S14P21A205.game.environment.entity.TrafficStatus;
+import com.ssafy.S14P21A205.game.environment.repository.TrafficRepository;
 import com.ssafy.S14P21A205.exception.ErrorCode;
 import com.ssafy.S14P21A205.game.day.dto.GameDayLiveState;
 import com.ssafy.S14P21A205.game.day.repository.GameDayStoreStateRedisRepository;
@@ -30,6 +33,8 @@ import com.ssafy.S14P21A205.store.repository.StoreRepository;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
@@ -42,15 +47,16 @@ import org.springframework.transaction.annotation.Transactional;
 public class ActionServiceImpl implements ActionService {
 
     private static final BigDecimal EMERGENCY_COST_MULTIPLIER = new BigDecimal("1.5");
-    // TODO: Replace fixed 30-second emergency delivery time with traffic-based calculation.
-    private static final int EMERGENCY_DELIVERY_SECONDS = 30;
+    private static final int[] DELIVERY_SECONDS_BY_TRAFFIC = {0, 5, 15, 20, 25, 35}; // index = TrafficStatus.value
 
+    // 가격 구간 판정 기준 (평균가 대비 ±10%)
     private static final BigDecimal PRICE_RANGE_UPPER = new BigDecimal("1.10");
     private static final BigDecimal PRICE_RANGE_LOWER = new BigDecimal("0.90");
     private static final BigDecimal MULTIPLIER_ABOVE = new BigDecimal("0.80");
     private static final BigDecimal MULTIPLIER_AVERAGE = new BigDecimal("1.00");
     private static final BigDecimal MULTIPLIER_BELOW = new BigDecimal("1.20");
 
+    // 나눔 유입률 보너스: 5개 단위당 0.01
     private static final BigDecimal DONATION_BONUS_PER_UNIT = new BigDecimal("0.01");
     private static final int DONATION_UNIT_SIZE = 5;
 
@@ -61,6 +67,9 @@ public class ActionServiceImpl implements ActionService {
     private final StoreRepository storeRepository;
     private final SeasonRepository seasonRepository;
     private final OrderRepository orderRepository;
+    private final TrafficRepository trafficRepository;
+
+    // ── GET API ──
 
     @Override
     public ActionStatusResponse getActionStatus(Integer userId) {
@@ -75,6 +84,8 @@ public class ActionServiceImpl implements ActionService {
         List<Action> promotions = actionRepository.findByCategory(ActionCategory.PROMOTION);
         return PromotionPriceResponse.from(promotions);
     }
+
+    // ── POST API ──
 
     @Override
     @Transactional
@@ -91,6 +102,7 @@ public class ActionServiceImpl implements ActionService {
 
         validateBalance(store.getId(), day, action.getCost());
 
+        // inflow_rate에 곱하기 반영 (captureRate 0.10 → ×1.10)
         BigDecimal multiplier = BigDecimal.ONE.add(action.getCaptureRate());
         applyInflowRateMultiplier(store.getId(), day, multiplier);
 
@@ -100,7 +112,7 @@ public class ActionServiceImpl implements ActionService {
         return new ActionResponse(
                 "PROMOTION_" + request.promotionType().name(),
                 action.getCost(),
-                "Promotion has been executed."
+                "홍보가 실행되었습니다."
         );
     }
 
@@ -115,6 +127,7 @@ public class ActionServiceImpl implements ActionService {
         Action action = findSingleAction(ActionCategory.DISCOUNT);
         validateBalance(store.getId(), day, action.getCost());
 
+        // 새 판매가 계산 (현재가 - 할인금액)
         int previousPrice = store.getPrice();
         int newPrice = previousPrice - request.discountValue();
 
@@ -122,16 +135,26 @@ public class ActionServiceImpl implements ActionService {
             throw new BaseException(ErrorCode.INVALID_INPUT_VALUE);
         }
 
+        // Store 판매가 영구 변경
         store.changePrice(newPrice);
 
-        int averagePrice = store.getMenu().getOriginPrice();
+        // TODO(지원) : 같은 시즌·같은 메뉴를 파는 전체 store의 판매가 평균으로 가격 구간 판정
+        // TODO(지원) : 현재 할인 시점에 DB 쿼리. 기획 의도대로라면 Day Start에서 계산해서 state Hash에 저장하고 여기서 읽어야 함.
+        int averagePrice = storeRepository.findAveragePriceBySeasonIdAndMenuId(
+                store.getSeason().getId(), store.getMenu().getId());
+        if (averagePrice <= 0) {
+            averagePrice = store.getMenu().getOriginPrice();
+        }
         PriceRange priceRange = determinePriceRange(newPrice, averagePrice);
 
+        // state Hash의 sale_price 즉시 갱신
         gameDayStoreStateRedisRepository.updateField(
                 store.getId(), day, "sale_price", String.valueOf(newPrice));
 
+        // inflow_rate에 가격구간 배수 곱하기 반영
         applyInflowRateMultiplier(store.getId(), day, priceRange.multiplier);
 
+        // actionValue에 가격구간 배수 저장 (이력용)
         actionLogRepository.save(new ActionLog(action, store, day, priceRange.multiplier));
         gameStateRedisRepository.markActionUsed(store.getId(), day, "discount");
 
@@ -140,7 +163,7 @@ public class ActionServiceImpl implements ActionService {
                 newPrice,
                 priceRange.label,
                 priceRange.multiplier,
-                "Discount event executed. Price changed from " + previousPrice + " to " + newPrice + "."
+                "할인 이벤트가 실행되었습니다. 판매가가 " + previousPrice + "원 → " + newPrice + "원으로 변경됩니다."
         );
     }
 
@@ -154,6 +177,7 @@ public class ActionServiceImpl implements ActionService {
 
         Action action = findSingleAction(ActionCategory.DONATION);
 
+        // 재고 검증: 나눔 수량만큼 있어야 함
         GameDayLiveState state = gameDayStoreStateRedisRepository.find(store.getId(), day)
                 .orElseThrow(() -> new BaseException(ErrorCode.GAME_STATE_NOT_FOUND));
         int currentStock = state.stock() == null ? 0 : state.stock();
@@ -161,25 +185,29 @@ public class ActionServiceImpl implements ActionService {
             throw new BaseException(ErrorCode.INSUFFICIENT_STOCK);
         }
 
+        // 유입률 보너스 계산: 5개 단위당 0.01
         int bonusUnits = request.quantity() / DONATION_UNIT_SIZE;
         BigDecimal captureRateBonus = DONATION_BONUS_PER_UNIT
                 .multiply(BigDecimal.valueOf(bonusUnits))
                 .setScale(2, RoundingMode.HALF_UP);
 
+        // state Hash의 stock 즉시 차감
         int newStock = currentStock - request.quantity();
         gameDayStoreStateRedisRepository.updateField(
                 store.getId(), day, "stock", String.valueOf(newStock));
 
+        // inflow_rate에 나눔 보너스 곱하기 반영 (보너스 0.05 → ×1.05)
         BigDecimal multiplier = BigDecimal.ONE.add(captureRateBonus);
         applyInflowRateMultiplier(store.getId(), day, multiplier);
 
+        // actionValue에 유입률 보너스 저장 (이력용)
         actionLogRepository.save(new ActionLog(action, store, day, captureRateBonus));
         gameStateRedisRepository.markActionUsed(store.getId(), day, "donation");
 
         return new DonationResponse(
                 request.quantity(),
                 captureRateBonus,
-                request.quantity() + " items donated. Inflow bonus +" + captureRateBonus + "."
+                request.quantity() + "개를 나눔하였습니다. 유입률 +" + captureRateBonus + " 보너스."
         );
     }
 
@@ -201,7 +229,8 @@ public class ActionServiceImpl implements ActionService {
 
         validateBalance(store.getId(), day, totalCost);
 
-        LocalDateTime arrivedTime = LocalDateTime.now().plusSeconds(EMERGENCY_DELIVERY_SECONDS);
+        int deliverySeconds = calculateDeliverySeconds(store.getLocation().getId(), day);
+        LocalDateTime arrivedTime = LocalDateTime.now().plusSeconds(deliverySeconds);
 
         actionLogRepository.save(new ActionLog(action, store, day, null));
         Order order = orderRepository.save(
@@ -215,9 +244,11 @@ public class ActionServiceImpl implements ActionService {
                 request.quantity(),
                 totalCost,
                 arrivedTime,
-                "Emergency order has been placed."
+                "긴급 발주가 접수되었습니다."
         );
     }
+
+    // ── 공통 헬퍼 ──
 
     private Store findStore(Integer userId) {
         return storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(userId, SeasonStatus.IN_PROGRESS)
@@ -253,6 +284,8 @@ public class ActionServiceImpl implements ActionService {
         }
     }
 
+    // ── 유입률 헬퍼 ──
+
     private void applyInflowRateMultiplier(Long storeId, int day, BigDecimal multiplier) {
         GameDayLiveState state = gameDayStoreStateRedisRepository.find(storeId, day)
                 .orElseThrow(() -> new BaseException(ErrorCode.GAME_STATE_NOT_FOUND));
@@ -260,6 +293,8 @@ public class ActionServiceImpl implements ActionService {
         BigDecimal newRate = currentRate.multiply(multiplier).setScale(4, RoundingMode.HALF_UP);
         gameDayStoreStateRedisRepository.updateField(storeId, day, "inflow_rate", newRate.toPlainString());
     }
+
+    // ── 할인 헬퍼 ──
 
     private PriceRange determinePriceRange(int sellingPrice, int averagePrice) {
         BigDecimal ratio = BigDecimal.valueOf(sellingPrice)
@@ -275,5 +310,52 @@ public class ActionServiceImpl implements ActionService {
     }
 
     private record PriceRange(String label, BigDecimal multiplier) {
+    }
+
+    // ── 긴급발주 헬퍼 ──
+
+    // TODO(지원) : 현재 교통량을 DB에서 직접 조회 중. 기획 의도대로라면 시즌 시작 전에 교통량 7일치를 Redis에 올려놓고 여기서 Redis에서 읽어야 함.
+    /**
+     * 교통량 기반 배송 시간 계산.
+     * TrafficStatus 평균값으로 배송 시간 결정.
+     * VERY_SMOOTH(1)=5초, SMOOTH(2)=15초, NORMAL(3)=20초, CONGESTED(4)=25초, VERY_CONGESTED(5)=35초
+     * 해당 location/day의 교통량 데이터가 없으면 NORMAL(20초) 기본값 사용.
+     */
+    private int calculateDeliverySeconds(Long locationId, int day) {
+        List<Traffic> traffics = trafficRepository.findByLocationIdOrderByDateAsc(locationId);
+        if (traffics.isEmpty()) {
+            return DELIVERY_SECONDS_BY_TRAFFIC[TrafficStatus.NORMAL.getValue()];
+        }
+
+        // GameDayStartService와 동일한 방식으로 day에 해당하는 교통량 선택
+        List<Traffic> dailyTraffics = selectTrafficsForDay(traffics, day);
+        if (dailyTraffics.isEmpty()) {
+            return DELIVERY_SECONDS_BY_TRAFFIC[TrafficStatus.NORMAL.getValue()];
+        }
+
+        // 해당 day의 교통량 평균값으로 배송 시간 결정
+        int totalValue = 0;
+        for (Traffic traffic : dailyTraffics) {
+            totalValue += traffic.getTrafficStatus().getValue();
+        }
+        int avgTrafficValue = totalValue / dailyTraffics.size();
+
+        int clampedValue = Math.max(1, Math.min(avgTrafficValue, 5));
+        return DELIVERY_SECONDS_BY_TRAFFIC[clampedValue];
+    }
+
+    private List<Traffic> selectTrafficsForDay(List<Traffic> traffics, int day) {
+        Map<java.time.LocalDate, List<Traffic>> byDate = new LinkedHashMap<>();
+        for (Traffic traffic : traffics) {
+            byDate.computeIfAbsent(traffic.getDate().toLocalDate(), k -> new ArrayList<>()).add(traffic);
+        }
+
+        List<List<Traffic>> groups = new ArrayList<>(byDate.values());
+        if (groups.isEmpty()) {
+            return List.of();
+        }
+
+        int index = Math.floorMod(day - 1, groups.size());
+        return groups.get(index);
     }
 }
