@@ -3,6 +3,8 @@ package com.ssafy.S14P21A205.game.season.controller;
 import com.ssafy.S14P21A205.exception.ErrorResponse;
 import com.ssafy.S14P21A205.game.season.dto.CurrentSeasonRankingsResponse;
 import com.ssafy.S14P21A205.game.season.dto.CurrentSeasonTopRankingsResponse;
+import com.ssafy.S14P21A205.game.season.dto.SeasonJoinRequest;
+import com.ssafy.S14P21A205.game.season.dto.SeasonJoinResponse;
 import com.ssafy.S14P21A205.game.season.dto.SeasonSummaryResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -18,6 +20,44 @@ import org.springframework.web.bind.annotation.RequestParam;
 
 @Tag(name = "Game Season API", description = "Season ranking API")
 public interface SeasonControllerDoc {
+
+    @Operation(
+            summary = "Join current season",
+            description = "Join the current season and create a store immediately. The response balance is the remaining balance after paying a 10% location interior.",
+            security = @SecurityRequirement(name = "bearerAuth")
+    )
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "201",
+                    description = "Season join success",
+                    content = @Content(schema = @Schema(implementation = SeasonJoinResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "Invalid request",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "401",
+                    description = "Authentication required",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "404",
+                    description = "Season or location not found",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "409",
+                    description = "Already joined current season",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            )
+    })
+    ResponseEntity<SeasonJoinResponse> joinCurrentSeason(
+            @Parameter(hidden = true) Authentication authentication,
+            @Parameter(description = "Current season join request")
+            SeasonJoinRequest request
+    );
 
     @Operation(
             summary = "Get current top rankings",

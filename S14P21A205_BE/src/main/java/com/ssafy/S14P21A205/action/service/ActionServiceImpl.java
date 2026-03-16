@@ -29,7 +29,6 @@ public class ActionServiceImpl implements ActionService {
     private final StoreRepository storeRepository;
     private final SeasonRepository seasonRepository;
 
-    // 액션 사용 현황 조회
 
     @Override
     public ActionStatusResponse getActionStatus(Integer userId) {
@@ -39,7 +38,6 @@ public class ActionServiceImpl implements ActionService {
         return ActionStatusResponse.from(actions);
     }
 
-    // 홍보 가격 조회
 
     @Override
     public PromotionPriceResponse getPromotionPrices() {
@@ -47,10 +45,9 @@ public class ActionServiceImpl implements ActionService {
         return PromotionPriceResponse.from(promotions);
     }
 
-    // 공통 헬퍼
 
     private Store findStore(Integer userId) {
-        return storeRepository.findByUser_Id(userId)
+        return storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(userId, SeasonStatus.IN_PROGRESS)
                 .orElseThrow(() -> new BaseException(ErrorCode.STORE_NOT_FOUND));
     }
 

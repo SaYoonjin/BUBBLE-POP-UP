@@ -1,7 +1,10 @@
 package com.ssafy.S14P21A205.store.service;
 
+import com.ssafy.S14P21A205.exception.BaseException;
+import com.ssafy.S14P21A205.exception.ErrorCode;
+import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
 import com.ssafy.S14P21A205.shop.entity.ItemCategory;
-import com.ssafy.S14P21A205.shop.entity.Menu;
+import com.ssafy.S14P21A205.shop.repository.ItemUserRepository;
 import com.ssafy.S14P21A205.store.dto.LocationListResponse;
 import com.ssafy.S14P21A205.store.dto.LocationResponse;
 import com.ssafy.S14P21A205.store.dto.MenuListResponse;
@@ -31,6 +34,7 @@ public class StoreServiceImpl implements StoreService {
     private final StoreRepository storeRepository;
     private final LocationRepository locationRepository;
     private final MenuRepository menuRepository;
+    private final ItemUserRepository itemUserRepository;
     private final StringRedisTemplate stringRedisTemplate;
 
     @Override
@@ -45,29 +49,18 @@ public class StoreServiceImpl implements StoreService {
         );
     }
 
-    /**
-     * 매장 위치 변경
-     * 1. userId로 매장 조회
-     * 2. RENT 할인 아이템 보유 여부 확인
-     * 3. 변경할 지역 조회
-     * 4. 현재 지역과 동일한지 검증
-     * 5. 할인 적용 임대료 계산
-     * 6. Redis 잔액 차감
-     * 7. 매장 위치 변경
-     */
     @Override
     @Transactional
     public UpdateStoreLocationResponse updateStoreLocation(Integer userId, UpdateStoreLocationRequest request) {
         Store store = getStoreByUserId(userId);
         Long storeId = store.getId();
-
-        BigDecimal rentDiscountMultiplier = getRentDiscountMultiplier(storeId);
+        BigDecimal rentDiscountMultiplier = getRentDiscountMultiplier(userId);
 
         Location location = locationRepository.findById(request.locationId())
-                .orElseThrow(() -> new RuntimeException("지역을 찾을 수 없습니다."));
+                .orElseThrow(() -> new RuntimeException("Location was not found."));
 
         if (store.getLocation().getId().equals(location.getId())) {
-            throw new RuntimeException("이미 해당 지역에 매장이 위치해 있습니다.");
+            throw new RuntimeException("The store is already using this location.");
         }
 
         Integer discountedRent = applyDiscount(location.getRent(), rentDiscountMultiplier);
@@ -81,16 +74,10 @@ public class StoreServiceImpl implements StoreService {
         );
     }
 
-    /**
-     * 지역 목록 조회
-     * - 전체 지역 목록 반환
-     * - RENT 할인 아이템이 있으면 할인율도 함께 표시
-     */
     @Override
     public LocationListResponse getLocations(Integer userId) {
-        Store store = getStoreByUserId(userId);
-        Long storeId = store.getId();
-        float discount = getDisplayedRentDiscountRate(storeId).floatValue();
+        getStoreByUserId(userId);
+        float discount = getDisplayedRentDiscountRate(userId).floatValue();
 
         return new LocationListResponse(
                 locationRepository.findAllByOrderByIdAsc().stream()
@@ -104,16 +91,10 @@ public class StoreServiceImpl implements StoreService {
         );
     }
 
-    /**
-     * 메뉴 목록 조회
-     * - 전체 메뉴 목록 반환
-     * - INGREDIENT 할인 아이템이 있으면 할인율도 함께 표시
-     */
     @Override
     public MenuListResponse getMenus(Integer userId) {
-        Store store = getStoreByUserId(userId);
-        Long storeId = store.getId();
-        float discount = getDisplayedIngredientDiscountRate(storeId).floatValue();
+        getStoreByUserId(userId);
+        float discount = getDisplayedIngredientDiscountRate(userId).floatValue();
 
         List<MenuListResponse.MenuInfo> menuInfos = menuRepository.findAllByOrderByIdAsc().stream()
                 .map(menu -> MenuListResponse.MenuInfo.builder()
@@ -129,24 +110,18 @@ public class StoreServiceImpl implements StoreService {
                 .build();
     }
 
-    /**
-     * Redis에서 매장 잔액 차감
-     * - 잔액 정보가 없으면 예외
-     * - 잔액 부족 시 예외
-     * - 차감 후 Redis에 반영
-     */
     private Integer deductBalance(Long storeId, Integer amount) {
         String key = generateBalanceKey(storeId);
         String value = stringRedisTemplate.opsForValue().get(key);
 
         if (value == null) {
-            throw new RuntimeException("잔액 정보를 찾을 수 없습니다.");
+            throw new RuntimeException("Balance information was not found.");
         }
 
         Integer currentBalance = Integer.valueOf(value);
 
         if (currentBalance < amount) {
-            throw new RuntimeException("잔액이 부족합니다.");
+            throw new RuntimeException("Balance is insufficient.");
         }
 
         Integer updatedBalance = currentBalance - amount;
@@ -159,18 +134,18 @@ public class StoreServiceImpl implements StoreService {
         return BALANCE_KEY_PREFIX + storeId;
     }
 
-    private BigDecimal getRentDiscountMultiplier(Long storeId) {
-        return storeRepository.findPurchasedDiscountRateByStoreIdAndCategory(storeId, ItemCategory.RENT)
+    private BigDecimal getRentDiscountMultiplier(Integer userId) {
+        return itemUserRepository.findPurchasedDiscountRateByUserIdAndCategory(userId, ItemCategory.RENT)
                 .orElse(BigDecimal.ONE);
     }
 
-    private BigDecimal getDisplayedRentDiscountRate(Long storeId) {
-        return storeRepository.findPurchasedDiscountRateByStoreIdAndCategory(storeId, ItemCategory.RENT)
+    private BigDecimal getDisplayedRentDiscountRate(Integer userId) {
+        return itemUserRepository.findPurchasedDiscountRateByUserIdAndCategory(userId, ItemCategory.RENT)
                 .orElse(BigDecimal.ONE);
     }
 
-    private BigDecimal getDisplayedIngredientDiscountRate(Long storeId) {
-        return storeRepository.findPurchasedDiscountRateByStoreIdAndCategory(storeId, ItemCategory.INGREDIENT)
+    private BigDecimal getDisplayedIngredientDiscountRate(Integer userId) {
+        return itemUserRepository.findPurchasedDiscountRateByUserIdAndCategory(userId, ItemCategory.INGREDIENT)
                 .orElse(BigDecimal.ONE);
     }
 
@@ -183,7 +158,7 @@ public class StoreServiceImpl implements StoreService {
     }
 
     private Store getStoreByUserId(Integer userId) {
-        return storeRepository.findByUser_Id(userId)
-                .orElseThrow(() -> new RuntimeException("매장을 찾을 수 없습니다."));
+        return storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(userId, SeasonStatus.IN_PROGRESS)
+                .orElseThrow(() -> new BaseException(ErrorCode.STORE_NOT_FOUND));
     }
 }

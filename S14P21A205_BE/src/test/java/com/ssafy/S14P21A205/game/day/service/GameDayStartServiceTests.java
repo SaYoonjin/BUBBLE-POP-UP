@@ -51,6 +51,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.security.core.Authentication;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -84,6 +86,13 @@ class GameDayStartServiceTests {
     @Mock
     private GameDayStoreStateRedisRepository gameDayStoreStateRedisRepository;
 
+    
+    @Mock
+    private StringRedisTemplate stringRedisTemplate;
+
+    @Mock
+    private ValueOperations<String, String> valueOperations;
+
     private GameDayStartService gameDayStartService;
 
     @BeforeEach
@@ -97,8 +106,10 @@ class GameDayStartServiceTests {
                 weatherRepository,
                 dailyEventRepository,
                 orderRepository,
-                gameDayStoreStateRedisRepository
+                gameDayStoreStateRedisRepository,
+                stringRedisTemplate
         );
+        org.mockito.Mockito.lenient().when(stringRedisTemplate.opsForValue()).thenReturn(valueOperations);
         ReflectionTestUtils.setField(
                 gameDayStartService,
                 "clock",
@@ -219,6 +230,40 @@ class GameDayStartServiceTests {
                 });
     }
 
+
+    @Test
+    void startDayUsesPersistedBalanceOnFirstDayWithoutDoubleDeductingExistingOrder() {
+        User user = user(1);
+        Store store = store(user, 15L, 3L, 1L, 9L, 1, 7, 4_500, 100_000, 2_000);
+        Weather sunny = weather(WeatherType.SUNNY, "1.00");
+        var existingOrder = com.ssafy.S14P21A205.order.entity.Order.create(
+                store.getMenu(),
+                store,
+                120,
+                1_000_000,
+                1
+        );
+
+        when(userService.getCurrentUser(any())).thenReturn(user);
+        when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
+                .thenReturn(Optional.of(store));
+        when(gameDayStoreStateRedisRepository.find(15L, 1)).thenReturn(Optional.empty());
+        when(orderRepository.findDailyStartOrder(15L, 1)).thenReturn(Optional.of(existingOrder));
+        when(valueOperations.get("balance:15")).thenReturn("8900000");
+        when(populationRepository.findByLocationIdOrderByDateAsc(3L)).thenReturn(List.of(
+                population(store.getLocation(), LocalDateTime.of(2026, 3, 1, 10, 0), 500)
+        ));
+        when(trafficRepository.findByLocationIdOrderByDateAsc(3L)).thenReturn(List.of(
+                traffic(store.getLocation(), LocalDateTime.of(2026, 3, 1, 10, 0), 100)
+        ));
+        when(weatherRepository.findAllByOrderByIdAsc()).thenReturn(List.of(sunny));
+        when(dailyEventRepository.findBySeasonIdAndDayOrderByIdAsc(9L, 1)).thenReturn(List.of());
+
+        GameDayStartResponse response = gameDayStartService.startDay(mock(Authentication.class));
+
+        assertThat(response.initialBalance()).isEqualTo(8_800_000);
+        assertThat(response.initialStock()).isEqualTo(120);
+    }
     private User user(int id) {
         User user = new User("test@example.com", "tester");
         ReflectionTestUtils.setField(user, "id", id);
@@ -323,3 +368,9 @@ class GameDayStartServiceTests {
         }
     }
 }
+
+
+
+
+
+
