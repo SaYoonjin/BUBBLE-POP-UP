@@ -1,0 +1,9 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  font-family: "Spline Sans", "Noto Sans KR", sans-serif;
+  background-color: #fdfdfb;
+  margin: 0;
+}
