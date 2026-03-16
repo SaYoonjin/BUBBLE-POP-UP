@@ -2,6 +2,10 @@ package com.ssafy.S14P21A205.action.controller;
 
 import com.ssafy.S14P21A205.action.dto.ActionResponse;
 import com.ssafy.S14P21A205.action.dto.ActionStatusResponse;
+import com.ssafy.S14P21A205.action.dto.DiscountRequest;
+import com.ssafy.S14P21A205.action.dto.DiscountResponse;
+import com.ssafy.S14P21A205.action.dto.DonationRequest;
+import com.ssafy.S14P21A205.action.dto.DonationResponse;
 import com.ssafy.S14P21A205.action.dto.EmergencyOrderRequest;
 import com.ssafy.S14P21A205.action.dto.EmergencyOrderResponse;
 import com.ssafy.S14P21A205.action.dto.PromotionPriceResponse;
@@ -49,16 +53,22 @@ public class ActionController implements ActionControllerDoc {
 
     @PostMapping("/discount")
     @Override
-    public ResponseEntity<ActionResponse> executeDiscount(Authentication authentication) {
+    public ResponseEntity<DiscountResponse> executeDiscount(
+            Authentication authentication,
+            @Valid @RequestBody DiscountRequest request
+    ) {
         Integer userId = Integer.parseInt(authentication.getName());
-        return ResponseEntity.ok(actionService.executeDiscount(userId));
+        return ResponseEntity.ok(actionService.executeDiscount(userId, request));
     }
 
     @PostMapping("/donation")
     @Override
-    public ResponseEntity<ActionResponse> executeDonation(Authentication authentication) {
+    public ResponseEntity<DonationResponse> executeDonation(
+            Authentication authentication,
+            @Valid @RequestBody DonationRequest request
+    ) {
         Integer userId = Integer.parseInt(authentication.getName());
-        return ResponseEntity.ok(actionService.executeDonation(userId));
+        return ResponseEntity.ok(actionService.executeDonation(userId, request));
     }
 
     @PostMapping("/emergency-order")

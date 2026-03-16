@@ -2,6 +2,10 @@ package com.ssafy.S14P21A205.action.service;
 
 import com.ssafy.S14P21A205.action.dto.ActionResponse;
 import com.ssafy.S14P21A205.action.dto.ActionStatusResponse;
+import com.ssafy.S14P21A205.action.dto.DiscountRequest;
+import com.ssafy.S14P21A205.action.dto.DiscountResponse;
+import com.ssafy.S14P21A205.action.dto.DonationRequest;
+import com.ssafy.S14P21A205.action.dto.DonationResponse;
 import com.ssafy.S14P21A205.action.dto.EmergencyOrderRequest;
 import com.ssafy.S14P21A205.action.dto.EmergencyOrderResponse;
 import com.ssafy.S14P21A205.action.dto.PromotionPriceResponse;
@@ -15,9 +19,9 @@ public interface ActionService {
 
     ActionResponse executePromotion(Integer userId, PromotionRequest request);
 
-    ActionResponse executeDiscount(Integer userId);
+    DiscountResponse executeDiscount(Integer userId, DiscountRequest request);
 
-    ActionResponse executeDonation(Integer userId);
+    DonationResponse executeDonation(Integer userId, DonationRequest request);
 
     EmergencyOrderResponse executeEmergencyOrder(Integer userId, EmergencyOrderRequest request);
 }
