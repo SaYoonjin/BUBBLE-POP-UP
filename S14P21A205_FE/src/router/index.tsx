@@ -13,6 +13,7 @@ import ComponentTestPage from "../pages/ComponentTestPage";
 import CozyTestPage from "../pages/CozyTestPage";
 import NewsPage from "../pages/NewsPage";
 import CozyPrepPage from "../pages/CozyPrepPage";
+import DashboardPage from "../pages/DashboardPage";
 
 const router = createBrowserRouter([
   { path: "/", element: <LobbyPage /> },
@@ -24,6 +25,7 @@ const router = createBrowserRouter([
   {
     element: <PrivateRoute />,
     children: [
+      { path: "/dashboard", element: <DashboardPage /> },
       { path: "/mypage", element: <MyPage /> },
       { path: "/game/setup/location", element: <LocationSelectPage /> },
       { path: "/game/setup/naming", element: <BrandNamingPage /> },

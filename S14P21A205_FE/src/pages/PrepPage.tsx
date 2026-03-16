@@ -1,6 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
-import ProfileDropdown from "../components/common/ProfileDropdown";
+import AppHeader from "../components/common/AppHeader";
 import CountdownTimer from "../components/common/CountdownTimer";
 import MenuSelector from "../components/game/MenuSelector";
 import PriceSlider from "../components/game/PriceSlider";
@@ -51,19 +50,10 @@ export default function PrepPage() {
 
   return (
     <div className="min-h-screen bg-[#FDFDFB] text-slate-900 font-display flex flex-col">
-      {/* Header */}
-      <header className="sticky top-0 z-50 flex items-center justify-between bg-[#FDFDFB] px-10 py-5">
-        <Link to="/" className="flex items-center gap-4">
-          <div className="size-8 text-primary">
-            <span className="material-symbols-outlined text-3xl">bubble_chart</span>
-          </div>
-          <h2 className="text-slate-900 text-lg font-bold leading-tight tracking-[-0.015em]">BubbleBubble</h2>
-        </Link>
-        <ProfileDropdown nickname="Owner" />
-      </header>
+      <AppHeader nickname="Owner" />
 
       {/* Main */}
-      <main className="flex-1 flex flex-col items-center py-8 px-4 sm:px-10">
+      <main className="flex-1 flex flex-col items-center py-8 pt-24 px-4 sm:px-10">
         <div className="w-full max-w-5xl flex flex-col gap-8">
           {/* Page Header */}
           <div className="flex flex-col gap-6">
