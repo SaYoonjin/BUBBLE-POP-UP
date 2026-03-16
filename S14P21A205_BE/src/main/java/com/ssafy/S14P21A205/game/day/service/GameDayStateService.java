@@ -219,19 +219,27 @@ public class GameDayStateService {
             }
 
             totalCost += actionLog.getAction().getCost() == null ? 0L : actionLog.getAction().getCost();
-            captureRateBoost = captureRateBoost.add(
-                    actionLog.getAction().getCaptureRate() == null ? DECIMAL_ZERO : actionLog.getAction().getCaptureRate()
-            );
 
-            if (actionLog.getAction().getCategory() == ActionCategory.DISCOUNT) {
+            // 할인/나눔은 actionValue(동적 값)를 사용, 그 외는 Action 테이블의 고정 captureRate 사용
+            ActionCategory category = actionLog.getAction().getCategory();
+            if (category == ActionCategory.DISCOUNT || category == ActionCategory.DONATION) {
+                BigDecimal dynamicValue = actionLog.getActionValue() == null ? DECIMAL_ZERO : actionLog.getActionValue();
+                captureRateBoost = captureRateBoost.add(dynamicValue);
+            } else {
+                captureRateBoost = captureRateBoost.add(
+                        actionLog.getAction().getCaptureRate() == null ? DECIMAL_ZERO : actionLog.getAction().getCaptureRate()
+                );
+            }
+
+            if (category == ActionCategory.DISCOUNT) {
                 discountUsed = true;
                 continue;
             }
-            if (actionLog.getAction().getCategory() == ActionCategory.DONATION) {
+            if (category == ActionCategory.DONATION) {
                 donationUsed = true;
                 continue;
             }
-            if (actionLog.getAction().getCategory() != ActionCategory.PROMOTION) {
+            if (category != ActionCategory.PROMOTION) {
                 continue;
             }
 
@@ -408,7 +416,7 @@ public class GameDayStateService {
                         state.startResponse(),
                         tick,
                         population,
-                        resolveInflowRate(state.startResponse().captureRate(), actionUsage.captureRateBoost()),
+                        state.inflowRate() != null ? state.inflowRate() : resolveInflowRate(state.startResponse().captureRate(), actionUsage.captureRateBoost()),
                         state.salePrice(),
                         tickProgress.tickCustomerCount(),
                         tickProgress.tickPurchaseCount(),
