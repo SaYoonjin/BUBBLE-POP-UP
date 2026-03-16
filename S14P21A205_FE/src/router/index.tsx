@@ -10,11 +10,15 @@ import PlayPage from "../pages/PlayPage";
 import ReportPage from "../pages/ReportPage";
 import RankingPage from "../pages/RankingPage";
 import ComponentTestPage from "../pages/ComponentTestPage";
+import CozyTestPage from "../pages/CozyTestPage";
+import NewsPage from "../pages/NewsPage";
 
 const router = createBrowserRouter([
   { path: "/", element: <LobbyPage /> },
   { path: "/login", element: <LoginPage /> },
   { path: "/test", element: <ComponentTestPage /> },
+  { path: "/test/cozy", element: <CozyTestPage /> },
+  { path: "/news", element: <NewsPage /> },
   {
     element: <PrivateRoute />,
     children: [
