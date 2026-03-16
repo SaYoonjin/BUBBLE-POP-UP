@@ -181,7 +181,7 @@ public class GameDayStartService {
         for (Traffic traffic : selectedTraffics) {
             int hour = traffic.getDate().getHour();
             if (hour >= BUSINESS_OPEN_HOUR && hour < BUSINESS_CLOSE_HOUR) {
-                trafficByHour.put(hour, traffic.getTrafficStatus());
+                trafficByHour.put(hour, traffic.getTrafficStatus().getValue());
             }
         }
 
@@ -222,7 +222,7 @@ public class GameDayStartService {
     private BigDecimal averageTrafficStatus(List<Traffic> traffics) {
         BigDecimal total = BigDecimal.ZERO;
         for (Traffic traffic : traffics) {
-            total = total.add(BigDecimal.valueOf(traffic.getTrafficStatus()));
+            total = total.add(BigDecimal.valueOf(traffic.getTrafficStatus().getValue()));
         }
         return total.divide(BigDecimal.valueOf(traffics.size()), 6, RoundingMode.HALF_UP);
     }

@@ -2,22 +2,28 @@ package com.ssafy.S14P21A205.config;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.ssafy.S14P21A205.auth.service.AuthService;
 import com.ssafy.S14P21A205.auth.service.JwtTokenService;
+import com.ssafy.S14P21A205.action.service.ActionService;
 import com.ssafy.S14P21A205.game.day.repository.GameDayStoreStateRedisRepository;
 import com.ssafy.S14P21A205.game.day.dto.GameDayStartResponse;
 import com.ssafy.S14P21A205.game.day.service.GameDayReportService;
 import com.ssafy.S14P21A205.game.day.service.GameDayStartService;
 import com.ssafy.S14P21A205.game.day.service.GameDayStateService;
+import com.ssafy.S14P21A205.game.season.dto.GameWaitingResponse;
+import com.ssafy.S14P21A205.game.season.dto.GameWaitingStatus;
 import com.ssafy.S14P21A205.order.service.OrderService;
 import com.ssafy.S14P21A205.game.season.repository.DailyReportRepository;
 import com.ssafy.S14P21A205.game.season.repository.SeasonRankingRedisRepository;
 import com.ssafy.S14P21A205.game.season.repository.SeasonRepository;
 import com.ssafy.S14P21A205.game.season.service.SeasonRankingService;
+import com.ssafy.S14P21A205.game.season.service.SeasonSummaryService;
+import com.ssafy.S14P21A205.game.season.service.SeasonWaitingService;
 import com.ssafy.S14P21A205.shop.service.ShopService;
 import com.ssafy.S14P21A205.store.repository.StoreRepository;
 import com.ssafy.S14P21A205.store.service.StoreService;
@@ -61,6 +67,9 @@ class SecurityConfigTests {
     private GameDayReportService gameDayReportService;
 
     @MockitoBean
+    private ActionService actionService;
+
+    @MockitoBean
     private ShopService shopService;
 
     @MockitoBean
@@ -87,6 +96,12 @@ class SecurityConfigTests {
     @MockitoBean
     private SeasonRankingService seasonRankingService;
 
+    @MockitoBean
+    private SeasonSummaryService seasonSummaryService;
+
+    @MockitoBean
+    private SeasonWaitingService seasonWaitingService;
+
     @Test
     void startDayAllowsAuthenticatedRequest() throws Exception {
         when(gameDayStartService.startDay(any()))
@@ -112,5 +127,14 @@ class SecurityConfigTests {
     void startDayRejectsUnauthenticatedRequest() throws Exception {
         mockMvc.perform(post("/game/day/start"))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void waitingStatusAllowsUnauthenticatedRequest() throws Exception {
+        when(seasonWaitingService.getWaitingStatus())
+                .thenReturn(new GameWaitingResponse(GameWaitingStatus.WAITING, 4, null, 300));
+
+        mockMvc.perform(get("/game/waiting"))
+                .andExpect(status().isOk());
     }
 }

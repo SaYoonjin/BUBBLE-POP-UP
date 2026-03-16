@@ -33,6 +33,7 @@ public class SecurityConfig {
             "/actuator/prometheus",
             "/oauth2/**",
             "/login/oauth2/**",
+            "/game/waiting",
             "/api/auth/login",
             "/api/auth/refresh",
             "/api/auth/logout"

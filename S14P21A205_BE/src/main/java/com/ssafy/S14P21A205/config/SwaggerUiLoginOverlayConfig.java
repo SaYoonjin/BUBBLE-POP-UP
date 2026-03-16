@@ -93,23 +93,6 @@ public class SwaggerUiLoginOverlayConfig {
                     const params = new URLSearchParams(window.location.search);
 
                     const getAccessToken = () => window.localStorage.getItem(ACCESS_TOKEN_KEY);
-                    const getJwtPayload = () => {
-                      const accessToken = getAccessToken();
-                      if (!accessToken) {
-                        return null;
-                      }
-                      const parts = accessToken.split(".");
-                      if (parts.length !== 3) {
-                        return null;
-                      }
-                      try {
-                        const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
-                        const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
-                        return JSON.parse(atob(padded));
-                      } catch (error) {
-                        return null;
-                      }
-                    };
                     const setTokens = (accessToken) => {
                       if (accessToken) {
                         window.localStorage.setItem(ACCESS_TOKEN_KEY, accessToken);
@@ -194,13 +177,12 @@ public class SwaggerUiLoginOverlayConfig {
                     const meBtn = document.getElementById("swagger-auth-me");
                     if (meBtn) {
                       meBtn.addEventListener("click", async () => {
-                        const payload = getJwtPayload();
-                        const userId = payload && payload.sub;
-                        if (!userId) {
-                          alert("access token에서 사용자 ID를 읽을 수 없습니다. 다시 로그인해주세요.");
+                        const accessToken = getAccessToken();
+                        if (!accessToken) {
+                          alert("로그인 후 다시 시도해주세요.");
                           return;
                         }
-                        const response = await request("/api/users/" + encodeURIComponent(userId));
+                        const response = await request("/api/users");
                         if (!response.ok) {
                           alert("인증 상태를 확인해주세요. HTTP " + response.status);
                           return;
