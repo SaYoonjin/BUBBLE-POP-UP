@@ -16,6 +16,9 @@ import com.ssafy.S14P21A205.action.entity.ActionLog;
 import com.ssafy.S14P21A205.action.repository.ActionLogRepository;
 import com.ssafy.S14P21A205.action.repository.ActionRepository;
 import com.ssafy.S14P21A205.exception.BaseException;
+import com.ssafy.S14P21A205.game.environment.entity.Traffic;
+import com.ssafy.S14P21A205.game.environment.entity.TrafficStatus;
+import com.ssafy.S14P21A205.game.environment.repository.TrafficRepository;
 import com.ssafy.S14P21A205.exception.ErrorCode;
 import com.ssafy.S14P21A205.game.day.dto.GameDayLiveState;
 import com.ssafy.S14P21A205.game.day.repository.GameDayStoreStateRedisRepository;
@@ -30,6 +33,8 @@ import com.ssafy.S14P21A205.store.repository.StoreRepository;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
@@ -42,8 +47,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class ActionServiceImpl implements ActionService {
 
     private static final BigDecimal EMERGENCY_COST_MULTIPLIER = new BigDecimal("1.5");
-    // TODO(지원) : 긴급발주 도착 시간 고정 30초. TrafficStatus 기반으로 교통량에 따라 동적 계산으로 변경 필요.
-    private static final int EMERGENCY_DELIVERY_SECONDS = 30;
+    private static final int[] DELIVERY_SECONDS_BY_TRAFFIC = {0, 5, 15, 20, 25, 35}; // index = TrafficStatus.value
 
     // 가격 구간 판정 기준 (평균가 대비 ±10%)
     private static final BigDecimal PRICE_RANGE_UPPER = new BigDecimal("1.10");
@@ -63,6 +67,7 @@ public class ActionServiceImpl implements ActionService {
     private final StoreRepository storeRepository;
     private final SeasonRepository seasonRepository;
     private final OrderRepository orderRepository;
+    private final TrafficRepository trafficRepository;
 
     // ── GET API ──
 
@@ -134,7 +139,7 @@ public class ActionServiceImpl implements ActionService {
         store.changePrice(newPrice);
 
         // TODO(지원) : 평균가를 menu.originPrice로 임시 사용 중. 같은 시즌·같은 메뉴를 파는 전체 store의 판매가 평균으로 교체 필요.
-        //  Day Start에서 평균가를 계산해서 state Hash에 저장하거나, 여기서 쿼리로 조회하는 방식으로 변경.
+        // TODO(지원) : Day Start에서 평균가를 계산해서 state Hash에 저장하거나, 여기서 쿼리로 조회하는 방식으로 변경.
         int averagePrice = store.getMenu().getOriginPrice();
         PriceRange priceRange = determinePriceRange(newPrice, averagePrice);
 
@@ -220,7 +225,8 @@ public class ActionServiceImpl implements ActionService {
 
         validateBalance(store.getId(), day, totalCost);
 
-        LocalDateTime arrivedTime = LocalDateTime.now().plusSeconds(EMERGENCY_DELIVERY_SECONDS);
+        int deliverySeconds = calculateDeliverySeconds(store.getLocation().getId(), day);
+        LocalDateTime arrivedTime = LocalDateTime.now().plusSeconds(deliverySeconds);
 
         actionLogRepository.save(new ActionLog(action, store, day, null));
         Order order = orderRepository.save(
@@ -300,5 +306,52 @@ public class ActionServiceImpl implements ActionService {
     }
 
     private record PriceRange(String label, BigDecimal multiplier) {
+    }
+
+    // ── 긴급발주 헬퍼 ──
+
+    // TODO(지원) : 현재 교통량을 DB에서 직접 조회 중. 기획 의도대로라면 시즌 시작 전에 교통량 7일치를 Redis에 올려놓고 여기서 Redis에서 읽어야 함.
+    /**
+     * 교통량 기반 배송 시간 계산.
+     * TrafficStatus 평균값으로 배송 시간 결정.
+     * VERY_SMOOTH(1)=5초, SMOOTH(2)=15초, NORMAL(3)=20초, CONGESTED(4)=25초, VERY_CONGESTED(5)=35초
+     * 해당 location/day의 교통량 데이터가 없으면 NORMAL(20초) 기본값 사용.
+     */
+    private int calculateDeliverySeconds(Long locationId, int day) {
+        List<Traffic> traffics = trafficRepository.findByLocationIdOrderByDateAsc(locationId);
+        if (traffics.isEmpty()) {
+            return DELIVERY_SECONDS_BY_TRAFFIC[TrafficStatus.NORMAL.getValue()];
+        }
+
+        // GameDayStartService와 동일한 방식으로 day에 해당하는 교통량 선택
+        List<Traffic> dailyTraffics = selectTrafficsForDay(traffics, day);
+        if (dailyTraffics.isEmpty()) {
+            return DELIVERY_SECONDS_BY_TRAFFIC[TrafficStatus.NORMAL.getValue()];
+        }
+
+        // 해당 day의 교통량 평균값으로 배송 시간 결정
+        int totalValue = 0;
+        for (Traffic traffic : dailyTraffics) {
+            totalValue += traffic.getTrafficStatus().getValue();
+        }
+        int avgTrafficValue = totalValue / dailyTraffics.size();
+
+        int clampedValue = Math.max(1, Math.min(avgTrafficValue, 5));
+        return DELIVERY_SECONDS_BY_TRAFFIC[clampedValue];
+    }
+
+    private List<Traffic> selectTrafficsForDay(List<Traffic> traffics, int day) {
+        Map<java.time.LocalDate, List<Traffic>> byDate = new LinkedHashMap<>();
+        for (Traffic traffic : traffics) {
+            byDate.computeIfAbsent(traffic.getDate().toLocalDate(), k -> new ArrayList<>()).add(traffic);
+        }
+
+        List<List<Traffic>> groups = new ArrayList<>(byDate.values());
+        if (groups.isEmpty()) {
+            return List.of();
+        }
+
+        int index = Math.floorMod(day - 1, groups.size());
+        return groups.get(index);
     }
 }
