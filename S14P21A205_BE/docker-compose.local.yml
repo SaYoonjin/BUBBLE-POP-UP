@@ -69,6 +69,11 @@ services:
       - ./hadoop.env
     environment:
       - INIT_DAEMON_STEP=setup_spark
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_NAME=${DB_NAME:-mydb}
+      - DB_USERNAME=${DB_USERNAME:-myuser}
+      - DB_PASSWORD=${DB_PASSWORD:-mypassword}
     volumes:
       - ./spark/jobs:/opt/spark-jobs
 

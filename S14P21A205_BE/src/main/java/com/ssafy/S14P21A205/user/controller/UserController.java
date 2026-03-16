@@ -2,6 +2,7 @@ package com.ssafy.S14P21A205.user.controller;
 
 import com.ssafy.S14P21A205.auth.dto.AuthMeResponse;
 import com.ssafy.S14P21A205.user.dto.UserNicknameUpdateRequest;
+import com.ssafy.S14P21A205.user.dto.UserPointsResponse;
 import com.ssafy.S14P21A205.user.service.UserService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -29,6 +30,16 @@ public class UserController implements UserControllerDoc {
     ) {
         var user = userService.getUser(userId, authentication);
         return ResponseEntity.ok(AuthMeResponse.from(authentication, user));
+    }
+
+    @GetMapping("/{userId}/points")
+    @Override
+    public ResponseEntity<UserPointsResponse> getUserPoints(
+            @PathVariable String userId,
+            Authentication authentication
+    ) {
+        var user = userService.getUser(userId, authentication);
+        return ResponseEntity.ok(new UserPointsResponse(user.getPoint()));
     }
 
     @PatchMapping("/{userId}/nickname")

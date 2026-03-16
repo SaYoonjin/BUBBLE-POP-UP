@@ -2,16 +2,30 @@ package com.ssafy.S14P21A205.config;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.ssafy.S14P21A205.auth.service.AuthService;
 import com.ssafy.S14P21A205.auth.service.JwtTokenService;
+import com.ssafy.S14P21A205.action.service.ActionService;
+import com.ssafy.S14P21A205.game.day.repository.GameDayStoreStateRedisRepository;
 import com.ssafy.S14P21A205.game.day.dto.GameDayStartResponse;
-import com.ssafy.S14P21A205.game.day.service.GameDayService;
+import com.ssafy.S14P21A205.game.day.service.GameDayReportService;
+import com.ssafy.S14P21A205.game.day.service.GameDayStartService;
+import com.ssafy.S14P21A205.game.day.service.GameDayStateService;
+import com.ssafy.S14P21A205.game.season.dto.GameWaitingResponse;
+import com.ssafy.S14P21A205.game.season.dto.GameWaitingStatus;
+import com.ssafy.S14P21A205.order.service.OrderService;
+import com.ssafy.S14P21A205.game.season.repository.DailyReportRepository;
+import com.ssafy.S14P21A205.game.season.repository.SeasonRankingRedisRepository;
+import com.ssafy.S14P21A205.game.season.repository.SeasonRepository;
+import com.ssafy.S14P21A205.game.season.service.SeasonRankingService;
+import com.ssafy.S14P21A205.game.season.service.SeasonSummaryService;
+import com.ssafy.S14P21A205.game.season.service.SeasonWaitingService;
 import com.ssafy.S14P21A205.shop.service.ShopService;
+import com.ssafy.S14P21A205.store.repository.StoreRepository;
 import com.ssafy.S14P21A205.store.service.StoreService;
 import com.ssafy.S14P21A205.user.service.UserService;
 import java.math.BigDecimal;
@@ -21,7 +35,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
-import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -45,7 +58,16 @@ class SecurityConfigTests {
     private UserService userService;
 
     @MockitoBean
-    private GameDayService gameDayService;
+    private GameDayStartService gameDayStartService;
+
+    @MockitoBean
+    private GameDayStateService gameDayStateService;
+
+    @MockitoBean
+    private GameDayReportService gameDayReportService;
+
+    @MockitoBean
+    private ActionService actionService;
 
     @MockitoBean
     private ShopService shopService;
@@ -53,9 +75,36 @@ class SecurityConfigTests {
     @MockitoBean
     private StoreService storeService;
 
+    @MockitoBean
+    private OrderService orderService;
+
+    @MockitoBean
+    private SeasonRepository seasonRepository;
+
+    @MockitoBean
+    private StoreRepository storeRepository;
+
+    @MockitoBean
+    private DailyReportRepository dailyReportRepository;
+
+    @MockitoBean
+    private GameDayStoreStateRedisRepository gameDayStoreStateRedisRepository;
+
+    @MockitoBean
+    private SeasonRankingRedisRepository seasonRankingRedisRepository;
+
+    @MockitoBean
+    private SeasonRankingService seasonRankingService;
+
+    @MockitoBean
+    private SeasonSummaryService seasonSummaryService;
+
+    @MockitoBean
+    private SeasonWaitingService seasonWaitingService;
+
     @Test
-    void startDayAllowsAuthenticatedRequestWithCsrfHeader() throws Exception {
-        when(gameDayService.startDay(any(), any()))
+    void startDayAllowsAuthenticatedRequest() throws Exception {
+        when(gameDayStartService.startDay(any()))
                 .thenReturn(new GameDayStartResponse(
                         "10:00",
                         "22:00",
@@ -70,34 +119,22 @@ class SecurityConfigTests {
                 ));
 
         mockMvc.perform(post("/game/day/start")
-                        .with(jwt().jwt(jwt -> jwt.subject("1")))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "locationId": 99990001,
-                                  "menuId": 99990001,
-                                  "price": 5000,
-                                  "orderCount": 100
-                                }
-                                """))
+                        .with(jwt().jwt(jwt -> jwt.subject("1"))))
                 .andExpect(status().isOk());
     }
 
     @Test
-    void startDayReturnsDetailedMessageWhenRequestValidationFails() throws Exception {
-        mockMvc.perform(post("/game/day/start")
-                        .with(jwt().jwt(jwt -> jwt.subject("1")))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "locationId": 99990001,
-                                  "menuId": 99990001,
-                                  "price": 0,
-                                  "orderCount": 100
-                                }
-                                """))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("COMMON-002"))
-                .andExpect(jsonPath("$.message").value("price는 0보다 커야 합니다."));
+    void startDayRejectsUnauthenticatedRequest() throws Exception {
+        mockMvc.perform(post("/game/day/start"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void waitingStatusAllowsUnauthenticatedRequest() throws Exception {
+        when(seasonWaitingService.getWaitingStatus())
+                .thenReturn(new GameWaitingResponse(GameWaitingStatus.WAITING, 4, null, 300));
+
+        mockMvc.perform(get("/game/waiting"))
+                .andExpect(status().isOk());
     }
 }
