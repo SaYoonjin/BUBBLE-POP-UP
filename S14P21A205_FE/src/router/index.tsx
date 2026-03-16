@@ -14,6 +14,10 @@ import CozyTestPage from "../pages/CozyTestPage";
 import NewsPage from "../pages/NewsPage";
 import CozyPrepPage from "../pages/CozyPrepPage";
 import DashboardPage from "../pages/DashboardPage";
+import CozyLobbyPage from "../pages/CozyLobbyPage";
+import CozyLoginPage from "../pages/CozyLoginPage";
+import CozyDashboardPage from "../pages/CozyDashboardPage";
+import CozyMyPage from "../pages/CozyMyPage";
 
 const router = createBrowserRouter([
   { path: "/", element: <LobbyPage /> },
@@ -21,6 +25,10 @@ const router = createBrowserRouter([
   { path: "/test", element: <ComponentTestPage /> },
   { path: "/test/cozy", element: <CozyTestPage /> },
   { path: "/news", element: <NewsPage /> },
+  { path: "/cozy", element: <CozyLobbyPage /> },
+  { path: "/cozy/login", element: <CozyLoginPage /> },
+  { path: "/cozy/dashboard", element: <CozyDashboardPage /> },
+  { path: "/cozy/mypage", element: <CozyMyPage /> },
   { path: "/cozy/prep", element: <CozyPrepPage /> },
   {
     element: <PrivateRoute />,

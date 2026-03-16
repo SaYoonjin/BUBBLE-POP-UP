@@ -14,7 +14,7 @@ interface CozyNotebookProps {
 
 export default function CozyNotebook({ title, items, memo, compact = false }: CozyNotebookProps) {
   return (
-    <div className="relative bg-white rounded-lg shadow-cozy-float rotate-1 hover:rotate-0 transition-transform">
+    <div className="relative bg-white rounded-lg rotate-1 hover:rotate-0 transition-transform shadow-[0_15px_35px_-8px_rgba(0,0,0,0.2),0_6px_12px_-3px_rgba(0,0,0,0.1)]">
       {/* Spiral binding */}
       <div className="absolute -top-3 left-0 w-full h-8 flex justify-evenly z-20">
         {Array.from({ length: 8 }).map((_, i) => (

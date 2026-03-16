@@ -13,7 +13,7 @@ interface CozyNewspaperProps {
 
 export default function CozyNewspaper({ items, expandedId, onToggle, day }: CozyNewspaperProps) {
   return (
-    <div className="bg-cozy-paper shadow-cozy-paper rounded-sm relative overflow-hidden hover:-translate-y-0.5 transition-transform">
+    <div className="bg-cozy-paper rounded-sm relative overflow-hidden hover:-translate-y-0.5 transition-transform shadow-[0_10px_30px_-5px_rgba(0,0,0,0.18),0_4px_10px_-2px_rgba(0,0,0,0.1)]">
       {/* Paper texture */}
       <div
         className="absolute inset-0 opacity-40 mix-blend-multiply pointer-events-none"

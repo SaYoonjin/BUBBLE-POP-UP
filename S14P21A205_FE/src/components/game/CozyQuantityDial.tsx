@@ -9,7 +9,7 @@ export default function CozyQuantityDial({ quantity, min = 1, max = 500, onChang
   const adjust = (delta: number) => onChange(Math.max(min, Math.min(max, quantity + delta)));
 
   return (
-    <div className="bg-[#263238] rounded-2xl p-6 shadow-cozy-float border-b-8 border-[#1a2327] flex flex-col items-center relative overflow-hidden">
+    <div className="bg-[#263238] rounded-2xl p-6 border-b-8 border-[#1a2327] flex flex-col items-center relative overflow-hidden shadow-[0_20px_40px_-8px_rgba(0,0,0,0.35),0_8px_16px_-4px_rgba(0,0,0,0.2)]">
       {/* Metal reflection */}
       <div className="absolute top-0 left-0 w-full h-1/2 bg-gradient-to-b from-white/10 to-transparent pointer-events-none" />
 

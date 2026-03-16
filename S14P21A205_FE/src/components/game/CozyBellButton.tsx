@@ -8,7 +8,7 @@ export default function CozyBellButton({ onClick, label = "벨을 눌러 영업�
     <div className="flex flex-col items-center gap-2">
       <button
         onClick={onClick}
-        className="group relative size-28 rounded-full flex items-center justify-center outline-none transition-transform active:scale-95"
+        className="group relative size-28 rounded-full flex items-center justify-center outline-none transition-transform active:scale-95 drop-shadow-[0_10px_20px_rgba(0,0,0,0.25)]"
       >
         {/* Base plate */}
         <div className="absolute bottom-0 w-28 h-10 bg-gray-300 rounded-[50%] shadow-xl z-0 border border-gray-400" />

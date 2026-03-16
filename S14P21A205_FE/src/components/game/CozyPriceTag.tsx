@@ -11,7 +11,7 @@ export default function CozyPriceTag({ price, min, max, step, costPrice, onChang
   const margin = price - costPrice;
 
   return (
-    <div className="bg-cozy-cream rounded-xl p-1 shadow-cozy-float relative rotate-1 hover:rotate-0 transition-transform duration-300 origin-top-left">
+    <div className="bg-cozy-cream rounded-xl p-1 relative rotate-1 hover:rotate-0 transition-transform duration-300 origin-top-left shadow-[0_15px_35px_-8px_rgba(0,0,0,0.2),0_6px_12px_-3px_rgba(0,0,0,0.1)]">
       {/* Pin */}
       <div className="absolute -top-3 left-1/2 -translate-x-1/2 size-8 bg-red-500 rounded-full shadow-md z-20 border-2 border-red-700 flex items-center justify-center">
         <div className="size-2 bg-red-300 rounded-full blur-[1px]" />

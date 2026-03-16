@@ -14,7 +14,7 @@ interface CozyMenuSelectorProps {
 
 export default function CozyMenuSelector({ menus, selectedId, onSelect, dayLabel }: CozyMenuSelectorProps) {
   return (
-    <div className="bg-cozy-cream rounded-xl p-6 shadow-cozy-float border-4 border-white/50 relative">
+    <div className="bg-cozy-cream rounded-xl p-6 border-4 border-white/50 relative shadow-[0_15px_35px_-8px_rgba(0,0,0,0.2),0_6px_12px_-3px_rgba(0,0,0,0.1)]">
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-2xl font-bold text-[#5D4037] flex items-center gap-2">
           <span className="material-symbols-outlined text-cozy-sage-green">bakery_dining</span>
