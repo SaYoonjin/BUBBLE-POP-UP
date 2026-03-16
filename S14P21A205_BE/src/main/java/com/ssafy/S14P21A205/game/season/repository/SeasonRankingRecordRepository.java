@@ -1,6 +1,7 @@
 package com.ssafy.S14P21A205.game.season.repository;
 
 import com.ssafy.S14P21A205.game.season.entity.SeasonRankingRecord;
+import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.EntityGraph;
@@ -11,7 +12,12 @@ public interface SeasonRankingRecordRepository extends JpaRepository<SeasonRanki
     @EntityGraph(attributePaths = {"store", "store.user", "store.location", "store.menu", "store.season"})
     List<SeasonRankingRecord> findByStore_Season_IdOrderByFinalRankAsc(Long seasonId);
 
-    // 특정 시즌 + 특정 유저의 가게
+    @EntityGraph(attributePaths = {"store", "store.location", "store.season"})
+    List<SeasonRankingRecord> findTop10ByStore_User_IdAndStore_Season_StatusOrderByStore_Season_IdDesc(
+            Integer userId,
+            SeasonStatus seasonStatus
+    );
+
     @EntityGraph(attributePaths = {"store", "store.user", "store.location", "store.menu", "store.season"})
     Optional<SeasonRankingRecord> findByStore_Season_IdAndStore_User_Id(Long seasonId, Integer userId);
 }
