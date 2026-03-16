@@ -8,6 +8,7 @@ fi
 
 /spark/bin/spark-submit --master spark://spark-master:7077 /opt/spark-jobs/etl_population.py && \
 /spark/bin/spark-submit --master spark://spark-master:7077 /opt/spark-jobs/etl_news.py && \
+/spark/bin/spark-submit --master spark://spark-master:7077 /opt/spark-jobs/etl_news_score.py && \
 /spark/bin/spark-submit --master spark://spark-master:7077 /opt/spark-jobs/etl_traffic.py
 
 echo "All ETL jobs complete!"

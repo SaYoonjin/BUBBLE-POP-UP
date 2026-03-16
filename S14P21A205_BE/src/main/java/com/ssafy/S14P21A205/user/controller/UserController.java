@@ -3,6 +3,7 @@ package com.ssafy.S14P21A205.user.controller;
 import com.ssafy.S14P21A205.auth.dto.AuthMeResponse;
 import com.ssafy.S14P21A205.user.dto.UserNicknameUpdateRequest;
 import com.ssafy.S14P21A205.user.dto.UserPointsResponse;
+import com.ssafy.S14P21A205.user.dto.UserRecordsResponse;
 import com.ssafy.S14P21A205.user.service.UserService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -47,5 +48,13 @@ public class UserController implements UserControllerDoc {
     ) {
         var user = userService.changeNickname(authentication, request.nickname());
         return ResponseEntity.ok(AuthMeResponse.from(authentication, user));
+    }
+
+    @GetMapping("/records")
+    @Override
+    public ResponseEntity<UserRecordsResponse> getUserRecords(
+            Authentication authentication
+    ) {
+        return ResponseEntity.ok(userService.getUserRecords(authentication));
     }
 }

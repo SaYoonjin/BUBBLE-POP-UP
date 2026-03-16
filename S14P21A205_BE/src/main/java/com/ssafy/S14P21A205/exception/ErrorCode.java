@@ -24,6 +24,7 @@ public enum ErrorCode {
     GAME_STATE_NOT_FOUND(HttpStatus.NOT_FOUND, "GAME-004", "Game state was not found."),
     SEASON_NOT_FOUND(HttpStatus.NOT_FOUND, "GAME-005", "No active season is available."),
     MENU_NOT_FOUND(HttpStatus.NOT_FOUND, "GAME-006", "Menu was not found."),
+    ALREADY_JOINED_CURRENT_SEASON(HttpStatus.CONFLICT, "GAME-007", "Current season is already joined."),
 
     // Store
     STORE_NOT_FOUND(HttpStatus.NOT_FOUND, "STORE-001", "Store was not found."),

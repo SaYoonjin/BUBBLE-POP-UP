@@ -1,9 +1,7 @@
 package com.ssafy.S14P21A205.store.repository;
 
 import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
-import com.ssafy.S14P21A205.shop.entity.ItemCategory;
 import com.ssafy.S14P21A205.store.entity.Store;
-import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.EntityGraph;
@@ -16,25 +14,34 @@ public interface StoreRepository extends JpaRepository<Store, Long> {
     @EntityGraph(attributePaths = {"user", "location", "menu", "season"})
     Optional<Store> findFirstByUser_IdAndSeasonStatusOrderByIdDesc(Integer userId, SeasonStatus seasonStatus);
 
+    @EntityGraph(attributePaths = {"user", "location", "menu", "season"})
+    @Query("""
+            select s
+            from Store s
+            where s.user.id = :userId
+              and s.season.status = :seasonStatus
+              and not exists (
+                    select 1
+                    from SeasonRankingRecord record
+                    where record.store = s
+              )
+            order by s.id desc
+            """)
+    List<Store> findActiveStoresByUserIdAndSeasonStatusOrderByIdDesc(
+            @Param("userId") Integer userId,
+            @Param("seasonStatus") SeasonStatus seasonStatus
+    );
+
     Optional<Store> findFirstByUser_IdOrderBySeason_IdDescIdDesc(Integer userId);
+
+    Optional<Store> findFirstByUser_IdAndSeason_IdOrderByIdDesc(Integer userId, Long seasonId);
+
+    boolean existsByUser_IdAndSeason_Id(Integer userId, Long seasonId);
 
     Optional<Store> findByUser_Id(Integer userId);
 
     @EntityGraph(attributePaths = {"user", "location", "menu", "season"})
     List<Store> findBySeason_IdOrderByIdAsc(Long seasonId);
-
-    @Query("""
-            select item.discountRate
-            from ItemUser itemUser
-            join itemUser.item item
-            where itemUser.store.id = :storeId
-              and itemUser.isPurchased = true
-              and item.category = :category
-            """)
-    Optional<BigDecimal> findPurchasedDiscountRateByStoreIdAndCategory(
-            @Param("storeId") Long storeId,
-            @Param("category") ItemCategory category
-    );
 
     Optional<Store> findByUserId(Integer userId);
 
@@ -48,4 +55,8 @@ public interface StoreRepository extends JpaRepository<Store, Long> {
             @Param("seasonId") Long seasonId,
             @Param("menuId") Long menuId
     );
+
+    default Optional<Store> findFirstActiveByUser_IdAndSeasonStatusOrderByIdDesc(Integer userId, SeasonStatus seasonStatus) {
+        return findActiveStoresByUserIdAndSeasonStatusOrderByIdDesc(userId, seasonStatus).stream().findFirst();
+    }
 }

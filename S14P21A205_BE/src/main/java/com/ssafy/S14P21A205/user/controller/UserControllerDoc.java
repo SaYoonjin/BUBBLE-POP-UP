@@ -4,6 +4,7 @@ import com.ssafy.S14P21A205.auth.dto.AuthMeResponse;
 import com.ssafy.S14P21A205.exception.ErrorResponse;
 import com.ssafy.S14P21A205.user.dto.UserNicknameUpdateRequest;
 import com.ssafy.S14P21A205.user.dto.UserPointsResponse;
+import com.ssafy.S14P21A205.user.dto.UserRecordsResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -54,6 +55,25 @@ public interface UserControllerDoc {
             )
     })
     ResponseEntity<UserPointsResponse> getUserPoints(Authentication authentication);
+
+    @Operation(
+            summary = "Get records",
+            description = "Returns up to 10 recent finished season records for the authenticated user.",
+            security = @SecurityRequirement(name = "bearerAuth")
+    )
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "Success",
+                    content = @Content(schema = @Schema(implementation = UserRecordsResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "401",
+                    description = "Unauthorized",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            )
+    })
+    ResponseEntity<UserRecordsResponse> getUserRecords(Authentication authentication);
 
     @Operation(
             summary = "Update nickname",

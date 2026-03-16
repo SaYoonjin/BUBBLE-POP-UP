@@ -2,6 +2,11 @@ package com.ssafy.S14P21A205.user.service;
 
 import com.ssafy.S14P21A205.exception.BaseException;
 import com.ssafy.S14P21A205.exception.ErrorCode;
+import com.ssafy.S14P21A205.game.season.entity.SeasonRankingRecord;
+import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
+import com.ssafy.S14P21A205.game.season.repository.SeasonRankingRecordRepository;
+import com.ssafy.S14P21A205.user.dto.UserRecordResponse;
+import com.ssafy.S14P21A205.user.dto.UserRecordsResponse;
 import com.ssafy.S14P21A205.user.entity.OAuthIdentity;
 import com.ssafy.S14P21A205.user.entity.User;
 import com.ssafy.S14P21A205.user.repository.OAuthIdentityRepository;
@@ -32,6 +37,7 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final OAuthIdentityRepository oauthIdentityRepository;
+    private final SeasonRankingRecordRepository seasonRankingRecordRepository;
 
     /** 용도: OAuth 인증 기준 사용자 upsert. */
     @Transactional
@@ -80,6 +86,21 @@ public class UserService {
     /** 용도: 인증 사용자 기준 사용자 조회. */
     public User getUser(Authentication authentication) {
         return getCurrentUser(authentication);
+    }
+
+    public UserRecordsResponse getUserRecords(Authentication authentication) {
+        User user = getCurrentUser(authentication);
+
+        return new UserRecordsResponse(
+                seasonRankingRecordRepository
+                        .findTop10ByStore_User_IdAndStore_Season_StatusOrderByStore_Season_IdDesc(
+                                user.getId(),
+                                SeasonStatus.FINISHED
+                        )
+                        .stream()
+                        .map(this::toUserRecordResponse)
+                        .toList()
+        );
     }
 
     /** 용도: 인증 사용자 기준 닉네임 변경. */
@@ -195,6 +216,18 @@ public class UserService {
         }
         return userRepository.findById(user.getId())
                 .orElseThrow(() -> new BaseException(ErrorCode.UNAUTHORIZED));
+    }
+
+    private UserRecordResponse toUserRecordResponse(SeasonRankingRecord record) {
+        var store = record.getStore();
+        return new UserRecordResponse(
+                Math.toIntExact(store.getSeason().getId()),
+                record.getFinalRank(),
+                store.getLocation().getLocationName(),
+                store.getStoreName(),
+                record.getTotalNetProfit(),
+                record.getRewardPoints()
+        );
     }
 
     private User getRequiredUser(String rawUserId) {

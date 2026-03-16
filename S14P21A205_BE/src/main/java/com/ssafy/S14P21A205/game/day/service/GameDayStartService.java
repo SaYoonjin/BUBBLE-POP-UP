@@ -39,6 +39,7 @@ import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Function;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -49,6 +50,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class GameDayStartService {
 
     private static final int INITIAL_CAPITAL = 10_000_000;
+    private static final String BALANCE_KEY_PREFIX = "balance:";
     private static final int BUSINESS_OPEN_HOUR = SeasonTimeline.BUSINESS_OPEN_HOUR;
     private static final int BUSINESS_CLOSE_HOUR = SeasonTimeline.BUSINESS_CLOSE_HOUR;
     private static final int[] PURCHASE_QUANTITY_WEIGHTS = {10, 40, 35, 15};
@@ -66,6 +68,7 @@ public class GameDayStartService {
     private final DailyEventRepository dailyEventRepository;
     private final OrderRepository orderRepository;
     private final GameDayStoreStateRedisRepository gameDayStoreStateRedisRepository;
+    private final StringRedisTemplate stringRedisTemplate;
 
     private Clock clock = Clock.systemDefaultZone();
 
@@ -126,8 +129,13 @@ public class GameDayStartService {
 
         int carriedBalance;
         int carriedStock;
+        int orderCostToDeduct = orderCost;
         if (day == 1) {
-            carriedBalance = INITIAL_CAPITAL;
+            Integer persistedBalance = getPersistedBalance(store.getId());
+            carriedBalance = persistedBalance == null ? INITIAL_CAPITAL : persistedBalance;
+            if (persistedBalance != null) {
+                orderCostToDeduct = 0;
+            }
             carriedStock = 0;
         } else {
             DailyReport previousDay = dailyReportRepository.findByStoreIdAndDay(store.getId(), day - 1)
@@ -138,7 +146,7 @@ public class GameDayStartService {
 
         int dailyRent = store.getLocation().getRent();
         int balanceAfterDailyRent = carriedBalance - dailyRent;
-        int initialBalance = balanceAfterDailyRent - orderCost;
+        int initialBalance = balanceAfterDailyRent - orderCostToDeduct;
         if (initialBalance < 0) {
             int maxAffordableOrderCount = Math.max(0, balanceAfterDailyRent / store.getMenu().getOriginPrice());
             throw new BaseException(
@@ -343,14 +351,7 @@ public class GameDayStartService {
     }
 
     private String toWeatherLabel(WeatherType weatherType) {
-        return switch (weatherType) {
-            case SUNNY -> "맑음";
-            case RAIN -> "비";
-            case SNOW -> "눈";
-            case HEATWAVE -> "폭염";
-            case COLDWAVE -> "한파";
-            case FOG -> "흐림";
-        };
+        return weatherType.name();
     }
 
     private BigDecimal normalizeScale(BigDecimal value) {
@@ -364,8 +365,20 @@ public class GameDayStartService {
         return value.max(BigDecimal.ZERO).setScale(2, RoundingMode.HALF_UP);
     }
 
+    private Integer getPersistedBalance(Long storeId) {
+        String value = stringRedisTemplate.opsForValue().get(balanceKey(storeId));
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return Integer.valueOf(value);
+    }
+
     private String formatHour(int hour) {
         return LocalTime.of(hour % 24, 0).format(TIME_FORMATTER);
+    }
+
+    private String balanceKey(Long storeId) {
+        return BALANCE_KEY_PREFIX + storeId;
     }
 
     private record StartingState(
@@ -382,3 +395,4 @@ public class GameDayStartService {
     ) {
     }
 }
+

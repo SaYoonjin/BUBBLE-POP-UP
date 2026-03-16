@@ -251,7 +251,7 @@ public class ActionServiceImpl implements ActionService {
     // ── 공통 헬퍼 ──
 
     private Store findStore(Integer userId) {
-        return storeRepository.findByUser_Id(userId)
+        return storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(userId, SeasonStatus.IN_PROGRESS)
                 .orElseThrow(() -> new BaseException(ErrorCode.STORE_NOT_FOUND));
     }
 
