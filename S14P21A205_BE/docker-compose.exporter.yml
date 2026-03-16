@@ -1,7 +1,8 @@
+name: host-exporter
+
 services:
   node-exporter:
     image: prom/node-exporter
-    container_name: node-exporter
     command:
       - --path.rootfs=/host
     network_mode: host
