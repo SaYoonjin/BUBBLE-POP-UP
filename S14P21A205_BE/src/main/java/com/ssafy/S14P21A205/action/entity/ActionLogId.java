@@ -12,4 +12,5 @@ public class ActionLogId implements Serializable {
 
     private Long action;
     private Long store;
+    private Integer gameDay;
 }

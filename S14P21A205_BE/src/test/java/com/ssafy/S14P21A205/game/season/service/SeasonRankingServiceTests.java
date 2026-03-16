@@ -21,12 +21,14 @@ import com.ssafy.S14P21A205.shop.entity.Menu;
 import com.ssafy.S14P21A205.store.entity.Location;
 import com.ssafy.S14P21A205.store.entity.Store;
 import com.ssafy.S14P21A205.user.entity.User;
+import com.ssafy.S14P21A205.user.service.UserService;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.BeanUtils;
+import org.springframework.security.core.Authentication;
 import org.springframework.test.util.ReflectionTestUtils;
 
 class SeasonRankingServiceTests {
@@ -34,11 +36,13 @@ class SeasonRankingServiceTests {
     private final SeasonRankingRedisRepository seasonRankingRedisRepository = mock(SeasonRankingRedisRepository.class);
     private final SeasonRepository seasonRepository = mock(SeasonRepository.class);
     private final SeasonRankingRecordRepository seasonRankingRecordRepository = mock(SeasonRankingRecordRepository.class);
+    private final UserService userService = mock(UserService.class);
 
     private final SeasonRankingService seasonRankingService = new SeasonRankingService(
             seasonRankingRedisRepository,
             seasonRepository,
-            seasonRankingRecordRepository
+            seasonRankingRecordRepository,
+            userService
     );
 
     @Test
@@ -62,6 +66,7 @@ class SeasonRankingServiceTests {
     @Test
     void getCurrentFinalRankingsReturnsTopTenAndMyRankingFromSql() {
         Integer myUserId = 200;
+        Authentication authentication = authenticate(myUserId, "me");
         Season season = mock(Season.class);
         when(season.getId()).thenReturn(12L);
         when(season.getStatus()).thenReturn(SeasonStatus.FINISHED);
@@ -71,7 +76,7 @@ class SeasonRankingServiceTests {
         when(seasonRepository.findFirstByStatusOrderByIdDesc(SeasonStatus.FINISHED)).thenReturn(Optional.of(season));
         when(seasonRankingRecordRepository.findByStore_Season_IdOrderByFinalRankAsc(12L)).thenReturn(finalizedRecords);
 
-        CurrentSeasonRankingsResponse response = seasonRankingService.getCurrentFinalRankings(myUserId);
+        CurrentSeasonRankingsResponse response = seasonRankingService.getCurrentFinalRankings(authentication);
 
         assertEquals(12L, response.seasonId());
         assertEquals(10, response.rankings().size());
@@ -79,9 +84,11 @@ class SeasonRankingServiceTests {
         assertEquals("me", response.myRanking().nickname());
         assertFalse(response.rankings().stream().anyMatch(ranking -> ranking.userId().equals(myUserId)));
     }
+
     @Test
     void getCurrentFinalRankingsIncludesAllTiedUsersWithinTopTenRanks() {
         Integer myUserId = 999;
+        Authentication authentication = authenticate(myUserId, "me");
         Season season = mock(Season.class);
         when(season.getId()).thenReturn(12L);
         when(season.getStatus()).thenReturn(SeasonStatus.FINISHED);
@@ -91,7 +98,7 @@ class SeasonRankingServiceTests {
         when(seasonRepository.findFirstByStatusOrderByIdDesc(SeasonStatus.FINISHED)).thenReturn(Optional.of(season));
         when(seasonRankingRecordRepository.findByStore_Season_IdOrderByFinalRankAsc(12L)).thenReturn(finalizedRecords);
 
-        CurrentSeasonRankingsResponse response = seasonRankingService.getCurrentFinalRankings(myUserId);
+        CurrentSeasonRankingsResponse response = seasonRankingService.getCurrentFinalRankings(authentication);
 
         assertEquals(12L, response.seasonId());
         assertEquals(12, response.rankings().size());
@@ -113,6 +120,12 @@ class SeasonRankingServiceTests {
         assertEquals(3L, response.seasonId());
         assertTrue(response.rankings().isEmpty());
         assertNull(response.refreshedAt());
+    }
+
+    private Authentication authenticate(Integer userId, String nickname) {
+        Authentication authentication = mock(Authentication.class);
+        when(userService.getCurrentUser(authentication)).thenReturn(createUser(userId, nickname));
+        return authentication;
     }
 
     private List<CurrentSeasonTopRankingItemResponse> buildRankingItems(int count) {
@@ -181,8 +194,7 @@ class SeasonRankingServiceTests {
             String menuName,
             Integer originPrice
     ) {
-        User user = new User(userId + "@example.com", nickname);
-        ReflectionTestUtils.setField(user, "id", userId);
+        User user = createUser(userId, nickname);
 
         Location location = BeanUtils.instantiateClass(Location.class);
         ReflectionTestUtils.setField(location, "id", storeId + 1);
@@ -202,5 +214,11 @@ class SeasonRankingServiceTests {
         ReflectionTestUtils.setField(store, "storeName", storeName);
         ReflectionTestUtils.setField(store, "price", originPrice * 2);
         return store;
+    }
+
+    private User createUser(Integer userId, String nickname) {
+        User user = new User(userId + "@example.com", nickname);
+        ReflectionTestUtils.setField(user, "id", userId);
+        return user;
     }
 }
