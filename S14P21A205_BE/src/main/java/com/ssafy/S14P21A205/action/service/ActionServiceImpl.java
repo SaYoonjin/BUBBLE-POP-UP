@@ -42,6 +42,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class ActionServiceImpl implements ActionService {
 
     private static final BigDecimal EMERGENCY_COST_MULTIPLIER = new BigDecimal("1.5");
+    // TODO(지원) : 긴급발주 도착 시간 고정 30초. TrafficStatus 기반으로 교통량에 따라 동적 계산으로 변경 필요.
     private static final int EMERGENCY_DELIVERY_SECONDS = 30;
 
     // 가격 구간 판정 기준 (평균가 대비 ±10%)
