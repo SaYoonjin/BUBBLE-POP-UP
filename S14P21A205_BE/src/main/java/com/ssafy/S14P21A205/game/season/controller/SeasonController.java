@@ -3,14 +3,21 @@ package com.ssafy.S14P21A205.game.season.controller;
 import com.ssafy.S14P21A205.game.season.dto.CurrentSeasonRankingsResponse;
 import com.ssafy.S14P21A205.game.season.dto.CurrentSeasonTopRankingsResponse;
 import com.ssafy.S14P21A205.game.season.dto.GameWaitingResponse;
+import com.ssafy.S14P21A205.game.season.dto.SeasonJoinRequest;
+import com.ssafy.S14P21A205.game.season.dto.SeasonJoinResponse;
 import com.ssafy.S14P21A205.game.season.dto.SeasonSummaryResponse;
+import com.ssafy.S14P21A205.game.season.service.SeasonJoinService;
 import com.ssafy.S14P21A205.game.season.service.SeasonRankingService;
 import com.ssafy.S14P21A205.game.season.service.SeasonSummaryService;
 import com.ssafy.S14P21A205.game.season.service.SeasonWaitingService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -20,6 +27,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/game")
 public class SeasonController implements SeasonControllerDoc {
 
+    private final SeasonJoinService seasonJoinService;
     private final SeasonRankingService seasonRankingService;
     private final SeasonSummaryService seasonSummaryService;
     private final SeasonWaitingService seasonWaitingService;
@@ -28,6 +36,16 @@ public class SeasonController implements SeasonControllerDoc {
     @GetMapping("/waiting")
     public ResponseEntity<GameWaitingResponse> getWaitingStatus() {
         return ResponseEntity.ok(seasonWaitingService.getWaitingStatus());
+    }
+
+    @Override
+    @PostMapping("/seasons/current/join")
+    public ResponseEntity<SeasonJoinResponse> joinCurrentSeason(
+            Authentication authentication,
+            @Valid @RequestBody SeasonJoinRequest request
+    ) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(seasonJoinService.joinCurrentSeason(authentication, request));
     }
 
     @Override
@@ -42,8 +60,6 @@ public class SeasonController implements SeasonControllerDoc {
         return ResponseEntity.ok(seasonRankingService.getCurrentFinalRankings(authentication));
     }
 
-    // seasonId -> 특정 시즌 조회 (없으면 가장 최근 종료 시즌)
-    // userId -> 특정 유저 조회 (없으면 로그인 유저)
     @Override
     @GetMapping("/seasons/summary")
     public ResponseEntity<SeasonSummaryResponse> getSeasonSummary(
