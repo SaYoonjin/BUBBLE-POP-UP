@@ -1,8 +1,7 @@
 package com.ssafy.S14P21A205.game.state.repository;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.ObjectMapper;
 import java.util.HashMap;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
@@ -39,7 +38,7 @@ public class GameStateRedisRepository {
         }
         try {
             return objectMapper.readValue(json, new TypeReference<>() {});
-        } catch (JsonProcessingException e) {
+        } catch (Exception e) {
             return new HashMap<>();
         }
     }
@@ -54,7 +53,7 @@ public class GameStateRedisRepository {
         try {
             redisTemplate.opsForValue().set(actionsKey(storeId, day),
                     objectMapper.writeValueAsString(actions));
-        } catch (JsonProcessingException e) {
+        } catch (Exception e) {
             throw new RuntimeException("Failed to serialize actions", e);
         }
     }
