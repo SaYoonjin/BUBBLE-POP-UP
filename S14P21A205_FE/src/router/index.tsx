@@ -12,6 +12,7 @@ import RankingPage from "../pages/RankingPage";
 import ComponentTestPage from "../pages/ComponentTestPage";
 import CozyTestPage from "../pages/CozyTestPage";
 import NewsPage from "../pages/NewsPage";
+import CozyPrepPage from "../pages/CozyPrepPage";
 
 const router = createBrowserRouter([
   { path: "/", element: <LobbyPage /> },
@@ -19,6 +20,7 @@ const router = createBrowserRouter([
   { path: "/test", element: <ComponentTestPage /> },
   { path: "/test/cozy", element: <CozyTestPage /> },
   { path: "/news", element: <NewsPage /> },
+  { path: "/cozy/prep", element: <CozyPrepPage /> },
   {
     element: <PrivateRoute />,
     children: [
