@@ -8,6 +8,8 @@ variables:
   WEB_APP_DIR: "/home/ubuntu/S14P21A205"
   DATA_USER: "ubuntu"
   DATA_APP_DIR: "/home/ubuntu/S14P21A205-data"
+  MONITOR_USER: "ubuntu"
+  MONITOR_APP_DIR: "/home/ubuntu/S14P21A205-monitoring"
 
 build-backend:
   stage: build
@@ -58,6 +60,23 @@ bootstrap-data-server:
   rules:
     - if: '$CI_COMMIT_BRANCH == "master"'
 
+bootstrap-monitoring-server:
+  stage: deploy
+  image: alpine:3.20
+  when: manual
+  before_script:
+    - apk add --no-cache openssh-client bash rsync
+    - mkdir -p ~/.ssh
+    - printf '%s' "${MONITOR_SSH_PRIVATE_KEY:-$SSH_PRIVATE_KEY}" | tr -d '\r' > ~/.ssh/id_rsa
+    - chmod 600 ~/.ssh/id_rsa
+    - ssh-keyscan -H "$MONITOR_SERVER_IP" >> ~/.ssh/known_hosts
+  script:
+    - ssh "$MONITOR_USER@$MONITOR_SERVER_IP" "mkdir -p '$MONITOR_APP_DIR/ops'"
+    - rsync -az "$BACKEND_DIR/ops/" "$MONITOR_USER@$MONITOR_SERVER_IP:$MONITOR_APP_DIR/ops/"
+    - ssh "$MONITOR_USER@$MONITOR_SERVER_IP" "cd '$MONITOR_APP_DIR' && sudo DEPLOY_USER='$MONITOR_USER' APP_DIR='$MONITOR_APP_DIR' bash ops/scripts/bootstrap_monitoring_ec2.sh"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "master"'
+
 deploy-web:
   stage: deploy
   image: alpine:3.20
@@ -90,6 +109,22 @@ deploy-web:
   rules:
     - if: '$CI_COMMIT_BRANCH == "master"'
 
+deploy-web-exporter:
+  stage: deploy
+  image: alpine:3.20
+  before_script:
+    - apk add --no-cache openssh-client bash rsync
+    - mkdir -p ~/.ssh
+    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/id_rsa
+    - chmod 600 ~/.ssh/id_rsa
+    - ssh-keyscan -H "$WEB_SERVER_IP" >> ~/.ssh/known_hosts
+  script:
+    - ssh "$WEB_USER@$WEB_SERVER_IP" "mkdir -p '$WEB_APP_DIR'"
+    - rsync -az "$BACKEND_DIR/docker-compose.exporter.yml" "$WEB_USER@$WEB_SERVER_IP:$WEB_APP_DIR/"
+    - ssh "$WEB_USER@$WEB_SERVER_IP" "cd '$WEB_APP_DIR' && docker compose -p web-exporter -f docker-compose.exporter.yml up -d --remove-orphans"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "master"'
+
 deploy-data:
   stage: deploy
   image: alpine:3.20
@@ -105,6 +140,62 @@ deploy-data:
     - rsync -az "$BACKEND_DIR/data/" "$DATA_USER@$DATA_SERVER_IP:$DATA_APP_DIR/data/"
     - rsync -az "$BACKEND_DIR/spark/" "$DATA_USER@$DATA_SERVER_IP:$DATA_APP_DIR/spark/"
     - ssh "$DATA_USER@$DATA_SERVER_IP" "cd '$DATA_APP_DIR' && docker compose -f docker-compose.data.yml up -d --build --remove-orphans"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "master"'
+
+deploy-data-exporter:
+  stage: deploy
+  image: alpine:3.20
+  before_script:
+    - apk add --no-cache openssh-client bash rsync
+    - mkdir -p ~/.ssh
+    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/id_rsa
+    - chmod 600 ~/.ssh/id_rsa
+    - ssh-keyscan -H "$DATA_SERVER_IP" >> ~/.ssh/known_hosts
+  script:
+    - ssh "$DATA_USER@$DATA_SERVER_IP" "mkdir -p '$DATA_APP_DIR'"
+    - rsync -az "$BACKEND_DIR/docker-compose.exporter.yml" "$DATA_USER@$DATA_SERVER_IP:$DATA_APP_DIR/"
+    - ssh "$DATA_USER@$DATA_SERVER_IP" "cd '$DATA_APP_DIR' && docker compose -p data-exporter -f docker-compose.exporter.yml up -d --remove-orphans"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "master"'
+
+deploy-monitoring:
+  stage: deploy
+  image: alpine:3.20
+  before_script:
+    - apk add --no-cache openssh-client bash rsync
+    - mkdir -p ~/.ssh
+    - printf '%s' "${MONITOR_SSH_PRIVATE_KEY:-$SSH_PRIVATE_KEY}" | tr -d '\r' > ~/.ssh/id_rsa
+    - chmod 600 ~/.ssh/id_rsa
+    - ssh-keyscan -H "$MONITOR_SERVER_IP" >> ~/.ssh/known_hosts
+  script:
+    - ssh "$MONITOR_USER@$MONITOR_SERVER_IP" "mkdir -p '$MONITOR_APP_DIR/monitoring' '$MONITOR_APP_DIR/monitoring/secrets'"
+    - rsync -az "$BACKEND_DIR/docker-compose.monitoring.yml" "$MONITOR_USER@$MONITOR_SERVER_IP:$MONITOR_APP_DIR/"
+    - rsync -az "$BACKEND_DIR/monitoring/" "$MONITOR_USER@$MONITOR_SERVER_IP:$MONITOR_APP_DIR/monitoring/"
+    - |
+      {
+        printf 'WEB_SCRAPE_SSH_HOST=%s\n' "$WEB_SERVER_IP"
+        printf 'WEB_SCRAPE_SSH_USER=%s\n' "$WEB_USER"
+        printf 'DATA_SCRAPE_SSH_HOST=%s\n' "$DATA_SERVER_IP"
+        printf 'DATA_SCRAPE_SSH_USER=%s\n' "$DATA_USER"
+        if [ -n "${MONITORING_ENV_FILE:-}" ]; then
+          printf '%s\n' "$MONITORING_ENV_FILE"
+        fi
+      } > .env.monitoring
+    - sed -i 's/\r$//' .env.monitoring
+    - scp .env.monitoring "$MONITOR_USER@$MONITOR_SERVER_IP:$MONITOR_APP_DIR/.env.monitoring"
+    - printf '%s' "${SCRAPE_SSH_PRIVATE_KEY:-$SSH_PRIVATE_KEY}" | tr -d '\r' > exporter_tunnel_id_rsa
+    - chmod 600 exporter_tunnel_id_rsa
+    - scp exporter_tunnel_id_rsa "$MONITOR_USER@$MONITOR_SERVER_IP:$MONITOR_APP_DIR/monitoring/secrets/exporter_tunnel_id_rsa"
+    - ssh "$MONITOR_USER@$MONITOR_SERVER_IP" "chmod 600 '$MONITOR_APP_DIR/monitoring/secrets/exporter_tunnel_id_rsa'"
+    - |
+      ssh "$MONITOR_USER@$MONITOR_SERVER_IP" "cd '$MONITOR_APP_DIR' && \
+      if [ -f .env.monitoring ]; then \
+        cp .env.monitoring .env && \
+        docker compose --env-file .env.monitoring -f docker-compose.monitoring.yml up -d --remove-orphans; \
+      else \
+        docker compose -f docker-compose.monitoring.yml up -d --remove-orphans; \
+      fi"
   rules:
     - if: '$CI_COMMIT_BRANCH == "master"'
 

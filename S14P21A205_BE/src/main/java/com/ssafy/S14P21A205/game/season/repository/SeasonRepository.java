@@ -9,5 +9,9 @@ public interface SeasonRepository extends JpaRepository<Season, Long> {
 
     Optional<Season> findFirstByStatusOrderByIdDesc(SeasonStatus status);
 
+    Optional<Season> findFirstByStatusOrderByStartTimeAscIdAsc(SeasonStatus status);
+
+    Optional<Season> findFirstByOrderByIdDesc();
+
     Optional<Season> findByIdAndStatus(Long id, SeasonStatus status);
 }

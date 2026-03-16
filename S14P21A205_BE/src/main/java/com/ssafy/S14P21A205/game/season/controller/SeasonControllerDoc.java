@@ -3,6 +3,7 @@ package com.ssafy.S14P21A205.game.season.controller;
 import com.ssafy.S14P21A205.exception.ErrorResponse;
 import com.ssafy.S14P21A205.game.season.dto.CurrentSeasonRankingsResponse;
 import com.ssafy.S14P21A205.game.season.dto.CurrentSeasonTopRankingsResponse;
+import com.ssafy.S14P21A205.game.season.dto.GameWaitingResponse;
 import com.ssafy.S14P21A205.game.season.dto.SeasonJoinRequest;
 import com.ssafy.S14P21A205.game.season.dto.SeasonJoinResponse;
 import com.ssafy.S14P21A205.game.season.dto.SeasonSummaryResponse;
@@ -18,8 +19,21 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.RequestParam;
 
-@Tag(name = "Game Season API", description = "Season ranking API")
+@Tag(name = "Game Season API", description = "Season APIs")
 public interface SeasonControllerDoc {
+
+    @Operation(
+            summary = "Get game waiting status",
+            description = "Return lobby waiting status. If a season is in progress, the client can route to the game screen."
+    )
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "Waiting status lookup success",
+                    content = @Content(schema = @Schema(implementation = GameWaitingResponse.class))
+            )
+    })
+    ResponseEntity<GameWaitingResponse> getWaitingStatus();
 
     @Operation(
             summary = "Join current season",

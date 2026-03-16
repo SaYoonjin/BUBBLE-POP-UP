@@ -78,17 +78,14 @@ public class UserService {
     }
 
     /** 용도: 인증 사용자 기준 사용자 조회. */
-    public User getUser(String rawUserId, Authentication authentication) {
-        User currentUser = getCurrentUser(authentication);
-        validateSameUser(rawUserId, currentUser);
-        return currentUser;
+    public User getUser(Authentication authentication) {
+        return getCurrentUser(authentication);
     }
 
     /** 용도: 인증 사용자 기준 닉네임 변경. */
     @Transactional
-    public User changeNickname(String rawUserId, Authentication authentication, String rawNickname) {
+    public User changeNickname(Authentication authentication, String rawNickname) {
         User user = getCurrentUser(authentication);
-        validateSameUser(rawUserId, user);
         String nickname = rawNickname == null ? null : rawNickname.trim();
         if (!StringUtils.hasText(nickname) || nickname.length() > 30) {
             throw new BaseException(ErrorCode.INVALID_INPUT_VALUE);
@@ -198,12 +195,6 @@ public class UserService {
         }
         return userRepository.findById(user.getId())
                 .orElseThrow(() -> new BaseException(ErrorCode.UNAUTHORIZED));
-    }
-
-    private void validateSameUser(String rawUserId, User user) {
-        if (user == null || user.getId() == null || !user.getId().toString().equals(rawUserId)) {
-            throw new BaseException(ErrorCode.UNAUTHORIZED);
-        }
     }
 
     private User getRequiredUser(String rawUserId) {

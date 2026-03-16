@@ -94,9 +94,35 @@ public class GameDayStoreStateRedisRepository {
         saveTickLog(storeId, day, state);
     }
 
+    public void updateField(Long storeId, Integer day, String field, String value) {
+        stringRedisTemplate.opsForHash().put(buildStateKey(storeId, day), field, value);
+    }
+
     public boolean exists(Long storeId, Integer day) {
         Boolean exists = stringRedisTemplate.hasKey(buildStateKey(storeId, day));
         return Boolean.TRUE.equals(exists);
+    }
+
+    public Optional<Long> findBalance(Long storeId, Integer day) {
+        try {
+            return Optional.ofNullable(parseLongObject(
+                    stringRedisTemplate.opsForHash().get(buildStateKey(storeId, day), FIELD_BALANCE)
+            ));
+        } catch (Exception e) {
+            throw new BaseException(ErrorCode.INTERNAL_SERVER_ERROR, e);
+        }
+    }
+
+    public void saveBalance(Long storeId, Integer day, Long balance) {
+        try {
+            if (balance == null) {
+                stringRedisTemplate.opsForHash().delete(buildStateKey(storeId, day), FIELD_BALANCE);
+                return;
+            }
+            stringRedisTemplate.opsForHash().put(buildStateKey(storeId, day), FIELD_BALANCE, balance.toString());
+        } catch (Exception e) {
+            throw new BaseException(ErrorCode.INTERNAL_SERVER_ERROR, e);
+        }
     }
 
     String buildStateKey(Long storeId, Integer day) {

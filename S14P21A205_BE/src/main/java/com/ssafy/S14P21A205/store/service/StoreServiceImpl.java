@@ -2,6 +2,7 @@ package com.ssafy.S14P21A205.store.service;
 
 import com.ssafy.S14P21A205.exception.BaseException;
 import com.ssafy.S14P21A205.exception.ErrorCode;
+import com.ssafy.S14P21A205.game.day.repository.GameDayStoreStateRedisRepository;
 import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
 import com.ssafy.S14P21A205.shop.entity.ItemCategory;
 import com.ssafy.S14P21A205.shop.repository.ItemUserRepository;
@@ -17,10 +18,8 @@ import com.ssafy.S14P21A205.store.repository.LocationRepository;
 import com.ssafy.S14P21A205.store.repository.MenuRepository;
 import com.ssafy.S14P21A205.store.repository.StoreRepository;
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,13 +28,11 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class StoreServiceImpl implements StoreService {
 
-    private static final String BALANCE_KEY_PREFIX = "balance:";
-
     private final StoreRepository storeRepository;
     private final LocationRepository locationRepository;
     private final MenuRepository menuRepository;
     private final ItemUserRepository itemUserRepository;
-    private final StringRedisTemplate stringRedisTemplate;
+    private final GameDayStoreStateRedisRepository gameDayStoreStateRedisRepository;
 
     @Override
     public StoreResponse getStore(Integer userId) {
@@ -54,7 +51,7 @@ public class StoreServiceImpl implements StoreService {
     public UpdateStoreLocationResponse updateStoreLocation(Integer userId, UpdateStoreLocationRequest request) {
         Store store = getStoreByUserId(userId);
         Long storeId = store.getId();
-        BigDecimal rentDiscountMultiplier = getRentDiscountMultiplier(userId);
+        int currentDay = resolveCurrentDay(store.getSeason().getCurrentDay());
 
         Location location = locationRepository.findById(request.locationId())
                 .orElseThrow(() -> new RuntimeException("Location was not found."));
@@ -63,9 +60,7 @@ public class StoreServiceImpl implements StoreService {
             throw new RuntimeException("The store is already using this location.");
         }
 
-        Integer discountedRent = applyDiscount(location.getRent(), rentDiscountMultiplier);
-        Integer updatedBalance = deductBalance(storeId, discountedRent);
-
+        Integer updatedBalance = deductBalance(storeId, currentDay, location.getInteriorCost());
         store.changeLocation(location);
 
         return new UpdateStoreLocationResponse(
@@ -85,6 +80,7 @@ public class StoreServiceImpl implements StoreService {
                                 location.getId(),
                                 location.getLocationName(),
                                 location.getRent(),
+                                location.getInteriorCost(),
                                 discount
                         ))
                         .toList()
@@ -110,33 +106,17 @@ public class StoreServiceImpl implements StoreService {
                 .build();
     }
 
-    private Integer deductBalance(Long storeId, Integer amount) {
-        String key = generateBalanceKey(storeId);
-        String value = stringRedisTemplate.opsForValue().get(key);
-
-        if (value == null) {
-            throw new RuntimeException("Balance information was not found.");
-        }
-
-        Integer currentBalance = Integer.valueOf(value);
+    private Integer deductBalance(Long storeId, int day, Integer amount) {
+        long currentBalance = gameDayStoreStateRedisRepository.findBalance(storeId, day)
+                .orElseThrow(() -> new RuntimeException("Balance information was not found."));
 
         if (currentBalance < amount) {
             throw new RuntimeException("Balance is insufficient.");
         }
 
-        Integer updatedBalance = currentBalance - amount;
-        stringRedisTemplate.opsForValue().set(key, String.valueOf(updatedBalance));
-
-        return updatedBalance;
-    }
-
-    private String generateBalanceKey(Long storeId) {
-        return BALANCE_KEY_PREFIX + storeId;
-    }
-
-    private BigDecimal getRentDiscountMultiplier(Integer userId) {
-        return itemUserRepository.findPurchasedDiscountRateByUserIdAndCategory(userId, ItemCategory.RENT)
-                .orElse(BigDecimal.ONE);
+        long updatedBalance = currentBalance - amount;
+        gameDayStoreStateRedisRepository.saveBalance(storeId, day, updatedBalance);
+        return Math.toIntExact(updatedBalance);
     }
 
     private BigDecimal getDisplayedRentDiscountRate(Integer userId) {
@@ -149,12 +129,8 @@ public class StoreServiceImpl implements StoreService {
                 .orElse(BigDecimal.ONE);
     }
 
-    private Integer applyDiscount(Integer amount, BigDecimal discountMultiplier) {
-        BigDecimal discountedAmount = BigDecimal.valueOf(amount)
-                .multiply(discountMultiplier)
-                .setScale(0, RoundingMode.HALF_UP);
-
-        return discountedAmount.intValue();
+    private int resolveCurrentDay(Integer currentDay) {
+        return currentDay == null || currentDay == 0 ? 1 : currentDay;
     }
 
     private Store getStoreByUserId(Integer userId) {

@@ -4,6 +4,7 @@ public record LocationResponse(
         Long locationId,
         String locationName,
         Integer rent,
+        Integer interiorCost,
         Float discount
 ) {
 }

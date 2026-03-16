@@ -9,7 +9,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -22,34 +21,31 @@ public class UserController implements UserControllerDoc {
 
     private final UserService userService;
 
-    @GetMapping("/{userId}")
+    @GetMapping
     @Override
     public ResponseEntity<AuthMeResponse> getUser(
-            @PathVariable String userId,
             Authentication authentication
     ) {
-        var user = userService.getUser(userId, authentication);
+        var user = userService.getUser(authentication);
         return ResponseEntity.ok(AuthMeResponse.from(authentication, user));
     }
 
-    @GetMapping("/{userId}/points")
+    @GetMapping("/points")
     @Override
     public ResponseEntity<UserPointsResponse> getUserPoints(
-            @PathVariable String userId,
             Authentication authentication
     ) {
-        var user = userService.getUser(userId, authentication);
+        var user = userService.getUser(authentication);
         return ResponseEntity.ok(new UserPointsResponse(user.getPoint()));
     }
 
-    @PatchMapping("/{userId}/nickname")
+    @PatchMapping("/nickname")
     @Override
     public ResponseEntity<AuthMeResponse> updateMyNickname(
-            @PathVariable String userId,
             @Valid @RequestBody UserNicknameUpdateRequest request,
             Authentication authentication
     ) {
-        var user = userService.changeNickname(userId, authentication, request.nickname());
+        var user = userService.changeNickname(authentication, request.nickname());
         return ResponseEntity.ok(AuthMeResponse.from(authentication, user));
     }
 }

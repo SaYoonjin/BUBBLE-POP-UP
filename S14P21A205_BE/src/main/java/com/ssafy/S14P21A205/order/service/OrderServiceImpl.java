@@ -2,7 +2,9 @@ package com.ssafy.S14P21A205.order.service;
 
 import com.ssafy.S14P21A205.exception.BaseException;
 import com.ssafy.S14P21A205.exception.ErrorCode;
+import com.ssafy.S14P21A205.game.day.repository.GameDayStoreStateRedisRepository;
 import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
+import com.ssafy.S14P21A205.game.season.repository.DailyReportRepository;
 import com.ssafy.S14P21A205.order.dto.CurrentOrderResponse;
 import com.ssafy.S14P21A205.order.dto.RegularOrderRequest;
 import com.ssafy.S14P21A205.order.dto.RegularOrderResponse;
@@ -19,7 +21,6 @@ import java.math.RoundingMode;
 import java.util.Objects;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,25 +29,26 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class OrderServiceImpl implements OrderService {
 
-    private static final String STOCK_KEY_PREFIX = "stock:";
-    private static final String BALANCE_KEY_PREFIX = "balance:";
-    private static final Set<Integer> REGULAR_ORDER_DAYS = Set.of(0, 2, 4, 6);
+    private static final int INITIAL_CAPITAL = 10_000_000;
+    private static final Set<Integer> REGULAR_ORDER_DAYS = Set.of(1, 2, 4, 6);
 
     private final StoreRepository storeRepository;
     private final MenuRepository menuRepository;
     private final OrderRepository orderRepository;
+    private final DailyReportRepository dailyReportRepository;
+    private final GameDayStoreStateRedisRepository gameDayStoreStateRedisRepository;
     private final ItemUserRepository itemUserRepository;
-    private final StringRedisTemplate stringRedisTemplate;
 
     @Override
     public CurrentOrderResponse getCurrentOrder(Integer userId) {
         Store store = getStoreByUserId(userId);
         Long storeId = store.getId();
+        int currentDay = resolveRegularOrderDay(store.getSeason().getCurrentDay());
         Menu menu = store.getMenu();
 
         BigDecimal ingredientDiscountRate = getIngredientDiscountRate(store.getUser().getId());
         Integer discountedCostPrice = applyDiscount(menu.getOriginPrice(), ingredientDiscountRate);
-        Integer stock = getStock(storeId);
+        Integer stock = resolveStock(storeId, currentDay);
 
         return CurrentOrderResponse.builder()
                 .menuId(Math.toIntExact(menu.getId()))
@@ -63,11 +65,11 @@ public class OrderServiceImpl implements OrderService {
         Store store = getStoreByUserId(userId);
         Long storeId = store.getId();
         int regularOrderDay = resolveRegularOrderDay(store.getSeason().getCurrentDay());
-        int orderedDay = resolveOrderedDay(regularOrderDay);
 
         validateRegularOrderDay(regularOrderDay);
         validateQuantity(request.quantity());
-        validateNoExistingOrder(storeId, orderedDay);
+        validateDayNotStarted(storeId, regularOrderDay);
+        validateNoExistingOrder(storeId, regularOrderDay);
 
         Menu menu = getMenuById(request.menuId());
         boolean sameMenu = Objects.equals(store.getMenu().getId(), menu.getId());
@@ -77,19 +79,19 @@ public class OrderServiceImpl implements OrderService {
         Integer costPrice = resolveCostPrice(menu, discountRate);
         Integer totalCost = Math.multiplyExact(costPrice, request.quantity());
 
+        validateAffordableOrder(store, regularOrderDay, totalCost);
+
         if (!Objects.equals(store.getPrice(), sellingPrice)) {
             store.changePrice(sellingPrice);
         }
 
-        deductBalance(storeId, totalCost);
-        updateStock(storeId, request.quantity(), sameMenu);
+        Order savedOrder = orderRepository.save(
+                Order.create(menu, store, request.quantity(), totalCost, regularOrderDay)
+        );
+
         if (!sameMenu) {
             store.changeMenu(menu);
         }
-
-        Order savedOrder = orderRepository.save(
-                Order.create(menu, store, request.quantity(), totalCost, orderedDay)
-        );
 
         return RegularOrderResponse.builder()
                 .orderId(savedOrder.getId())
@@ -143,21 +145,23 @@ public class OrderServiceImpl implements OrderService {
 
     private void validateRegularOrderDay(int currentDay) {
         if (!REGULAR_ORDER_DAYS.contains(currentDay)) {
-            throw new RuntimeException("Regular orders are only available on days 0, 2, 4, and 6.");
+            throw new RuntimeException("Regular orders are only available on days 1, 2, 4, and 6.");
         }
     }
 
     private int resolveRegularOrderDay(Integer currentDay) {
-        return currentDay == null ? 0 : currentDay;
+        return currentDay == null || currentDay == 0 ? 1 : currentDay;
     }
 
-    private int resolveOrderedDay(int regularOrderDay) {
-        return regularOrderDay == 0 ? 1 : regularOrderDay;
+    private void validateDayNotStarted(Long storeId, int day) {
+        if (gameDayStoreStateRedisRepository.exists(storeId, day)) {
+            throw new RuntimeException("Regular orders are unavailable after the day has started.");
+        }
     }
 
     private void validateNoExistingOrder(Long storeId, Integer orderedDay) {
         if (orderRepository.findDailyStartOrder(storeId, orderedDay).isPresent()) {
-            throw new RuntimeException("A regular order for this day has already been created.");
+            throw new RuntimeException("A regular order already exists for this day.");
         }
     }
 
@@ -167,46 +171,36 @@ public class OrderServiceImpl implements OrderService {
         }
     }
 
-    private Integer getStock(Long storeId) {
-        String key = generateStockKey(storeId);
-        String value = stringRedisTemplate.opsForValue().get(key);
+    private void validateAffordableOrder(Store store, int day, int totalCost) {
+        int carriedBalance = day == 1
+                ? INITIAL_CAPITAL
+                : dailyReportRepository.findByStoreIdAndDay(store.getId(), day - 1)
+                .map(report -> report.getBalance() == null ? 0 : report.getBalance())
+                .orElseThrow(() -> new RuntimeException("Previous day report not found."));
 
-        if (value == null) {
-            return 0;
+        int balanceAfterDailyRent = carriedBalance - store.getLocation().getRent();
+        if (balanceAfterDailyRent < totalCost) {
+            throw new RuntimeException("Insufficient balance for this regular order.");
         }
-
-        return Integer.valueOf(value);
     }
 
-    private void updateStock(Long storeId, Integer quantity, boolean sameMenu) {
-        String key = generateStockKey(storeId);
-        int updatedStock = sameMenu ? getStock(storeId) + quantity : quantity;
-        stringRedisTemplate.opsForValue().set(key, String.valueOf(updatedStock));
+    private Integer resolveStock(Long storeId, int day) {
+        return gameDayStoreStateRedisRepository.find(storeId, day)
+                .map(state -> state.stock() == null ? 0 : state.stock())
+                .orElseGet(() -> resolveStartingStock(storeId, day));
     }
 
-    private void deductBalance(Long storeId, Integer amount) {
-        String key = generateBalanceKey(storeId);
-        String value = stringRedisTemplate.opsForValue().get(key);
+    private Integer resolveStartingStock(Long storeId, int day) {
+        int carriedStock = day == 1
+                ? 0
+                : dailyReportRepository.findByStoreIdAndDay(storeId, day - 1)
+                .map(report -> report.getStockRemaining() == null ? 0 : report.getStockRemaining())
+                .orElse(0);
 
-        if (value == null) {
-            throw new RuntimeException("Balance information was not found.");
-        }
+        int orderedStock = orderRepository.findDailyStartOrder(storeId, day)
+                .map(Order::getQuantity)
+                .orElse(0);
 
-        Integer currentBalance = Integer.valueOf(value);
-
-        if (currentBalance < amount) {
-            throw new RuntimeException("Balance is insufficient.");
-        }
-
-        Integer updatedBalance = currentBalance - amount;
-        stringRedisTemplate.opsForValue().set(key, String.valueOf(updatedBalance));
-    }
-
-    private String generateStockKey(Long storeId) {
-        return STOCK_KEY_PREFIX + storeId;
-    }
-
-    private String generateBalanceKey(Long storeId) {
-        return BALANCE_KEY_PREFIX + storeId;
+        return Math.addExact(carriedStock, orderedStock);
     }
 }

@@ -3,6 +3,8 @@ package com.ssafy.S14P21A205.game.environment.entity;
 import com.ssafy.S14P21A205.store.entity.Location;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -33,6 +35,7 @@ public class Traffic {
     @Column(nullable = false)
     private LocalDateTime date;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "traffic_status", nullable = false)
-    private Integer trafficStatus;
+    private TrafficStatus trafficStatus;
 }

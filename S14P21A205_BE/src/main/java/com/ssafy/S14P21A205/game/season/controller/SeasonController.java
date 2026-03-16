@@ -2,12 +2,14 @@ package com.ssafy.S14P21A205.game.season.controller;
 
 import com.ssafy.S14P21A205.game.season.dto.CurrentSeasonRankingsResponse;
 import com.ssafy.S14P21A205.game.season.dto.CurrentSeasonTopRankingsResponse;
+import com.ssafy.S14P21A205.game.season.dto.GameWaitingResponse;
 import com.ssafy.S14P21A205.game.season.dto.SeasonJoinRequest;
 import com.ssafy.S14P21A205.game.season.dto.SeasonJoinResponse;
 import com.ssafy.S14P21A205.game.season.dto.SeasonSummaryResponse;
 import com.ssafy.S14P21A205.game.season.service.SeasonJoinService;
 import com.ssafy.S14P21A205.game.season.service.SeasonRankingService;
 import com.ssafy.S14P21A205.game.season.service.SeasonSummaryService;
+import com.ssafy.S14P21A205.game.season.service.SeasonWaitingService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -28,6 +30,13 @@ public class SeasonController implements SeasonControllerDoc {
     private final SeasonJoinService seasonJoinService;
     private final SeasonRankingService seasonRankingService;
     private final SeasonSummaryService seasonSummaryService;
+    private final SeasonWaitingService seasonWaitingService;
+
+    @Override
+    @GetMapping("/waiting")
+    public ResponseEntity<GameWaitingResponse> getWaitingStatus() {
+        return ResponseEntity.ok(seasonWaitingService.getWaitingStatus());
+    }
 
     @Override
     @PostMapping("/seasons/current/join")
