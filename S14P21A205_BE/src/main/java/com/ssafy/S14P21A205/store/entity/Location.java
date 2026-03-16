@@ -26,4 +26,7 @@ public class Location {
 
     @Column(nullable = false)
     private Integer rent;
+
+    @Column(name = "interior_cost", nullable = false)
+    private Integer interiorCost;
 }

@@ -1,5 +1,7 @@
 package com.ssafy.S14P21A205.order.service;
 
+import com.ssafy.S14P21A205.game.day.repository.GameDayStoreStateRedisRepository;
+import com.ssafy.S14P21A205.game.season.repository.DailyReportRepository;
 import com.ssafy.S14P21A205.order.dto.CurrentOrderResponse;
 import com.ssafy.S14P21A205.order.dto.RegularOrderRequest;
 import com.ssafy.S14P21A205.order.dto.RegularOrderResponse;
@@ -16,7 +18,6 @@ import java.math.RoundingMode;
 import java.util.Objects;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,33 +26,28 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class OrderServiceImpl implements OrderService {
 
-    private static final String STOCK_KEY_PREFIX = "stock:";
-    private static final String BALANCE_KEY_PREFIX = "balance:";
-    private static final Set<Integer> REGULAR_ORDER_DAYS = Set.of(0, 2, 4, 6);
+    private static final int INITIAL_CAPITAL = 10_000_000;
+    private static final Set<Integer> REGULAR_ORDER_DAYS = Set.of(1, 2, 4, 6);
 
     private final StoreRepository storeRepository;
     private final MenuRepository menuRepository;
     private final OrderRepository orderRepository;
-    private final StringRedisTemplate stringRedisTemplate;
+    private final DailyReportRepository dailyReportRepository;
+    private final GameDayStoreStateRedisRepository gameDayStoreStateRedisRepository;
     private final EntityManager entityManager;
 
-    /**
-     * 현재 매장에서 판매 중인 메뉴의 가격 및 재고 조회
-     * 1. userId로 매장 조회
-     * 2. 매장에서 판매 중인 메뉴 조회
-     * 3. 원재료 할인 아이템 적용 여부 확인
-     * 4. 할인 적용 원가 계산
-     * 5. Redis에서 재고 조회
-     */
     @Override
     public CurrentOrderResponse getCurrentOrder(Integer userId) {
         Store store = getStoreByUserId(userId);
         Long storeId = store.getId();
+
+        // currentDay가 null 또는 0이면 정규 발주 기준상 1일차로 간주
+        int currentDay = resolveRegularOrderDay(store.getSeason().getCurrentDay());
         Menu menu = store.getMenu();
 
         BigDecimal ingredientDiscountRate = getIngredientDiscountRate(storeId);
         Integer discountedCostPrice = applyDiscount(menu.getOriginPrice(), ingredientDiscountRate);
-        Integer stock = getStock(storeId);
+        Integer stock = resolveStock(storeId, currentDay);
 
         return CurrentOrderResponse.builder()
                 .menuId(Math.toIntExact(menu.getId()))
@@ -62,34 +58,17 @@ public class OrderServiceImpl implements OrderService {
                 .build();
     }
 
-    /**
-     * 정규 발주 생성
-     * 처리 흐름
-     * 1. userId로 매장 조회
-     * 2. 현재 시즌 기준 발주 가능 일자 계산
-     * 3. 정규 발주 가능 일자 검증
-     * 4. 발주 수량 검증
-     * 5. 동일 발주일 중복 발주 여부 확인
-     * 6. 발주할 메뉴 조회
-     * 7. 현재 판매 메뉴와 동일한지 확인
-     * 8. 할인 적용 원가 계산
-     * 9. 총 발주 비용 계산
-     * 10. Redis 잔액 차감
-     * 11. Redis 재고 업데이트
-     * 12. 필요 시 매장 판매 메뉴 변경
-     * 13. orders 테이블에 발주 기록 저장
-     */
     @Override
     @Transactional
     public RegularOrderResponse createRegularOrder(Integer userId, RegularOrderRequest request) {
         Store store = getStoreByUserId(userId);
         Long storeId = store.getId();
         int regularOrderDay = resolveRegularOrderDay(store.getSeason().getCurrentDay());
-        int orderedDay = resolveOrderedDay(regularOrderDay);
 
         validateRegularOrderDay(regularOrderDay);
         validateQuantity(request.quantity());
-        validateNoExistingOrder(storeId, orderedDay);
+        validateDayNotStarted(storeId, regularOrderDay);
+        validateNoExistingOrder(storeId, regularOrderDay);
 
         Menu menu = getMenuById(request.menuId());
         boolean sameMenu = Objects.equals(store.getMenu().getId(), menu.getId());
@@ -99,19 +78,20 @@ public class OrderServiceImpl implements OrderService {
         Integer costPrice = resolveCostPrice(menu, discountRate);
         Integer totalCost = Math.multiplyExact(costPrice, request.quantity());
 
+        validateAffordableOrder(store, regularOrderDay, totalCost);
+
         if (!Objects.equals(store.getPrice(), sellingPrice)) {
             store.changePrice(sellingPrice);
         }
 
-        deductBalance(storeId, totalCost);
-        updateStock(storeId, request.quantity(), sameMenu);
+        Order savedOrder = orderRepository.save(
+                Order.create(menu, store, request.quantity(), totalCost, regularOrderDay)
+        );
+
         if (!sameMenu) {
+            entityManager.flush();
             updateStoreMenu(storeId, menu.getId());
         }
-
-        Order savedOrder = orderRepository.save(
-                Order.create(menu, store, request.quantity(), totalCost, orderedDay)
-        );
 
         return RegularOrderResponse.builder()
                 .orderId(savedOrder.getId())
@@ -125,12 +105,12 @@ public class OrderServiceImpl implements OrderService {
 
     private Store getStoreByUserId(Integer userId) {
         return storeRepository.findByUser_Id(userId)
-                .orElseThrow(() -> new RuntimeException("매장을 찾을 수 없습니다."));
+                .orElseThrow(() -> new RuntimeException("Store not found."));
     }
 
     private Menu getMenuById(Integer menuId) {
         return menuRepository.findById(Long.valueOf(menuId))
-                .orElseThrow(() -> new RuntimeException("메뉴를 찾을 수 없습니다."));
+                .orElseThrow(() -> new RuntimeException("Menu not found."));
     }
 
     private BigDecimal getIngredientDiscountRate(Long storeId) {
@@ -142,6 +122,12 @@ public class OrderServiceImpl implements OrderService {
         return applyDiscount(menu.getOriginPrice(), discountRate);
     }
 
+    /**
+     * 판매가 결정 우선순위
+     * 1. 요청값
+     * 2. 현재 매장 판매가
+     * 3. 메뉴 기본 가격
+     */
     private Integer resolveSellingPrice(Integer requestedPrice, Integer currentStorePrice, Integer defaultPrice) {
         if (requestedPrice != null) {
             return requestedPrice;
@@ -165,45 +151,63 @@ public class OrderServiceImpl implements OrderService {
 
     private void validateRegularOrderDay(int currentDay) {
         if (!REGULAR_ORDER_DAYS.contains(currentDay)) {
-            throw new RuntimeException("정규 발주는 0, 2, 4, 6일차에만 가능합니다.");
+            throw new RuntimeException("Regular orders are only available on days 1, 2, 4, and 6.");
         }
     }
 
     private int resolveRegularOrderDay(Integer currentDay) {
-        return currentDay == null ? 0 : currentDay;
+        return currentDay == null || currentDay == 0 ? 1 : currentDay;
     }
 
-    private int resolveOrderedDay(int regularOrderDay) {
-        return regularOrderDay == 0 ? 1 : regularOrderDay;
+    private void validateDayNotStarted(Long storeId, int day) {
+        if (gameDayStoreStateRedisRepository.exists(storeId, day)) {
+            throw new RuntimeException("Regular orders are unavailable after the day has started.");
+        }
     }
 
     private void validateNoExistingOrder(Long storeId, Integer orderedDay) {
         if (orderRepository.findDailyStartOrder(storeId, orderedDay).isPresent()) {
-            throw new RuntimeException("해당 발주일에는 이미 정규 발주가 완료되었습니다.");
+            throw new RuntimeException("A regular order already exists for this day.");
         }
     }
 
     private void validateQuantity(Integer quantity) {
         if (quantity == null || quantity < 50 || quantity > 500) {
-            throw new RuntimeException("발주 수량은 50~500 사이여야 합니다.");
+            throw new RuntimeException("Order quantity must be between 50 and 500.");
         }
     }
 
-    private Integer getStock(Long storeId) {
-        String key = generateStockKey(storeId);
-        String value = stringRedisTemplate.opsForValue().get(key);
+    private void validateAffordableOrder(Store store, int day, int totalCost) {
+        int carriedBalance = day == 1
+                ? INITIAL_CAPITAL
+                : dailyReportRepository.findByStoreIdAndDay(store.getId(), day - 1)
+                .map(report -> report.getBalance() == null ? 0 : report.getBalance())
+                .orElseThrow(() -> new RuntimeException("Previous day report not found."));
 
-        if (value == null) {
-            return 0;
+        int balanceAfterDailyRent = carriedBalance - store.getLocation().getRent();
+        if (balanceAfterDailyRent < totalCost) {
+            throw new RuntimeException("Insufficient balance for this regular order.");
         }
-
-        return Integer.valueOf(value);
     }
 
-    private void updateStock(Long storeId, Integer quantity, boolean sameMenu) {
-        String key = generateStockKey(storeId);
-        int updatedStock = sameMenu ? getStock(storeId) + quantity : quantity;
-        stringRedisTemplate.opsForValue().set(key, String.valueOf(updatedStock));
+    private Integer resolveStock(Long storeId, int day) {
+        return gameDayStoreStateRedisRepository.find(storeId, day)
+                .map(state -> state.stock() == null ? 0 : state.stock())
+                .orElseGet(() -> resolveStartingStock(storeId, day));
+    }
+
+    private Integer resolveStartingStock(Long storeId, int day) {
+        int carriedStock = day == 1
+                ? 0
+                : dailyReportRepository.findByStoreIdAndDay(storeId, day - 1)
+                .map(report -> report.getStockRemaining() == null ? 0 : report.getStockRemaining())
+                .orElse(0);
+
+        int orderedStock = orderRepository.findDailyStartOrder(storeId, day)
+                .map(Order::getQuantity)
+                .orElse(0);
+
+        return Math.addExact(carriedStock, orderedStock);
     }
 
     private void updateStoreMenu(Long storeId, Long menuId) {
@@ -211,31 +215,5 @@ public class OrderServiceImpl implements OrderService {
                 .setParameter("menuId", menuId)
                 .setParameter("storeId", storeId)
                 .executeUpdate();
-    }
-
-    private void deductBalance(Long storeId, Integer amount) {
-        String key = generateBalanceKey(storeId);
-        String value = stringRedisTemplate.opsForValue().get(key);
-
-        if (value == null) {
-            throw new RuntimeException("잔액 정보를 찾을 수 없습니다.");
-        }
-
-        Integer currentBalance = Integer.valueOf(value);
-
-        if (currentBalance < amount) {
-            throw new RuntimeException("잔액이 부족합니다.");
-        }
-
-        Integer updatedBalance = currentBalance - amount;
-        stringRedisTemplate.opsForValue().set(key, String.valueOf(updatedBalance));
-    }
-
-    private String generateStockKey(Long storeId) {
-        return STOCK_KEY_PREFIX + storeId;
-    }
-
-    private String generateBalanceKey(Long storeId) {
-        return BALANCE_KEY_PREFIX + storeId;
     }
 }
