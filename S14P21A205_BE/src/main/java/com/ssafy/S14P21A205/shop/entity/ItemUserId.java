@@ -11,5 +11,5 @@ import lombok.NoArgsConstructor;
 public class ItemUserId implements Serializable {
 
     private Long item;
-    private Long store;
+    private Integer user;
 }

@@ -94,6 +94,10 @@ public class GameDayStoreStateRedisRepository {
         saveTickLog(storeId, day, state);
     }
 
+    public void updateField(Long storeId, Integer day, String field, String value) {
+        stringRedisTemplate.opsForHash().put(buildStateKey(storeId, day), field, value);
+    }
+
     public boolean exists(Long storeId, Integer day) {
         Boolean exists = stringRedisTemplate.hasKey(buildStateKey(storeId, day));
         return Boolean.TRUE.equals(exists);

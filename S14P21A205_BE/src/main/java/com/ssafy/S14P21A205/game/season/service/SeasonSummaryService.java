@@ -33,15 +33,13 @@ public class SeasonSummaryService {
         Season season = resolveFinishedSeason(seasonId);
         Integer resolvedUserId = targetUserId == null ? requesterUserId : targetUserId;
 
-        // 시즌 + 유저 기준으로 랭킹 기록 조회
         SeasonRankingRecord record = seasonRankingRecordRepository
-                .findByStore_Season_IdAndStore_User_Id(season.getId(), resolvedUserId)
+                .findFirstByStore_Season_IdAndStore_User_IdOrderByIdDesc(season.getId(), resolvedUserId)
                 .orElseThrow(() -> new BaseException(ErrorCode.RESOURCE_NOT_FOUND));
 
         return toResponse(record);
     }
 
-    // 시즌 조회 (seasonId 없으면 가장 최근 FINISHED 조회)
     private Season resolveFinishedSeason(Long seasonId) {
         if (seasonId == null) {
             return seasonRepository.findFirstByStatusOrderByIdDesc(SeasonStatus.FINISHED)

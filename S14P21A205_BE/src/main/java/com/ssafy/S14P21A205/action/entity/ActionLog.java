@@ -9,6 +9,7 @@ import jakarta.persistence.IdClass;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import java.math.BigDecimal;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -37,10 +38,15 @@ public class ActionLog {
     @Column(name = "is_used", nullable = false)
     private Boolean isUsed;
 
-    public ActionLog(Action action, Store store, Integer gameDay) {
+    // 액션별 동적 값 (할인: 가격구간 배수 0.8/1.0/1.2, 나눔: 유입률 보너스 0.01~0.10)
+    @Column(name = "action_value", precision = 5, scale = 2)
+    private BigDecimal actionValue;
+
+    public ActionLog(Action action, Store store, Integer gameDay, BigDecimal actionValue) {
         this.action = action;
         this.store = store;
         this.gameDay = gameDay;
         this.isUsed = true;
+        this.actionValue = actionValue;
     }
 }

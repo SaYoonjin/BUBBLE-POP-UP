@@ -2,28 +2,31 @@ package com.ssafy.S14P21A205.config;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.ssafy.S14P21A205.action.service.ActionService;
 import com.ssafy.S14P21A205.auth.service.AuthService;
 import com.ssafy.S14P21A205.auth.service.JwtTokenService;
-import com.ssafy.S14P21A205.action.service.ActionService;
-import com.ssafy.S14P21A205.game.day.repository.GameDayStoreStateRedisRepository;
 import com.ssafy.S14P21A205.game.day.dto.GameDayStartResponse;
+import com.ssafy.S14P21A205.game.day.repository.GameDayStoreStateRedisRepository;
 import com.ssafy.S14P21A205.game.day.service.GameDayReportService;
 import com.ssafy.S14P21A205.game.day.service.GameDayStartService;
 import com.ssafy.S14P21A205.game.day.service.GameDayStateService;
 import com.ssafy.S14P21A205.game.season.dto.GameWaitingResponse;
 import com.ssafy.S14P21A205.game.season.dto.GameWaitingStatus;
-import com.ssafy.S14P21A205.order.service.OrderService;
+import com.ssafy.S14P21A205.game.season.dto.SeasonJoinResponse;
 import com.ssafy.S14P21A205.game.season.repository.DailyReportRepository;
 import com.ssafy.S14P21A205.game.season.repository.SeasonRankingRedisRepository;
 import com.ssafy.S14P21A205.game.season.repository.SeasonRepository;
+import com.ssafy.S14P21A205.game.season.service.SeasonJoinService;
 import com.ssafy.S14P21A205.game.season.service.SeasonRankingService;
 import com.ssafy.S14P21A205.game.season.service.SeasonSummaryService;
 import com.ssafy.S14P21A205.game.season.service.SeasonWaitingService;
+import com.ssafy.S14P21A205.order.service.OrderService;
+import com.ssafy.S14P21A205.shop.repository.ItemUserRepository;
 import com.ssafy.S14P21A205.shop.service.ShopService;
 import com.ssafy.S14P21A205.store.repository.StoreRepository;
 import com.ssafy.S14P21A205.store.service.StoreService;
@@ -35,6 +38,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -58,6 +63,9 @@ class SecurityConfigTests {
     private UserService userService;
 
     @MockitoBean
+    private ActionService actionService;
+
+    @MockitoBean
     private GameDayStartService gameDayStartService;
 
     @MockitoBean
@@ -65,9 +73,6 @@ class SecurityConfigTests {
 
     @MockitoBean
     private GameDayReportService gameDayReportService;
-
-    @MockitoBean
-    private ActionService actionService;
 
     @MockitoBean
     private ShopService shopService;
@@ -100,7 +105,16 @@ class SecurityConfigTests {
     private SeasonSummaryService seasonSummaryService;
 
     @MockitoBean
+    private SeasonJoinService seasonJoinService;
+
+    @MockitoBean
     private SeasonWaitingService seasonWaitingService;
+
+    @MockitoBean
+    private ItemUserRepository itemUserRepository;
+
+    @MockitoBean
+    private StringRedisTemplate stringRedisTemplate;
 
     @Test
     void startDayAllowsAuthenticatedRequest() throws Exception {
@@ -136,5 +150,25 @@ class SecurityConfigTests {
 
         mockMvc.perform(get("/game/waiting"))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    void joinCurrentSeasonAllowsAuthenticatedRequest() throws Exception {
+        when(seasonJoinService.joinCurrentSeason(any(), any()))
+                .thenReturn(new SeasonJoinResponse(156L, "cookie store", 7_000_000));
+
+        mockMvc.perform(post("/game/seasons/current/join")
+                        .with(jwt().jwt(jwt -> jwt.subject("1")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"locationId\":3,\"storeName\":\"cookie store\"}"))
+                .andExpect(status().isCreated());
+    }
+
+    @Test
+    void joinCurrentSeasonRejectsUnauthenticatedRequest() throws Exception {
+        mockMvc.perform(post("/game/seasons/current/join")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"locationId\":3,\"storeName\":\"cookie store\"}"))
+                .andExpect(status().isUnauthorized());
     }
 }
