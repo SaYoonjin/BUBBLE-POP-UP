@@ -5,7 +5,7 @@ import MenuSelector from "../components/game/MenuSelector";
 import PriceSlider from "../components/game/PriceSlider";
 import QuantityCounter from "../components/game/QuantityCounter";
 import RankingPanel from "../components/game/RankingPanel";
-import NewsAccordion from "../components/game/NewsAccordion";
+import CozyNewspaper from "../components/game/CozyNewspaper";
 
 const mockMenus = [
   { id: 1, emoji: "🍜", name: "마라탕" },
@@ -136,10 +136,11 @@ export default function PrepPage() {
                 <RankingPanel title="지역 매출 순위" icon="storefront" items={mockRevenueRanking} />
               </div>
               <div className="lg:col-span-8">
-                <NewsAccordion
+                <CozyNewspaper
                   items={mockNews}
                   expandedId={expandedNewsId}
                   onToggle={(id) => setExpandedNewsId(expandedNewsId === id ? null : id)}
+                  day={day}
                 />
               </div>
             </div>
