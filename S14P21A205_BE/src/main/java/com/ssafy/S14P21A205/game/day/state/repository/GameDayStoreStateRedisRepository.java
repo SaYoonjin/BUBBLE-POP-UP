@@ -213,9 +213,9 @@ public class GameDayStoreStateRedisRepository {
         put(entries, prefix + "population_per_store", state.populationPerStore());
         put(entries, prefix + "inflow_rate", state.inflowRate());
         put(entries, prefix + "sale_price", state.salePrice());
-        put(entries, prefix + "customer_count", state.tickCustomerCount());
-        put(entries, prefix + "purchase_count", state.tickPurchaseCount());
-        put(entries, prefix + "sales", state.tickSales());
+        put(entries, prefix + "tick_customer_count", state.tickCustomerCount());
+        put(entries, prefix + "tick_purchase_count", state.tickPurchaseCount());
+        put(entries, prefix + "tick_sales", state.tickSales());
         put(entries, prefix + "cumulative_customer_count", state.cumulativeCustomerCount());
         put(entries, prefix + "cumulative_purchase_count", state.cumulativePurchaseCount());
         put(entries, prefix + "cumulative_sales", state.cumulativeSales());

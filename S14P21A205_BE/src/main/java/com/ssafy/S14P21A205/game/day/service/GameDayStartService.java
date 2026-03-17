@@ -5,6 +5,7 @@ import com.ssafy.S14P21A205.exception.ErrorCode;
 import com.ssafy.S14P21A205.game.day.model.DaySchedule;
 import com.ssafy.S14P21A205.game.day.model.OpeningState;
 import com.ssafy.S14P21A205.game.day.dto.GameDayStartResponse;
+import com.ssafy.S14P21A205.game.day.generator.PurchaseListGenerator;
 import com.ssafy.S14P21A205.game.day.policy.CaptureRatePolicy;
 import com.ssafy.S14P21A205.game.day.resolver.EventScheduleResolver;
 import com.ssafy.S14P21A205.game.day.policy.PopulationPolicy;
@@ -29,10 +30,7 @@ import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ThreadLocalRandom;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
@@ -45,7 +43,6 @@ public class GameDayStartService {
 
     private static final int BUSINESS_OPEN_HOUR = GameTimePolicy.BUSINESS_OPEN_HOUR;
     private static final int BUSINESS_CLOSE_HOUR = GameTimePolicy.BUSINESS_CLOSE_HOUR;
-    private static final int[] PURCHASE_QUANTITY_WEIGHTS = {10, 40, 35, 15};
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
 
     private final UserService userService;
@@ -57,8 +54,8 @@ public class GameDayStartService {
     private final CaptureRatePolicy captureRatePolicy;
     private final EventScheduleResolver eventScheduleResolver;
     private final GameDayStoreStateRedisRepository gameDayStoreStateRedisRepository;
-
-    private Clock clock = Clock.systemDefaultZone();
+    private final PurchaseListGenerator purchaseListGenerator;
+    private final Clock clock;
 
     @Transactional
     public GameDayStartResponse startDay(Authentication authentication) {
@@ -126,7 +123,7 @@ public class GameDayStartService {
             OpeningState openingState,
             GameDayStartResponse response
     ) {
-        List<Integer> purchaseList = buildPurchaseList(response.hourlySchedule());
+        List<Integer> purchaseList = purchaseListGenerator.generate(response.hourlySchedule());
         LocalDateTime startedAt = LocalDateTime.now(clock);
         gameDayStoreStateRedisRepository.save(
                 store.getId(),
@@ -152,30 +149,6 @@ public class GameDayStartService {
                         startedAt
                 )
         );
-    }
-
-    private List<Integer> buildPurchaseList(Map<String, GameDayStartResponse.HourlySchedule> hourlySchedule) {
-        int expectedCustomerCount = 0;
-        for (GameDayStartResponse.HourlySchedule schedule : hourlySchedule.values()) {
-            expectedCustomerCount += schedule.population();
-        }
-
-        List<Integer> purchaseList = new ArrayList<>(expectedCustomerCount);
-        for (int i = 0; i < expectedCustomerCount; i++) {
-            purchaseList.add(drawPurchaseQuantity(ThreadLocalRandom.current().nextInt(100)));
-        }
-        return purchaseList;
-    }
-
-    private int drawPurchaseQuantity(int roll) {
-        int cumulative = 0;
-        for (int quantity = 0; quantity < PURCHASE_QUANTITY_WEIGHTS.length; quantity++) {
-            cumulative += PURCHASE_QUANTITY_WEIGHTS[quantity];
-            if (roll < cumulative) {
-                return quantity;
-            }
-        }
-        return PURCHASE_QUANTITY_WEIGHTS.length - 1;
     }
 
     private String toWeatherLabel(WeatherType weatherType) {

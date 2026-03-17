@@ -11,6 +11,7 @@ import static org.mockito.Mockito.when;
 import com.ssafy.S14P21A205.exception.BaseException;
 import com.ssafy.S14P21A205.exception.ErrorCode;
 import com.ssafy.S14P21A205.game.day.dto.GameDayStartResponse;
+import com.ssafy.S14P21A205.game.day.generator.PurchaseListGenerator;
 import com.ssafy.S14P21A205.game.day.policy.CaptureRatePolicy;
 import com.ssafy.S14P21A205.game.day.resolver.EventScheduleResolver;
 import com.ssafy.S14P21A205.game.day.policy.PopulationPolicy;
@@ -39,6 +40,7 @@ import com.ssafy.S14P21A205.shop.entity.Menu;
 import com.ssafy.S14P21A205.store.entity.Location;
 import com.ssafy.S14P21A205.store.entity.Store;
 import com.ssafy.S14P21A205.store.repository.StoreRepository;
+import com.ssafy.S14P21A205.support.GameDayTestFixtures;
 import com.ssafy.S14P21A205.user.entity.User;
 import com.ssafy.S14P21A205.user.service.UserService;
 import java.lang.reflect.Constructor;
@@ -47,6 +49,8 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -92,20 +96,32 @@ class GameDayStartServiceTests {
     private GameDayStoreStateRedisRepository gameDayStoreStateRedisRepository;
 
     @Mock
+    private PurchaseListGenerator purchaseListGenerator;
+
+    @Mock
     private StringRedisTemplate stringRedisTemplate;
 
     @Mock
     private ValueOperations<String, String> valueOperations;
 
     private GameDayStartService gameDayStartService;
+    private Clock fixedClock;
 
     @BeforeEach
     void setUp() {
+        fixedClock = Clock.fixed(Instant.parse("2026-03-09T05:32:10Z"), ZoneId.of("Asia/Seoul"));
+        gameDayStartService = createService(fixedClock);
+        RentPolicy rentPolicy = new RentPolicy(dailyReportRepository, stringRedisTemplate);
+        org.mockito.Mockito.lenient().when(stringRedisTemplate.opsForValue()).thenReturn(valueOperations);
+        org.mockito.Mockito.lenient().when(valueOperations.get(org.mockito.ArgumentMatchers.anyString())).thenReturn(null);
+    }
+
+    private GameDayStartService createService(Clock clock) {
         RentPolicy rentPolicy = new RentPolicy(dailyReportRepository, stringRedisTemplate);
         PopulationPolicy populationPolicy = new PopulationPolicy(populationRepository, trafficRepository);
-        CaptureRatePolicy captureRatePolicy = new CaptureRatePolicy(dailyReportRepository);
+        CaptureRatePolicy captureRatePolicy = new CaptureRatePolicy(dailyReportRepository, stringRedisTemplate);
         EventScheduleResolver eventScheduleResolver = new EventScheduleResolver(dailyEventRepository);
-        gameDayStartService = new GameDayStartService(
+        return new GameDayStartService(
                 userService,
                 storeRepository,
                 weatherRepository,
@@ -114,13 +130,9 @@ class GameDayStartServiceTests {
                 populationPolicy,
                 captureRatePolicy,
                 eventScheduleResolver,
-                gameDayStoreStateRedisRepository
-        );
-        org.mockito.Mockito.lenient().when(stringRedisTemplate.opsForValue()).thenReturn(valueOperations);
-        ReflectionTestUtils.setField(
-                gameDayStartService,
-                "clock",
-                Clock.fixed(Instant.parse("2026-03-09T05:32:10Z"), ZoneId.of("Asia/Seoul"))
+                gameDayStoreStateRedisRepository,
+                purchaseListGenerator,
+                clock
         );
     }
 
@@ -148,13 +160,16 @@ class GameDayStartServiceTests {
         ));
         when(weatherRepository.findAllByOrderByIdAsc()).thenReturn(List.of(sunny));
         when(dailyEventRepository.findBySeasonIdAndDayOrderByIdAsc(9L, 1)).thenReturn(List.of(dailyEvent));
+        List<Integer> fixedPurchaseList = new ArrayList<>(Collections.nCopies(1_150, 1));
+        when(purchaseListGenerator.generate(any()))
+                .thenReturn(fixedPurchaseList);
 
         GameDayStartResponse response = gameDayStartService.startDay(mock(Authentication.class));
 
         assertThat(response.startTime()).isEqualTo("10:00");
         assertThat(response.endTime()).isEqualTo("22:00");
         assertThat(response.weatherMultiplier()).isEqualByComparingTo("1.10");
-        assertThat(response.captureRate()).isEqualByComparingTo("0.00");
+        assertThat(response.captureRate()).isEqualByComparingTo("0.10");
         assertThat(response.hourlySchedule().get("10").population()).isEqualTo(500);
         assertThat(response.hourlySchedule().get("11").trafficMultiplier()).isEqualByComparingTo("0.75");
         assertThat(response.initialStock()).isEqualTo(0);
@@ -164,9 +179,36 @@ class GameDayStartServiceTests {
         ArgumentCaptor<GameDayLiveState> stateCaptor = ArgumentCaptor.forClass(GameDayLiveState.class);
         verify(gameDayStoreStateRedisRepository).save(org.mockito.ArgumentMatchers.eq(15L), org.mockito.ArgumentMatchers.eq(1), stateCaptor.capture());
         assertThat(stateCaptor.getValue().purchaseCursor()).isZero();
-        assertThat(stateCaptor.getValue().purchaseList()).hasSize(1_150);
+        assertThat(stateCaptor.getValue().purchaseList()).isEqualTo(fixedPurchaseList);
         assertThat(stateCaptor.getValue().startedAt()).isEqualTo(LocalDateTime.of(2026, 3, 9, 14, 32, 10));
         assertThat(stateCaptor.getValue().startResponse()).isEqualTo(response);
+    }
+
+    @Test
+    void startDayUsesPersistedSeasonInitialCaptureRateOnFirstDay() {
+        User user = user(1);
+        Store store = store(user, 15L, 3L, 1L, 9L, 1, 7, 4_500, 100_000, 2_000);
+        Weather sunny = weather(WeatherType.SUNNY, "1.10");
+
+        when(userService.getCurrentUser(any())).thenReturn(user);
+        when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
+                .thenReturn(Optional.of(store));
+        when(gameDayStoreStateRedisRepository.find(15L, 1)).thenReturn(Optional.empty());
+        when(orderRepository.findDailyStartOrder(15L, 1)).thenReturn(Optional.empty());
+        when(valueOperations.get("captureRate:15")).thenReturn("0.25");
+        when(populationRepository.findByLocationIdOrderByDateAsc(3L)).thenReturn(List.of(
+                population(store.getLocation(), LocalDateTime.of(2026, 3, 1, 10, 0), 500)
+        ));
+        when(trafficRepository.findByLocationIdOrderByDateAsc(3L)).thenReturn(List.of(
+                traffic(store.getLocation(), LocalDateTime.of(2026, 3, 1, 10, 0), TrafficStatus.NORMAL)
+        ));
+        when(weatherRepository.findAllByOrderByIdAsc()).thenReturn(List.of(sunny));
+        when(dailyEventRepository.findBySeasonIdAndDayOrderByIdAsc(9L, 1)).thenReturn(List.of());
+        when(purchaseListGenerator.generate(any())).thenReturn(List.of(1, 1, 1));
+
+        GameDayStartResponse response = gameDayStartService.startDay(mock(Authentication.class));
+
+        assertThat(response.captureRate()).isEqualByComparingTo("0.25");
     }
 
     @Test
@@ -264,11 +306,67 @@ class GameDayStartServiceTests {
         ));
         when(weatherRepository.findAllByOrderByIdAsc()).thenReturn(List.of(sunny));
         when(dailyEventRepository.findBySeasonIdAndDayOrderByIdAsc(9L, 1)).thenReturn(List.of());
+        when(purchaseListGenerator.generate(any()))
+                .thenReturn(List.of(1, 1, 1, 1, 1));
 
         GameDayStartResponse response = gameDayStartService.startDay(mock(Authentication.class));
 
         assertThat(response.initialBalance()).isEqualTo(8_800_000);
         assertThat(response.initialStock()).isEqualTo(120);
+    }
+
+    @Test
+    void startDayBuildsSharedDayFourFixtureOpeningState() {
+        gameDayStartService = createService(GameDayTestFixtures.fixedClockAtStart());
+
+        User user = GameDayTestFixtures.user(GameDayTestFixtures.USER_ID);
+        Location location = GameDayTestFixtures.location();
+        Menu menu = GameDayTestFixtures.menu();
+        Season season = GameDayTestFixtures.season();
+        Store store = GameDayTestFixtures.store(user, season, location, menu);
+        DailyReport previousDayReport = GameDayTestFixtures.previousDayReport(store);
+        var dailyStartOrder = GameDayTestFixtures.dailyStartOrder(store);
+        List<Integer> fixedPurchaseList = GameDayTestFixtures.fixedPurchaseList();
+        Weather weather = weather(WeatherType.SUNNY, "1.00");
+
+        when(userService.getCurrentUser(any())).thenReturn(user);
+        when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(
+                GameDayTestFixtures.USER_ID,
+                SeasonStatus.IN_PROGRESS
+        )).thenReturn(Optional.of(store));
+        when(gameDayStoreStateRedisRepository.find(GameDayTestFixtures.STORE_ID, GameDayTestFixtures.CURRENT_DAY))
+                .thenReturn(Optional.empty());
+        when(orderRepository.findDailyStartOrder(GameDayTestFixtures.STORE_ID, GameDayTestFixtures.CURRENT_DAY))
+                .thenReturn(Optional.of(dailyStartOrder));
+        when(dailyReportRepository.findByStoreIdAndDay(
+                GameDayTestFixtures.STORE_ID,
+                GameDayTestFixtures.CURRENT_DAY - 1
+        )).thenReturn(Optional.of(previousDayReport));
+        when(populationRepository.findByLocationIdOrderByDateAsc(GameDayTestFixtures.LOCATION_ID))
+                .thenReturn(GameDayTestFixtures.populations(location));
+        when(trafficRepository.findByLocationIdOrderByDateAsc(GameDayTestFixtures.LOCATION_ID))
+                .thenReturn(GameDayTestFixtures.traffics(location));
+        when(weatherRepository.findAllByOrderByIdAsc()).thenReturn(List.of(weather));
+        when(dailyEventRepository.findBySeasonIdAndDayOrderByIdAsc(
+                GameDayTestFixtures.SEASON_ID,
+                GameDayTestFixtures.CURRENT_DAY
+        )).thenReturn(List.of());
+        when(purchaseListGenerator.generate(any())).thenReturn(fixedPurchaseList);
+
+        GameDayStartResponse response = gameDayStartService.startDay(mock(Authentication.class));
+
+        assertThat(response.initialBalance()).isEqualTo(GameDayTestFixtures.INITIAL_BALANCE);
+        assertThat(response.initialStock()).isEqualTo(GameDayTestFixtures.INITIAL_STOCK);
+        assertThat(response.captureRate()).isEqualByComparingTo(GameDayTestFixtures.CAPTURE_RATE);
+
+        ArgumentCaptor<GameDayLiveState> stateCaptor = ArgumentCaptor.forClass(GameDayLiveState.class);
+        verify(gameDayStoreStateRedisRepository).save(
+                org.mockito.ArgumentMatchers.eq(GameDayTestFixtures.STORE_ID),
+                org.mockito.ArgumentMatchers.eq(GameDayTestFixtures.CURRENT_DAY),
+                stateCaptor.capture()
+        );
+        assertThat(stateCaptor.getValue().startedAt()).isEqualTo(GameDayTestFixtures.DAY4_STARTED_AT);
+        assertThat(stateCaptor.getValue().purchaseList()).isEqualTo(fixedPurchaseList);
     }
 
     private User user(int id) {

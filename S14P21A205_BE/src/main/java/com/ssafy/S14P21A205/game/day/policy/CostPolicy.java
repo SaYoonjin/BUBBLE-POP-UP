@@ -13,12 +13,10 @@ public class CostPolicy {
             long actionTotalCost,
             long emergencyOrderTotalCost,
             long capitalChange,
-            long actualSoldUnits,
-            Integer salePrice,
+            long cumulativeSales,
             int initialBalance
     ) {
         // TODO: Apply event-driven cost multipliers here if RandomEvent.costRate becomes part of live cost rules.
-        long cumulativeSales = Math.multiplyExact(actualSoldUnits, salePrice.longValue());
         long cumulativeTotalCost = valueOf(store.getLocation() == null ? null : store.getLocation().getRent())
                 + valueOf(dailyStartOrder == null ? null : dailyStartOrder.getTotalCost())
                 + actionTotalCost

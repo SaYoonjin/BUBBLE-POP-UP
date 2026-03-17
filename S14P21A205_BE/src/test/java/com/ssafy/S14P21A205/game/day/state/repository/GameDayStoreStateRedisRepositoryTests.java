@@ -2,6 +2,7 @@ package com.ssafy.S14P21A205.game.day.state.repository;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -108,6 +109,23 @@ class GameDayStoreStateRedisRepositoryTests {
                     BaseException baseException = (BaseException) exception;
                     assertThat(baseException.getErrorCode()).isEqualTo(ErrorCode.INTERNAL_SERVER_ERROR);
                 });
+    }
+
+    @Test
+    void saveStateAndTickLogUsesTickPrefixedFieldNames() {
+        GameDayLiveState state = state();
+
+        repository.saveStateAndTickLog(15L, 3, state);
+
+        ArgumentCaptor<Map<String, String>> tickLogCaptor = ArgumentCaptor.forClass(Map.class);
+        verify(hashOperations).putAll(eq("game:store:15:day:3:tick_log"), tickLogCaptor.capture());
+
+        Map<String, String> tickLogEntries = tickLogCaptor.getValue();
+        assertThat(tickLogEntries)
+                .containsEntry("tick:4:tick_customer_count", "12")
+                .containsEntry("tick:4:tick_purchase_count", "8")
+                .containsEntry("tick:4:tick_sales", "40000")
+                .containsEntry("tick:4:cumulative_customer_count", "30");
     }
 
     private GameDayLiveState state() {

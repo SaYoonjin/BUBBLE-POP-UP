@@ -1,0 +1,114 @@
+package com.ssafy.S14P21A205.game.day.resolver;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.when;
+
+import com.ssafy.S14P21A205.game.event.entity.DailyEvent;
+import com.ssafy.S14P21A205.game.event.entity.EventCategory;
+import com.ssafy.S14P21A205.game.event.entity.EventEndTime;
+import com.ssafy.S14P21A205.game.event.entity.EventStartTime;
+import com.ssafy.S14P21A205.game.event.entity.RandomEvent;
+import com.ssafy.S14P21A205.game.event.repository.DailyEventRepository;
+import com.ssafy.S14P21A205.game.season.entity.Season;
+import java.lang.reflect.Constructor;
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.List;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
+
+@ExtendWith(MockitoExtension.class)
+class EventEffectResolverTests {
+
+    @Mock
+    private DailyEventRepository dailyEventRepository;
+
+    @Test
+    void resolveAppliesScopedEventWhenLocationAndMenuMatch() {
+        EventEffectResolver resolver = new EventEffectResolver(dailyEventRepository);
+        Season season = instantiate(Season.class);
+        DailyEvent dailyEvent = dailyEvent(season, 3L, 7L);
+        when(dailyEventRepository.findBySeasonIdAndDayBetweenOrderByDayAscIdAsc(1L, 1, 1))
+                .thenReturn(List.of(dailyEvent));
+
+        EventEffectResolver.EventEffect effect = resolver.resolve(
+                1L,
+                1,
+                7,
+                LocalDateTime.of(2026, 3, 17, 9, 0),
+                LocalDateTime.of(2026, 3, 17, 9, 1, 30),
+                3L,
+                7L
+        );
+
+        assertThat(effect.capitalChange()).isEqualTo(200L);
+        assertThat(effect.stockChange()).isEqualTo(2);
+        assertThat(effect.populationEventMultiplier()).isEqualByComparingTo("1.50");
+        assertThat(effect.ingredientCostMultiplier()).isEqualByComparingTo("1.05");
+        assertThat(effect.appliedEvents()).hasSize(1);
+        assertThat(effect.appliedEvents().get(0).newsTitle()).isEqualTo("Celebrity arrived");
+    }
+
+    @Test
+    void resolveIgnoresScopedEventWhenLocationDoesNotMatch() {
+        EventEffectResolver resolver = new EventEffectResolver(dailyEventRepository);
+        Season season = instantiate(Season.class);
+        DailyEvent dailyEvent = dailyEvent(season, 3L, null);
+        when(dailyEventRepository.findBySeasonIdAndDayBetweenOrderByDayAscIdAsc(1L, 1, 1))
+                .thenReturn(List.of(dailyEvent));
+
+        EventEffectResolver.EventEffect effect = resolver.resolve(
+                1L,
+                1,
+                7,
+                LocalDateTime.of(2026, 3, 17, 9, 0),
+                LocalDateTime.of(2026, 3, 17, 9, 1, 30),
+                9L,
+                7L
+        );
+
+        assertThat(effect.capitalChange()).isZero();
+        assertThat(effect.stockChange()).isZero();
+        assertThat(effect.populationEventMultiplier()).isEqualByComparingTo("1.00");
+        assertThat(effect.ingredientCostMultiplier()).isEqualByComparingTo("1.00");
+        assertThat(effect.appliedEvents()).isEmpty();
+    }
+
+    private DailyEvent dailyEvent(Season season, Long targetLocationId, Long targetMenuId) {
+        RandomEvent randomEvent = instantiate(RandomEvent.class);
+        ReflectionTestUtils.setField(randomEvent, "id", 2L);
+        ReflectionTestUtils.setField(randomEvent, "eventCategory", EventCategory.GOOD);
+        ReflectionTestUtils.setField(randomEvent, "eventType", "CELEBRITY");
+        ReflectionTestUtils.setField(randomEvent, "startTime", EventStartTime.IMMEDIATE);
+        ReflectionTestUtils.setField(randomEvent, "endTime", EventEndTime.SAME_DAY);
+        ReflectionTestUtils.setField(randomEvent, "populationRate", new BigDecimal("1.50"));
+        ReflectionTestUtils.setField(randomEvent, "stockFlat", new BigDecimal("2.00"));
+        ReflectionTestUtils.setField(randomEvent, "costRate", new BigDecimal("1.05"));
+        ReflectionTestUtils.setField(randomEvent, "capitalFlat", 200);
+
+        DailyEvent dailyEvent = instantiate(DailyEvent.class);
+        ReflectionTestUtils.setField(dailyEvent, "id", 10L);
+        ReflectionTestUtils.setField(dailyEvent, "season", season);
+        ReflectionTestUtils.setField(dailyEvent, "event", randomEvent);
+        ReflectionTestUtils.setField(dailyEvent, "day", 1);
+        ReflectionTestUtils.setField(dailyEvent, "applyOffsetSeconds", 0);
+        ReflectionTestUtils.setField(dailyEvent, "expireOffsetSeconds", 120);
+        ReflectionTestUtils.setField(dailyEvent, "newsTitle", "Celebrity arrived");
+        ReflectionTestUtils.setField(dailyEvent, "targetLocationId", targetLocationId);
+        ReflectionTestUtils.setField(dailyEvent, "targetMenuId", targetMenuId);
+        return dailyEvent;
+    }
+
+    private <T> T instantiate(Class<T> type) {
+        try {
+            Constructor<T> constructor = type.getDeclaredConstructor();
+            constructor.setAccessible(true);
+            return constructor.newInstance();
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
+    }
+}
