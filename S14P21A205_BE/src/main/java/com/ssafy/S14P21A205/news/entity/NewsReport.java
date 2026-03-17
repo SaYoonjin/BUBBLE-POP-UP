@@ -34,19 +34,39 @@ public class NewsReport {
     @Column(nullable = false)
     private Integer day;
 
-    @Column(name = "today_trend", nullable = false, length = 50)
-    private String todayTrend;
-
     @Column(name = "area_revenue_ranking", nullable = false, columnDefinition = "json")
     private String areaRevenueRanking;
 
     @Column(name = "area_traffic_ranking", nullable = false, columnDefinition = "json")
     private String areaTrafficRanking;
 
-    @Column(name = "menu_price_change", nullable = false, columnDefinition = "json")
-    private String menuPriceChange;
+    @Column(name = "menu_entry_ranking", nullable = false, columnDefinition = "json")
+    private String menuEntryRanking;
+
+    @Column(name = "trend_keyword_ranking", nullable = false, columnDefinition = "json")
+    private String trendKeywordRanking;
+
+    @Column(name = "area_entry_ranking", nullable = false, columnDefinition = "json")
+    private String areaEntryRanking;
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
+
+    private NewsReport(Season season, Integer day, String areaRevenueRanking, String areaTrafficRanking,
+            String menuEntryRanking, String trendKeywordRanking, String areaEntryRanking) {
+        this.season = season;
+        this.day = day;
+        this.areaRevenueRanking = areaRevenueRanking;
+        this.areaTrafficRanking = areaTrafficRanking;
+        this.menuEntryRanking = menuEntryRanking;
+        this.trendKeywordRanking = trendKeywordRanking;
+        this.areaEntryRanking = areaEntryRanking;
+    }
+
+    public static NewsReport create(Season season, int day, String areaRevenueRanking, String areaTrafficRanking,
+            String menuEntryRanking, String trendKeywordRanking, String areaEntryRanking) {
+        return new NewsReport(season, day, areaRevenueRanking, areaTrafficRanking,
+                menuEntryRanking, trendKeywordRanking, areaEntryRanking);
+    }
 }
