@@ -20,6 +20,7 @@ import com.ssafy.S14P21A205.game.environment.entity.Traffic;
 import com.ssafy.S14P21A205.game.environment.entity.TrafficStatus;
 import com.ssafy.S14P21A205.game.environment.repository.TrafficRepository;
 import com.ssafy.S14P21A205.exception.ErrorCode;
+import com.ssafy.S14P21A205.game.day.resolver.EventEffectResolver;
 import com.ssafy.S14P21A205.game.day.state.GameDayLiveState;
 import com.ssafy.S14P21A205.game.day.state.repository.GameDayStoreStateRedisRepository;
 import com.ssafy.S14P21A205.game.season.entity.Season;
@@ -27,10 +28,13 @@ import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
 import com.ssafy.S14P21A205.game.season.repository.SeasonRepository;
 import com.ssafy.S14P21A205.order.entity.Order;
 import com.ssafy.S14P21A205.order.repository.OrderRepository;
+import com.ssafy.S14P21A205.shop.entity.ItemCategory;
+import com.ssafy.S14P21A205.shop.repository.ItemUserRepository;
 import com.ssafy.S14P21A205.store.entity.Store;
 import com.ssafy.S14P21A205.store.repository.StoreRepository;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -51,13 +55,34 @@ public class ActionServiceImpl implements ActionService {
     // 가격 구간 판정 기준 (평균가 대비 ±10%)
     private static final BigDecimal PRICE_RANGE_UPPER = new BigDecimal("1.10");
     private static final BigDecimal PRICE_RANGE_LOWER = new BigDecimal("0.90");
-    private static final BigDecimal MULTIPLIER_ABOVE = new BigDecimal("0.80");
     private static final BigDecimal MULTIPLIER_AVERAGE = new BigDecimal("1.00");
-    private static final BigDecimal MULTIPLIER_BELOW = new BigDecimal("1.20");
+    private static final BigDecimal MULTIPLIER_ABOVE_200 = new BigDecimal("0.01");
+    private static final BigDecimal MULTIPLIER_ABOVE_190 = new BigDecimal("0.10");
+    private static final BigDecimal MULTIPLIER_ABOVE_180 = new BigDecimal("0.20");
+    private static final BigDecimal MULTIPLIER_ABOVE_170 = new BigDecimal("0.30");
+    private static final BigDecimal MULTIPLIER_ABOVE_160 = new BigDecimal("0.40");
+    private static final BigDecimal MULTIPLIER_ABOVE_150 = new BigDecimal("0.50");
+    private static final BigDecimal MULTIPLIER_ABOVE_140 = new BigDecimal("0.60");
+    private static final BigDecimal MULTIPLIER_ABOVE_130 = new BigDecimal("0.70");
+    private static final BigDecimal MULTIPLIER_ABOVE_120 = new BigDecimal("0.80");
+    private static final BigDecimal MULTIPLIER_BELOW_80 = new BigDecimal("1.20");
+    private static final BigDecimal MULTIPLIER_BELOW_70 = new BigDecimal("1.30");
+    private static final BigDecimal MULTIPLIER_BELOW_60 = new BigDecimal("1.40");
+    private static final BigDecimal RATIO_200 = new BigDecimal("2.00");
+    private static final BigDecimal RATIO_190 = new BigDecimal("1.90");
+    private static final BigDecimal RATIO_180 = new BigDecimal("1.80");
+    private static final BigDecimal RATIO_170 = new BigDecimal("1.70");
+    private static final BigDecimal RATIO_160 = new BigDecimal("1.60");
+    private static final BigDecimal RATIO_150 = new BigDecimal("1.50");
+    private static final BigDecimal RATIO_140 = new BigDecimal("1.40");
+    private static final BigDecimal RATIO_130 = new BigDecimal("1.30");
+    private static final BigDecimal RATIO_120 = new BigDecimal("1.20");
+    private static final BigDecimal RATIO_80 = new BigDecimal("0.80");
+    private static final BigDecimal RATIO_70 = new BigDecimal("0.70");
+    private static final BigDecimal RATIO_60 = new BigDecimal("0.60");
 
     // 나눔 유입률 보너스: 5개 단위당 0.01
-    private static final BigDecimal DONATION_BONUS_PER_UNIT = new BigDecimal("0.01");
-    private static final int DONATION_UNIT_SIZE = 5;
+    private static final BigDecimal DONATION_CAPTURE_RATE_BONUS = new BigDecimal("0.10");
 
     private final GameDayStoreStateRedisRepository gameDayStoreStateRedisRepository;
     private final ActionRepository actionRepository;
@@ -66,6 +91,9 @@ public class ActionServiceImpl implements ActionService {
     private final SeasonRepository seasonRepository;
     private final OrderRepository orderRepository;
     private final TrafficRepository trafficRepository;
+    private final ItemUserRepository itemUserRepository;
+    private final EventEffectResolver eventEffectResolver;
+    private final Clock clock;
 
     // ── GET API ──
 
@@ -129,7 +157,7 @@ public class ActionServiceImpl implements ActionService {
         int previousPrice = store.getPrice();
         int newPrice = previousPrice - request.discountValue();
 
-        if (newPrice <= 0) {
+        if (newPrice < store.getMenu().getOriginPrice()) {
             throw new BaseException(ErrorCode.INVALID_INPUT_VALUE);
         }
 
@@ -184,10 +212,7 @@ public class ActionServiceImpl implements ActionService {
         }
 
         // 유입률 보너스 계산: 5개 단위당 0.01
-        int bonusUnits = request.quantity() / DONATION_UNIT_SIZE;
-        BigDecimal captureRateBonus = DONATION_BONUS_PER_UNIT
-                .multiply(BigDecimal.valueOf(bonusUnits))
-                .setScale(2, RoundingMode.HALF_UP);
+        BigDecimal captureRateBonus = DONATION_CAPTURE_RATE_BONUS.setScale(2, RoundingMode.HALF_UP);
 
         // state Hash의 stock 즉시 차감
         int newStock = currentStock - request.quantity();
@@ -219,8 +244,17 @@ public class ActionServiceImpl implements ActionService {
 
         Action action = findSingleAction(ActionCategory.EMERGENCY_ORDER);
 
+        GameDayLiveState state = gameDayStoreStateRedisRepository.find(store.getId(), day)
+                .orElseThrow(() -> new BaseException(ErrorCode.GAME_STATE_NOT_FOUND));
+        LocalDateTime now = LocalDateTime.now(clock);
+        BigDecimal ingredientCostMultiplier = resolveIngredientCostMultiplier(store, day, state, now);
         int originPrice = store.getMenu().getOriginPrice();
-        int totalCost = BigDecimal.valueOf(originPrice)
+        int adjustedOriginPrice = BigDecimal.valueOf(originPrice)
+                .multiply(resolveIngredientDiscountRate(store.getUser().getId()))
+                .multiply(ingredientCostMultiplier)
+                .setScale(0, RoundingMode.HALF_UP)
+                .intValue();
+        int totalCost = BigDecimal.valueOf(adjustedOriginPrice)
                 .multiply(BigDecimal.valueOf(request.quantity()))
                 .multiply(EMERGENCY_COST_MULTIPLIER)
                 .intValue();
@@ -228,7 +262,7 @@ public class ActionServiceImpl implements ActionService {
         validateBalance(store.getId(), day, totalCost);
 
         int deliverySeconds = calculateDeliverySeconds(store.getLocation().getId(), day);
-        LocalDateTime arrivedTime = LocalDateTime.now().plusSeconds(deliverySeconds);
+        LocalDateTime arrivedTime = now.plusSeconds(deliverySeconds);
 
         actionLogRepository.save(new ActionLog(action, store, day, null));
         Order order = orderRepository.save(
@@ -287,7 +321,11 @@ public class ActionServiceImpl implements ActionService {
     private void applyInflowRateMultiplier(Long storeId, int day, BigDecimal multiplier) {
         GameDayLiveState state = gameDayStoreStateRedisRepository.find(storeId, day)
                 .orElseThrow(() -> new BaseException(ErrorCode.GAME_STATE_NOT_FOUND));
-        BigDecimal currentRate = state.inflowRate() != null ? state.inflowRate() : BigDecimal.ZERO;
+        BigDecimal currentRate = state.inflowRate() != null
+                ? state.inflowRate()
+                : state.startResponse() != null && state.startResponse().captureRate() != null
+                ? state.startResponse().captureRate()
+                : BigDecimal.ZERO;
         BigDecimal newRate = currentRate.multiply(multiplier).setScale(4, RoundingMode.HALF_UP);
         gameDayStoreStateRedisRepository.updateField(storeId, day, "inflow_rate", newRate.toPlainString());
     }
@@ -299,12 +337,53 @@ public class ActionServiceImpl implements ActionService {
                 .divide(BigDecimal.valueOf(averagePrice), 4, RoundingMode.HALF_UP);
 
         if (ratio.compareTo(PRICE_RANGE_UPPER) > 0) {
-            return new PriceRange("ABOVE", MULTIPLIER_ABOVE);
+            return new PriceRange("ABOVE", resolveAboveMultiplier(ratio));
         }
         if (ratio.compareTo(PRICE_RANGE_LOWER) < 0) {
-            return new PriceRange("BELOW", MULTIPLIER_BELOW);
+            return new PriceRange("BELOW", resolveBelowMultiplier(ratio));
         }
         return new PriceRange("AVERAGE", MULTIPLIER_AVERAGE);
+    }
+
+    private BigDecimal resolveAboveMultiplier(BigDecimal ratio) {
+        if (ratio.compareTo(RATIO_200) >= 0) {
+            return MULTIPLIER_ABOVE_200;
+        }
+        if (ratio.compareTo(RATIO_190) >= 0) {
+            return MULTIPLIER_ABOVE_190;
+        }
+        if (ratio.compareTo(RATIO_180) >= 0) {
+            return MULTIPLIER_ABOVE_180;
+        }
+        if (ratio.compareTo(RATIO_170) >= 0) {
+            return MULTIPLIER_ABOVE_170;
+        }
+        if (ratio.compareTo(RATIO_160) >= 0) {
+            return MULTIPLIER_ABOVE_160;
+        }
+        if (ratio.compareTo(RATIO_150) >= 0) {
+            return MULTIPLIER_ABOVE_150;
+        }
+        if (ratio.compareTo(RATIO_140) >= 0) {
+            return MULTIPLIER_ABOVE_140;
+        }
+        if (ratio.compareTo(RATIO_130) >= 0) {
+            return MULTIPLIER_ABOVE_130;
+        }
+        return MULTIPLIER_ABOVE_120;
+    }
+
+    private BigDecimal resolveBelowMultiplier(BigDecimal ratio) {
+        if (ratio.compareTo(RATIO_60) <= 0) {
+            return MULTIPLIER_BELOW_60;
+        }
+        if (ratio.compareTo(RATIO_70) <= 0) {
+            return MULTIPLIER_BELOW_70;
+        }
+        if (ratio.compareTo(RATIO_80) <= 0) {
+            return MULTIPLIER_BELOW_80;
+        }
+        return MULTIPLIER_BELOW_80;
     }
 
     private record PriceRange(String label, BigDecimal multiplier) {
@@ -340,6 +419,33 @@ public class ActionServiceImpl implements ActionService {
 
         int clampedValue = Math.max(1, Math.min(avgTrafficValue, 5));
         return DELIVERY_SECONDS_BY_TRAFFIC[clampedValue];
+    }
+
+    private BigDecimal resolveIngredientCostMultiplier(
+            Store store,
+            int day,
+            GameDayLiveState state,
+            LocalDateTime now
+    ) {
+        if (state.startedAt() == null) {
+            return BigDecimal.ONE;
+        }
+
+        return eventEffectResolver.resolve(
+                store.getSeason().getId(),
+                day,
+                store.getSeason().getTotalDays(),
+                state.startedAt(),
+                now,
+                store.getLocation().getId(),
+                store.getMenu().getId()
+        ).ingredientCostMultiplier();
+    }
+
+    private BigDecimal resolveIngredientDiscountRate(Integer userId) {
+        return itemUserRepository.findPurchasedDiscountRateByUserIdAndCategory(userId, ItemCategory.INGREDIENT)
+                .filter(rate -> rate.signum() > 0)
+                .orElse(BigDecimal.ONE);
     }
 
     private List<Traffic> selectTrafficsForDay(List<Traffic> traffics, int day) {
