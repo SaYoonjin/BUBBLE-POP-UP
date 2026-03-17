@@ -9,7 +9,6 @@ interface RankingItem {
   name: string;
   change: string;
   positive: boolean;
-  barWidth?: string;
 }
 
 interface RankingSection {
@@ -120,51 +119,33 @@ export default function CozyNewspaper({ items, expandedId, onToggle, day, rankin
                   </div>
 
                   <ul className="flex flex-col gap-3">
-                    {section.items.map((item) => (
-                      <li key={`${section.title}-${item.rank}-${item.name}`} className="flex items-center gap-3 border-b border-cozy-ink/10 pb-2 last:border-b-0 last:pb-0">
+                    {section.items.map((item) => {
+                      const isNeutral = item.change === "-" || item.change === "0%" || item.change === "0.0%";
+
+                      return (
+                      <li key={`${section.title}-${item.rank}-${item.name}`} className="flex items-center gap-3 border-b border-cozy-ink/10 pb-3 last:border-b-0 last:pb-0">
                         <span className="font-mono text-lg font-bold text-slate-500 w-7 shrink-0">
                           {item.rank}.
                         </span>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-baseline justify-between gap-3">
-                            <span className="font-body text-[15px] font-semibold text-slate-800 truncate">
-                              {item.name}
+                        <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
+                          <span className="font-body text-[15px] font-semibold text-slate-800 truncate">
+                            {item.name}
+                          </span>
+                          <div className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-bold ${
+                            isNeutral
+                              ? "border-slate-200 bg-slate-100 text-slate-500"
+                              : item.positive
+                                ? "border-primary/30 bg-primary/12 text-primary-dark"
+                                : "border-red-200 bg-red-50 text-red-500"
+                          }`}>
+                            <span className="material-symbols-outlined text-[14px] leading-none">
+                              {isNeutral ? "trending_flat" : item.positive ? "north_east" : "south_east"}
                             </span>
-                            <span className={`text-[11px] font-mono px-1.5 py-0.5 rounded-sm font-bold border ${
-                              item.positive
-                                ? "bg-[#ece4d8] text-[#5d554a] border-[#d5cab8]"
-                                : "bg-[#f1e4de] text-[#8a6258] border-[#e2c7bd]"
-                            }`}>
-                              {item.change}
-                            </span>
-                          </div>
-                          <div className="mt-2.5 relative h-7 border border-cozy-ink/15 bg-[#f5efe4] overflow-hidden">
-                            <div
-                              className="absolute inset-0 opacity-40"
-                              style={{
-                                backgroundImage:
-                                  "linear-gradient(to right, rgba(44,44,44,0.08) 1px, transparent 1px)",
-                                backgroundSize: "18px 100%",
-                              }}
-                            />
-                            <div
-                              className={`absolute left-0 top-0 h-full border-r ${
-                                item.positive ? "border-black/20" : "border-black/10"
-                              }`}
-                              style={{
-                                width: item.barWidth ?? `${Math.max(36, 100 - item.rank * 16)}%`,
-                                backgroundImage: item.positive
-                                  ? "repeating-linear-gradient(135deg, rgba(44,44,44,0.16) 0px, rgba(44,44,44,0.16) 4px, rgba(44,44,44,0.3) 4px, rgba(44,44,44,0.3) 8px)"
-                                  : "repeating-linear-gradient(45deg, rgba(90,74,66,0.1) 0px, rgba(90,74,66,0.1) 4px, rgba(90,74,66,0.22) 4px, rgba(90,74,66,0.22) 8px)",
-                              }}
-                            />
-                            <div className="absolute left-2 top-1/2 -translate-y-1/2 text-[9px] font-mono uppercase tracking-[0.25em] text-cozy-ink/35">
-                              Index
-                            </div>
+                            <span className="font-mono">{item.change}</span>
                           </div>
                         </div>
                       </li>
-                    ))}
+                    )})}
                   </ul>
                 </section>
               ))}
