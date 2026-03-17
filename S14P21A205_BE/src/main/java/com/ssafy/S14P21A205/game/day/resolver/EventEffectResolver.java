@@ -1,11 +1,11 @@
 package com.ssafy.S14P21A205.game.day.resolver;
 
 import com.ssafy.S14P21A205.game.day.dto.GameStateResponse;
-import com.ssafy.S14P21A205.game.day.service.SeasonTimeline;
 import com.ssafy.S14P21A205.game.event.entity.DailyEvent;
 import com.ssafy.S14P21A205.game.event.entity.EventStartTime;
 import com.ssafy.S14P21A205.game.event.entity.RandomEvent;
 import com.ssafy.S14P21A205.game.event.repository.DailyEventRepository;
+import com.ssafy.S14P21A205.game.time.service.SeasonTimelineService;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
@@ -21,7 +21,7 @@ public class EventEffectResolver {
     private static final BigDecimal DECIMAL_ONE = new BigDecimal("1.00");
 
     private final DailyEventRepository dailyEventRepository;
-    private final SeasonTimeline seasonTimeline = new SeasonTimeline();
+    private final SeasonTimelineService seasonTimelineService = new SeasonTimelineService();
 
     public EventEffect resolve(
             Long seasonId,
@@ -48,7 +48,7 @@ public class EventEffectResolver {
                 continue;
             }
 
-            LocalDateTime appliedAt = seasonTimeline.resolveAppliedAt(
+            LocalDateTime appliedAt = seasonTimelineService.resolveAppliedAt(
                     currentDayStart,
                     currentDay,
                     totalDays,
@@ -59,7 +59,7 @@ public class EventEffectResolver {
                 continue;
             }
 
-            LocalDateTime endedAt = seasonTimeline.resolveEndedAt(
+            LocalDateTime endedAt = seasonTimelineService.resolveEndedAt(
                     currentDayStart,
                     currentDay,
                     totalDays,

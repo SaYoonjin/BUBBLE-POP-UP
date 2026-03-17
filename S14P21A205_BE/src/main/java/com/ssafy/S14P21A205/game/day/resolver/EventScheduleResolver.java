@@ -1,10 +1,10 @@
 package com.ssafy.S14P21A205.game.day.resolver;
 
 import com.ssafy.S14P21A205.game.day.dto.GameDayStartResponse;
-import com.ssafy.S14P21A205.game.day.service.SeasonTimeline;
 import com.ssafy.S14P21A205.game.event.entity.DailyEvent;
 import com.ssafy.S14P21A205.game.event.entity.RandomEvent;
 import com.ssafy.S14P21A205.game.event.repository.DailyEventRepository;
+import com.ssafy.S14P21A205.game.time.service.SeasonTimelineService;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
@@ -17,7 +17,7 @@ import org.springframework.stereotype.Component;
 public class EventScheduleResolver {
 
     private final DailyEventRepository dailyEventRepository;
-    private final SeasonTimeline seasonTimeline = new SeasonTimeline();
+    private final SeasonTimelineService seasonTimelineService = new SeasonTimelineService();
 
     public List<GameDayStartResponse.EventSchedule> resolve(Long seasonId, int day) {
         List<DailyEvent> dailyEvents = dailyEventRepository.findBySeasonIdAndDayOrderByIdAsc(seasonId, day);
@@ -28,7 +28,7 @@ public class EventScheduleResolver {
                     ? null
                     : event.getCapitalFlat();
             eventSchedule.add(new GameDayStartResponse.EventSchedule(
-                    seasonTimeline.formatGameTime(dailyEvent.getApplyOffsetSeconds()),
+                    seasonTimelineService.formatGameTime(dailyEvent.getApplyOffsetSeconds()),
                     event.getEventType(),
                     new GameDayStartResponse.Scope(null, null),
                     dailyEvent.getNewsTitle(),

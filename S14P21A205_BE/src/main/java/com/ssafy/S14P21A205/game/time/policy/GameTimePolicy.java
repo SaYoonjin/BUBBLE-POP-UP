@@ -1,16 +1,17 @@
-package com.ssafy.S14P21A205.game.day.service;
+package com.ssafy.S14P21A205.game.time.policy;
 
 import com.ssafy.S14P21A205.game.event.entity.EventEndTime;
+import com.ssafy.S14P21A205.game.time.model.DayWindow;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 
-public final class SeasonTimeline {
+public class GameTimePolicy {
 
     public static final int BUSINESS_OPEN_HOUR = 10;
     public static final int BUSINESS_CLOSE_HOUR = 22;
-    static final int REALTIME_SEGMENT_COUNT = 3;
+    public static final int REALTIME_SEGMENT_COUNT = 3;
 
     private static final Duration PREP_DURATION = Duration.ofSeconds(50);
     private static final Duration BUSINESS_DURATION = Duration.ofMinutes(2);
@@ -19,18 +20,18 @@ public final class SeasonTimeline {
     private static final int GAME_BUSINESS_DURATION_MINUTES = (BUSINESS_CLOSE_HOUR - BUSINESS_OPEN_HOUR) * 60;
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
 
-    public DayTimeline currentDay(LocalDateTime currentDayStart, int currentDay, int totalDays) {
+    public DayWindow currentDay(LocalDateTime currentDayStart, int currentDay, int totalDays) {
         return day(currentDayStart, currentDay, totalDays, currentDay);
     }
 
-    DayTimeline day(LocalDateTime currentDayStart, int currentDay, int totalDays, int targetDay) {
+    public DayWindow day(LocalDateTime currentDayStart, int currentDay, int totalDays, int targetDay) {
         LocalDateTime targetDayStart = currentDayStart.minus(DAY_DURATION.multipliedBy((long) currentDay - targetDay));
         LocalDateTime businessStart = targetDayStart.plus(PREP_DURATION);
         LocalDateTime businessEnd = businessStart.plus(BUSINESS_DURATION);
         LocalDateTime reportEnd = businessEnd.plus(REPORT_DURATION);
         LocalDateTime dayOneStart = currentDayStart.minus(DAY_DURATION.multipliedBy(currentDay - 1L));
         LocalDateTime seasonPlayableEnd = dayOneStart.plus(DAY_DURATION.multipliedBy(totalDays));
-        return new DayTimeline(targetDayStart, businessStart, businessEnd, reportEnd, seasonPlayableEnd);
+        return new DayWindow(targetDayStart, businessStart, businessEnd, reportEnd, seasonPlayableEnd);
     }
 
     public LocalDateTime resolveAppliedAt(
@@ -40,8 +41,8 @@ public final class SeasonTimeline {
             int appliedDay,
             Integer offsetSeconds
     ) {
-        DayTimeline appliedDayTimeline = day(currentDayStart, currentDay, totalDays, appliedDay);
-        return appliedDayTimeline.businessStart().plusSeconds(normalizeOffsetSeconds(offsetSeconds));
+        DayWindow appliedDayWindow = day(currentDayStart, currentDay, totalDays, appliedDay);
+        return appliedDayWindow.businessStart().plusSeconds(normalizeOffsetSeconds(offsetSeconds));
     }
 
     public LocalDateTime resolveEndedAt(
@@ -52,13 +53,13 @@ public final class SeasonTimeline {
             Integer expireOffsetSeconds,
             EventEndTime endTime
     ) {
-        DayTimeline appliedDayTimeline = day(currentDayStart, currentDay, totalDays, appliedDay);
+        DayWindow appliedDayWindow = day(currentDayStart, currentDay, totalDays, appliedDay);
         if (expireOffsetSeconds != null && expireOffsetSeconds >= 0) {
-            return appliedDayTimeline.businessStart().plusSeconds(expireOffsetSeconds);
+            return appliedDayWindow.businessStart().plusSeconds(expireOffsetSeconds);
         }
         return endTime == EventEndTime.SEASON_END
-                ? appliedDayTimeline.seasonPlayableEnd()
-                : appliedDayTimeline.businessEnd();
+                ? appliedDayWindow.seasonPlayableEnd()
+                : appliedDayWindow.businessEnd();
     }
 
     public String formatGameTime(Integer offsetSeconds) {
@@ -71,28 +72,19 @@ public final class SeasonTimeline {
         return BUSINESS_DURATION;
     }
 
-    Duration reportDuration() {
+    public Duration reportDuration() {
         return REPORT_DURATION;
     }
 
-    Duration prepDuration() {
+    public Duration prepDuration() {
         return PREP_DURATION;
     }
 
-    Duration dayDuration() {
+    public Duration dayDuration() {
         return DAY_DURATION;
     }
 
     private int normalizeOffsetSeconds(Integer offsetSeconds) {
         return offsetSeconds == null ? 0 : Math.max(0, offsetSeconds);
-    }
-
-    public record DayTimeline(
-            LocalDateTime dayStart,
-            LocalDateTime businessStart,
-            LocalDateTime businessEnd,
-            LocalDateTime reportEnd,
-            LocalDateTime seasonPlayableEnd
-    ) {
     }
 }

@@ -1,7 +1,8 @@
 package com.ssafy.S14P21A205.game.day.engine;
 
 import com.ssafy.S14P21A205.game.day.state.GameDayLiveState;
-import com.ssafy.S14P21A205.game.day.service.SeasonTimeline;
+import com.ssafy.S14P21A205.game.time.model.DayWindow;
+import com.ssafy.S14P21A205.game.time.service.SeasonTimelineService;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -11,9 +12,9 @@ import org.springframework.stereotype.Component;
 public class StockEngine {
 
     private static final Duration TICK_INTERVAL = Duration.ofSeconds(10);
-    private final SeasonTimeline seasonTimeline = new SeasonTimeline();
+    private final SeasonTimelineService seasonTimelineService = new SeasonTimelineService();
 
-    public int resolveCurrentTick(SeasonTimeline.DayTimeline currentTimeline, LocalDateTime effectiveNow) {
+    public int resolveCurrentTick(DayWindow currentTimeline, LocalDateTime effectiveNow) {
         if (!effectiveNow.isAfter(currentTimeline.businessStart())) {
             return 0;
         }
@@ -27,7 +28,7 @@ public class StockEngine {
 
     public int resolvePurchaseCursorAtTick(
             GameDayLiveState state,
-            SeasonTimeline.DayTimeline currentTimeline,
+            DayWindow currentTimeline,
             int tick
     ) {
         if (tick <= 0) {
@@ -68,7 +69,7 @@ public class StockEngine {
 
     public TickProgress calculateTickProgress(
             GameDayLiveState state,
-            SeasonTimeline.DayTimeline currentTimeline,
+            DayWindow currentTimeline,
             int tick,
             int totalAvailableStock
     ) {
@@ -94,7 +95,7 @@ public class StockEngine {
 
     private int resolvePurchaseCursor(
             GameDayLiveState state,
-            SeasonTimeline.DayTimeline currentTimeline,
+            DayWindow currentTimeline,
             LocalDateTime effectiveNow
     ) {
         List<Integer> purchaseList = state.purchaseList();
@@ -109,7 +110,7 @@ public class StockEngine {
             return purchaseList.size();
         }
 
-        long totalMillis = seasonTimeline.businessDuration().toMillis();
+        long totalMillis = seasonTimelineService.businessDuration().toMillis();
         long elapsedMillis = Duration.between(currentTimeline.businessStart(), effectiveNow).toMillis();
         long boundedElapsedMillis = Math.max(0L, Math.min(elapsedMillis, totalMillis));
         int computedCursor = (int) ((purchaseList.size() * boundedElapsedMillis) / totalMillis);
@@ -118,7 +119,7 @@ public class StockEngine {
     }
 
     private int totalTickCount() {
-        return (int) (seasonTimeline.businessDuration().toMillis() / TICK_INTERVAL.toMillis());
+        return (int) (seasonTimelineService.businessDuration().toMillis() / TICK_INTERVAL.toMillis());
     }
 
     private int safeToInt(long value) {
