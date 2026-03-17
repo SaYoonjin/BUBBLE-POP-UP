@@ -31,7 +31,7 @@ public class EventScheduleResolver {
                     seasonTimelineService.formatGameTime(dailyEvent.getApplyOffsetSeconds()),
                     event.getEventType(),
                     new GameDayStartResponse.Scope(null, null),
-                    dailyEvent.getNewsTitle(),
+                    event.getEventType(),
                     normalizeScale(event.getPopulationRate()),
                     balanceChange
             ));
@@ -40,6 +40,9 @@ public class EventScheduleResolver {
     }
 
     private BigDecimal normalizeScale(BigDecimal value) {
+        if (value == null) {
+            return BigDecimal.ONE.setScale(2, RoundingMode.HALF_UP);
+        }
         return value.setScale(2, RoundingMode.HALF_UP);
     }
 }

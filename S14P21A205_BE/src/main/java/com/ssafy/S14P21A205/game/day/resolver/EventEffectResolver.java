@@ -69,6 +69,9 @@ public class EventEffectResolver {
             );
             ResolvedEvent resolvedEvent = new ResolvedEvent(dailyEvent, appliedDay, appliedAt, endedAt);
             RandomEvent event = resolvedEvent.dailyEvent().getEvent();
+            if (!resolvedEvent.appliedAt().isAfter(currentDayStart)) {
+                continue;
+            }
 
             if (resolvedEvent.appliedDay() == currentDay) {
                 capitalChange += event.getCapitalFlat() == null ? 0L : event.getCapitalFlat();
@@ -80,7 +83,7 @@ public class EventEffectResolver {
                 appliedEvents.add(new GameStateResponse.AppliedEvent(
                         event.getEventType(),
                         event.getEventType(),
-                        resolvedEvent.dailyEvent().getNewsTitle(),
+                        event.getEventType(),
                         resolvedEvent.appliedAt()
                 ));
             }
