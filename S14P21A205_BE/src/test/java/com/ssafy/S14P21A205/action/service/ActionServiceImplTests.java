@@ -20,6 +20,7 @@ import com.ssafy.S14P21A205.action.repository.ActionRepository;
 import com.ssafy.S14P21A205.exception.BaseException;
 import com.ssafy.S14P21A205.exception.ErrorCode;
 import com.ssafy.S14P21A205.game.day.dto.GameDayStartResponse;
+import com.ssafy.S14P21A205.game.day.policy.CaptureRatePolicy;
 import com.ssafy.S14P21A205.game.day.resolver.EventEffectResolver;
 import com.ssafy.S14P21A205.game.day.state.GameDayLiveState;
 import com.ssafy.S14P21A205.game.day.state.repository.GameDayStoreStateRedisRepository;
@@ -97,6 +98,7 @@ class ActionServiceImplTests {
                 trafficRepository,
                 itemUserRepository,
                 eventEffectResolver,
+                new CaptureRatePolicy(),
                 fixedClock
         );
     }
@@ -124,7 +126,7 @@ class ActionServiceImplTests {
         assertThat(response.priceRange()).isEqualTo("ABOVE");
         assertThat(response.priceRangeMultiplier()).isEqualByComparingTo("0.01");
         verify(gameDayStoreStateRedisRepository).updateField(15L, 2, "sale_price", "4000");
-        verify(gameDayStoreStateRedisRepository).updateField(15L, 2, "inflow_rate", "0.0010");
+        verify(gameDayStoreStateRedisRepository).updateField(15L, 2, "capture_rate", "0.0010");
         verify(gameDayStoreStateRedisRepository).markActionUsed(15L, 2, "discount");
     }
 
@@ -149,7 +151,7 @@ class ActionServiceImplTests {
         assertThat(response.newPrice()).isEqualTo(4_600);
         assertThat(response.priceRange()).isEqualTo("ABOVE");
         assertThat(response.priceRangeMultiplier()).isEqualByComparingTo("0.80");
-        verify(gameDayStoreStateRedisRepository).updateField(15L, 2, "inflow_rate", "0.0800");
+        verify(gameDayStoreStateRedisRepository).updateField(15L, 2, "capture_rate", "0.0800");
     }
 
     @Test
@@ -173,7 +175,7 @@ class ActionServiceImplTests {
         assertThat(response.newPrice()).isEqualTo(4_000);
         assertThat(response.priceRange()).isEqualTo("AVERAGE");
         assertThat(response.priceRangeMultiplier()).isEqualByComparingTo("1.00");
-        verify(gameDayStoreStateRedisRepository).updateField(15L, 2, "inflow_rate", "0.1000");
+        verify(gameDayStoreStateRedisRepository).updateField(15L, 2, "capture_rate", "0.1000");
     }
 
     @Test
@@ -197,7 +199,7 @@ class ActionServiceImplTests {
         assertThat(response.newPrice()).isEqualTo(3_400);
         assertThat(response.priceRange()).isEqualTo("BELOW");
         assertThat(response.priceRangeMultiplier()).isEqualByComparingTo("1.20");
-        verify(gameDayStoreStateRedisRepository).updateField(15L, 2, "inflow_rate", "0.1200");
+        verify(gameDayStoreStateRedisRepository).updateField(15L, 2, "capture_rate", "0.1200");
     }
 
     @Test
@@ -221,9 +223,9 @@ class ActionServiceImplTests {
         assertThat(response.previousPrice()).isEqualTo(2_500);
         assertThat(response.newPrice()).isEqualTo(1_500);
         assertThat(response.priceRange()).isEqualTo("BELOW");
-        assertThat(response.priceRangeMultiplier()).isEqualByComparingTo("1.40");
+        assertThat(response.priceRangeMultiplier()).isEqualByComparingTo("1.30");
         verify(gameDayStoreStateRedisRepository).updateField(15L, 2, "sale_price", "1500");
-        verify(gameDayStoreStateRedisRepository).updateField(15L, 2, "inflow_rate", "0.1400");
+        verify(gameDayStoreStateRedisRepository).updateField(15L, 2, "capture_rate", "0.1300");
         verify(gameDayStoreStateRedisRepository).markActionUsed(15L, 2, "discount");
     }
 
@@ -268,7 +270,7 @@ class ActionServiceImplTests {
         assertThat(response.quantity()).isEqualTo(25);
         assertThat(response.captureRateBonus()).isEqualByComparingTo("0.10");
         verify(gameDayStoreStateRedisRepository).updateField(15L, 2, "stock", "25");
-        verify(gameDayStoreStateRedisRepository).updateField(15L, 2, "inflow_rate", "0.1100");
+        verify(gameDayStoreStateRedisRepository).updateField(15L, 2, "capture_rate", "0.1100");
         verify(gameDayStoreStateRedisRepository).markActionUsed(15L, 2, "donation");
     }
 
@@ -351,6 +353,7 @@ class ActionServiceImplTests {
                 trafficRepository,
                 itemUserRepository,
                 eventEffectResolver,
+                new CaptureRatePolicy(),
                 fixedClock
         );
 
@@ -424,14 +427,16 @@ class ActionServiceImplTests {
                 new GameDayStartResponse(
                         "10:00",
                         "22:00",
-                        Map.of("10", new GameDayStartResponse.HourlySchedule(100, BigDecimal.ONE)),
+                        Map.of("10", new GameDayStartResponse.HourlySchedule(100, BigDecimal.ONE, BigDecimal.ONE, 100)),
                         "SUNNY",
                         BigDecimal.ONE,
                         BigDecimal.ONE,
                         new BigDecimal("0.10"),
                         List.of(),
                         10_000_000,
-                        50
+                        50,
+                        null,
+                        null
                 ),
                 0,
                 0,

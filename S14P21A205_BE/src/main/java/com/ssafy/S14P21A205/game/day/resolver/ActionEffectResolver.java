@@ -9,6 +9,7 @@ import java.util.List;
 public class ActionEffectResolver {
 
     private static final BigDecimal DECIMAL_ZERO = new BigDecimal("0.00");
+    private static final BigDecimal DECIMAL_ONE = new BigDecimal("1.00");
 
     public ActionEffect resolve(List<ActionLog> actionLogs) {
         boolean discountUsed = false;
@@ -18,7 +19,7 @@ public class ActionEffectResolver {
         boolean leafletUsed = false;
         boolean friendUsed = false;
         long totalCost = 0L;
-        BigDecimal captureRateBoost = DECIMAL_ZERO;
+        BigDecimal captureRateMultiplier = DECIMAL_ONE;
 
         for (ActionLog actionLog : actionLogs) {
             if (actionLog.getAction() == null) {
@@ -28,12 +29,13 @@ public class ActionEffectResolver {
             totalCost += actionLog.getAction().getCost() == null ? 0L : actionLog.getAction().getCost();
 
             ActionCategory category = actionLog.getAction().getCategory();
-            if (category == ActionCategory.DISCOUNT || category == ActionCategory.DONATION) {
-                BigDecimal dynamicValue = actionLog.getActionValue() == null ? DECIMAL_ZERO : actionLog.getActionValue();
-                captureRateBoost = captureRateBoost.add(dynamicValue);
+            if (category == ActionCategory.DISCOUNT) {
+                captureRateMultiplier = captureRateMultiplier.multiply(normalizeMultiplier(actionLog.getActionValue()));
+            } else if (category == ActionCategory.DONATION) {
+                captureRateMultiplier = captureRateMultiplier.multiply(toBonusMultiplier(actionLog.getActionValue()));
             } else {
-                captureRateBoost = captureRateBoost.add(
-                        actionLog.getAction().getCaptureRate() == null ? DECIMAL_ZERO : actionLog.getAction().getCaptureRate()
+                captureRateMultiplier = captureRateMultiplier.multiply(
+                        toBonusMultiplier(actionLog.getAction().getCaptureRate())
                 );
             }
 
@@ -69,8 +71,23 @@ public class ActionEffectResolver {
                 leafletUsed,
                 friendUsed,
                 totalCost,
-                captureRateBoost
+                captureRateMultiplier
         );
+    }
+
+    private BigDecimal normalizeMultiplier(BigDecimal value) {
+        if (value == null || value.signum() <= 0) {
+            return DECIMAL_ONE;
+        }
+        return value;
+    }
+
+    private BigDecimal toBonusMultiplier(BigDecimal value) {
+        BigDecimal bonus = value == null ? DECIMAL_ZERO : value;
+        if (bonus.signum() <= 0) {
+            return DECIMAL_ONE;
+        }
+        return DECIMAL_ONE.add(bonus);
     }
 
     public record ActionEffect(
@@ -81,7 +98,7 @@ public class ActionEffectResolver {
             boolean leafletUsed,
             boolean friendUsed,
             long totalCost,
-            BigDecimal captureRateBoost
+            BigDecimal captureRateMultiplier
     ) {
     }
 }

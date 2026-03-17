@@ -41,7 +41,6 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class GameDayStateService {
 
-    private static final BigDecimal DECIMAL_ZERO = new BigDecimal("0.00");
     private static final SeasonTimelineService SEASON_TIMELINE_SERVICE = new SeasonTimelineService();
 
     private final UserService userService;
@@ -162,7 +161,7 @@ public class GameDayStateService {
                 state.startResponse(),
                 state.tick() == null ? 0 : state.tick(),
                 state.populationPerStore() == null ? 0 : state.populationPerStore(),
-                state.inflowRate(),
+                state.captureRate(),
                 state.salePrice() == null ? 0 : state.salePrice(),
                 state.tickCustomerCount() == null ? 0 : state.tickCustomerCount(),
                 state.tickPurchaseCount() == null ? 0 : state.tickPurchaseCount(),
@@ -187,7 +186,6 @@ public class GameDayStateService {
         boolean leafletUsed = false;
         boolean friendUsed = false;
         long totalCost = 0L;
-        BigDecimal captureRateBoost = DECIMAL_ZERO;
 
         for (ActionLog actionLog : actionLogs) {
             if (actionLog.getAction() == null) {
@@ -197,15 +195,6 @@ public class GameDayStateService {
             totalCost += actionLog.getAction().getCost() == null ? 0L : actionLog.getAction().getCost();
 
             ActionCategory category = actionLog.getAction().getCategory();
-            if (category == ActionCategory.DISCOUNT || category == ActionCategory.DONATION) {
-                BigDecimal dynamicValue = actionLog.getActionValue() == null ? DECIMAL_ZERO : actionLog.getActionValue();
-                captureRateBoost = captureRateBoost.add(dynamicValue);
-            } else {
-                captureRateBoost = captureRateBoost.add(
-                        actionLog.getAction().getCaptureRate() == null ? DECIMAL_ZERO : actionLog.getAction().getCaptureRate()
-                );
-            }
-
             if (category == ActionCategory.DISCOUNT) {
                 discountUsed = true;
                 continue;
@@ -237,8 +226,7 @@ public class GameDayStateService {
                 snsUsed,
                 leafletUsed,
                 friendUsed,
-                totalCost,
-                captureRateBoost
+                totalCost
         );
     }
 
@@ -287,14 +275,14 @@ public class GameDayStateService {
             int totalDays,
             long regionStoreCount
     ) {
-        BigDecimal inflowRate = resolveLiveInflowRate(state, actionUsage.captureRateBoost());
+        BigDecimal captureRate = resolveLiveCaptureRate(state);
         ProgressionState progressionState = progressStateByTick(
                 store,
                 state,
                 currentTimeline,
                 tick,
                 effectiveNow,
-                inflowRate,
+                captureRate,
                 day,
                 totalDays,
                 regionStoreCount
@@ -304,6 +292,7 @@ public class GameDayStateService {
         CostPolicy.CostResult costResult = costPolicy.calculate(
                 store,
                 dailyStartOrder,
+                state.startResponse(),
                 actionUsage.totalCost(),
                 emergencyOrderState.totalCost(),
                 eventEffect.capitalChange(),
@@ -324,7 +313,7 @@ public class GameDayStateService {
                         state.startResponse(),
                         tick,
                         progressionState.populationPerStore(),
-                        inflowRate,
+                        captureRate,
                         state.salePrice(),
                         progressionState.tickCustomerCount(),
                         progressionState.tickPurchaseCount(),
@@ -346,7 +335,7 @@ public class GameDayStateService {
             DayWindow currentTimeline,
             int currentTick,
             LocalDateTime effectiveNow,
-            BigDecimal inflowRate,
+            BigDecimal captureRate,
             int day,
             int totalDays,
             long regionStoreCount
@@ -377,7 +366,7 @@ public class GameDayStateService {
                     tickBoundary,
                     regionStoreCount
             );
-            int desiredCustomerCount = stockEngine.calculateTickCustomerCount(populationPerStore, inflowRate);
+            int desiredCustomerCount = stockEngine.calculateTickCustomerCount(populationPerStore, captureRate);
             int nextCursor = stockEngine.advancePurchaseCursor(state.purchaseList(), purchaseCursor, desiredCustomerCount);
             int actualCustomerCount = Math.max(0, nextCursor - purchaseCursor);
             long demandUnits = stockEngine.calculateDemandUnits(state.purchaseList(), purchaseCursor, nextCursor);
@@ -450,11 +439,14 @@ public class GameDayStateService {
         );
     }
 
-    private BigDecimal resolveLiveInflowRate(GameDayLiveState state, BigDecimal actionCaptureRateBoost) {
-        if (state.inflowRate() != null) {
-            return state.inflowRate();
+    private BigDecimal resolveLiveCaptureRate(GameDayLiveState state) {
+        if (state.captureRate() != null) {
+            return captureRatePolicy.normalizeCaptureRate(state.captureRate());
         }
-        return captureRatePolicy.resolveInflowRate(state.startResponse().captureRate(), actionCaptureRateBoost);
+        if (state.startResponse() != null && state.startResponse().captureRate() != null) {
+            return captureRatePolicy.normalizeCaptureRate(state.startResponse().captureRate());
+        }
+        return captureRatePolicy.normalizeCaptureRate(BigDecimal.ZERO);
     }
 
     private int resolvePopulationPerStore(
@@ -511,8 +503,7 @@ public class GameDayStateService {
             boolean snsUsed,
             boolean leafletUsed,
             boolean friendUsed,
-            long totalCost,
-            BigDecimal captureRateBoost
+            long totalCost
     ) {
     }
 

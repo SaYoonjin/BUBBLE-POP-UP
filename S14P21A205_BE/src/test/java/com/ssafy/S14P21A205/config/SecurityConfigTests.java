@@ -14,9 +14,14 @@ import com.ssafy.S14P21A205.game.day.dto.GameDayStartResponse;
 import com.ssafy.S14P21A205.game.day.policy.CaptureRatePolicy;
 import com.ssafy.S14P21A205.game.day.resolver.EventScheduleResolver;
 import com.ssafy.S14P21A205.game.day.resolver.EventEffectResolver;
+import com.ssafy.S14P21A205.game.day.resolver.EnvironmentScheduleResolver;
+import com.ssafy.S14P21A205.game.day.resolver.NewsRankingResolver;
 import com.ssafy.S14P21A205.game.day.policy.PopulationPolicy;
 import com.ssafy.S14P21A205.game.day.policy.RentPolicy;
 import com.ssafy.S14P21A205.game.day.state.repository.GameDayStoreStateRedisRepository;
+import com.ssafy.S14P21A205.game.environment.repository.SeasonWeatherRedisRepository;
+import com.ssafy.S14P21A205.game.environment.repository.WeatherRepository;
+import com.ssafy.S14P21A205.game.news.repository.NewsReportRepository;
 import com.ssafy.S14P21A205.game.day.service.GameDayReportService;
 import com.ssafy.S14P21A205.game.day.service.GameDayStartService;
 import com.ssafy.S14P21A205.game.day.service.GameDayStateService;
@@ -89,6 +94,12 @@ class SecurityConfigTests {
     private EventEffectResolver eventEffectResolver;
 
     @MockitoBean
+    private EnvironmentScheduleResolver environmentScheduleResolver;
+
+    @MockitoBean
+    private NewsRankingResolver newsRankingResolver;
+
+    @MockitoBean
     private GameDayStateService gameDayStateService;
 
     @MockitoBean
@@ -136,6 +147,15 @@ class SecurityConfigTests {
     @MockitoBean
     private StringRedisTemplate stringRedisTemplate;
 
+    @MockitoBean
+    private WeatherRepository weatherRepository;
+
+    @MockitoBean
+    private SeasonWeatherRedisRepository seasonWeatherRedisRepository;
+
+    @MockitoBean
+    private NewsReportRepository newsReportRepository;
+
     @Test
     void startDayAllowsAuthenticatedRequest() throws Exception {
         when(gameDayStartService.startDay(any()))
@@ -149,7 +169,9 @@ class SecurityConfigTests {
                         BigDecimal.ZERO,
                         List.of(),
                         10_000_000,
-                        100
+                        100,
+                        null,
+                        null
                 ));
 
         mockMvc.perform(post("/game/day/start")

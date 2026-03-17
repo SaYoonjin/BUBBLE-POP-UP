@@ -191,7 +191,7 @@ class GameDayReportServiceTests {
         assertThat(response.reputationChange()).isEqualByComparingTo("0.3");
         assertThat(response.tomorrowWeather()).isNotNull();
         assertThat(response.tomorrowWeather().condition()).isEqualTo("SNOW");
-        assertThat(response.isNextDayOrderDay()).isFalse();
+        assertThat(response.isNextDayOrderDay()).isTrue();
         assertThat(response.consecutiveDeficitDays()).isEqualTo(2);
         assertThat(response.isBankrupt()).isFalse();
     }

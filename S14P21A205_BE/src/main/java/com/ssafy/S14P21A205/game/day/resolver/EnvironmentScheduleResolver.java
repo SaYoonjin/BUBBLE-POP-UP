@@ -4,30 +4,46 @@ import com.ssafy.S14P21A205.exception.BaseException;
 import com.ssafy.S14P21A205.exception.ErrorCode;
 import com.ssafy.S14P21A205.game.day.model.DaySchedule;
 import com.ssafy.S14P21A205.game.day.policy.PopulationPolicy;
-import com.ssafy.S14P21A205.game.environment.entity.Weather;
-import com.ssafy.S14P21A205.game.environment.repository.WeatherRepository;
-import java.util.List;
+import com.ssafy.S14P21A205.game.environment.entity.WeatherType;
+import com.ssafy.S14P21A205.game.environment.repository.SeasonWeatherRedisRepository;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Component;
 
+@Component
+@RequiredArgsConstructor
 public class EnvironmentScheduleResolver {
 
-    public ResolvedEnvironment resolve(
-            PopulationPolicy populationPolicy,
-            WeatherRepository weatherRepository,
-            Long locationId,
-            int day
-    ) {
-        DaySchedule daySchedule = populationPolicy.buildDaySchedule(locationId, day);
-        List<Weather> weathers = weatherRepository.findAllByOrderByIdAsc();
-        if (weathers.isEmpty()) {
-            throw new BaseException(ErrorCode.RESOURCE_NOT_FOUND);
+    private final PopulationPolicy populationPolicy;
+    private final SeasonWeatherRedisRepository seasonWeatherRedisRepository;
+
+    public ResolvedEnvironment resolve(Long seasonId, Long locationId, int day) {
+        SeasonWeatherRedisRepository.SeasonWeatherEntry weather = resolveWeather(seasonId, day);
+        DaySchedule daySchedule = populationPolicy.buildDaySchedule(
+                locationId,
+                day,
+                normalizeScale(weather.populationMultiplier())
+        );
+        return new ResolvedEnvironment(daySchedule, weather.weatherType(), normalizeScale(weather.populationMultiplier()));
+    }
+
+    private SeasonWeatherRedisRepository.SeasonWeatherEntry resolveWeather(Long seasonId, int day) {
+        return seasonWeatherRedisRepository.findDay(seasonId, day)
+                .orElseThrow(() -> new BaseException(ErrorCode.RESOURCE_NOT_FOUND));
+    }
+
+    private BigDecimal normalizeScale(BigDecimal value) {
+        if (value == null) {
+            return BigDecimal.ONE.setScale(2, RoundingMode.HALF_UP);
         }
-        Weather weather = weathers.get(Math.floorMod(day - 1, weathers.size()));
-        return new ResolvedEnvironment(daySchedule, weather);
+        return value.setScale(2, RoundingMode.HALF_UP);
     }
 
     public record ResolvedEnvironment(
             DaySchedule daySchedule,
-            Weather weather
+            WeatherType weatherType,
+            BigDecimal weatherMultiplier
     ) {
     }
 }

@@ -15,14 +15,15 @@ import com.ssafy.S14P21A205.action.entity.ActionCategory;
 import com.ssafy.S14P21A205.action.entity.ActionLog;
 import com.ssafy.S14P21A205.action.repository.ActionLogRepository;
 import com.ssafy.S14P21A205.action.repository.ActionRepository;
-import com.ssafy.S14P21A205.exception.BaseException;
-import com.ssafy.S14P21A205.game.environment.entity.Traffic;
-import com.ssafy.S14P21A205.game.environment.entity.TrafficStatus;
-import com.ssafy.S14P21A205.game.environment.repository.TrafficRepository;
 import com.ssafy.S14P21A205.exception.ErrorCode;
+import com.ssafy.S14P21A205.exception.BaseException;
+import com.ssafy.S14P21A205.game.day.policy.CaptureRatePolicy;
 import com.ssafy.S14P21A205.game.day.resolver.EventEffectResolver;
 import com.ssafy.S14P21A205.game.day.state.GameDayLiveState;
 import com.ssafy.S14P21A205.game.day.state.repository.GameDayStoreStateRedisRepository;
+import com.ssafy.S14P21A205.game.environment.entity.Traffic;
+import com.ssafy.S14P21A205.game.environment.entity.TrafficStatus;
+import com.ssafy.S14P21A205.game.environment.repository.TrafficRepository;
 import com.ssafy.S14P21A205.game.season.entity.Season;
 import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
 import com.ssafy.S14P21A205.game.season.repository.SeasonRepository;
@@ -93,6 +94,7 @@ public class ActionServiceImpl implements ActionService {
     private final TrafficRepository trafficRepository;
     private final ItemUserRepository itemUserRepository;
     private final EventEffectResolver eventEffectResolver;
+    private final CaptureRatePolicy captureRatePolicy;
     private final Clock clock;
 
     // ── GET API ──
@@ -128,9 +130,9 @@ public class ActionServiceImpl implements ActionService {
 
         validateBalance(store.getId(), day, action.getCost());
 
-        // inflow_rate에 곱하기 반영 (captureRate 0.10 → ×1.10)
+        // 현재 capture_rate에 액션 multiplier를 곱해 반영합니다.
         BigDecimal multiplier = BigDecimal.ONE.add(action.getCaptureRate());
-        applyInflowRateMultiplier(store.getId(), day, multiplier);
+        applyCaptureRateMultiplier(store.getId(), day, multiplier);
 
         actionLogRepository.save(new ActionLog(action, store, day, null));
         gameDayStoreStateRedisRepository.markActionUsed(store.getId(), day, field);
@@ -177,8 +179,8 @@ public class ActionServiceImpl implements ActionService {
         gameDayStoreStateRedisRepository.updateField(
                 store.getId(), day, "sale_price", String.valueOf(newPrice));
 
-        // inflow_rate에 가격구간 배수 곱하기 반영
-        applyInflowRateMultiplier(store.getId(), day, priceRange.multiplier);
+        // 할인 후 결정된 가격 multiplier를 현재 capture_rate에 반영합니다.
+        applyCaptureRateMultiplier(store.getId(), day, priceRange.multiplier);
 
         // actionValue에 가격구간 배수 저장 (이력용)
         actionLogRepository.save(new ActionLog(action, store, day, priceRange.multiplier));
@@ -219,9 +221,9 @@ public class ActionServiceImpl implements ActionService {
         gameDayStoreStateRedisRepository.updateField(
                 store.getId(), day, "stock", String.valueOf(newStock));
 
-        // inflow_rate에 나눔 보너스 곱하기 반영 (보너스 0.05 → ×1.05)
+        // 나눔 보너스를 multiplier로 변환해 현재 capture_rate에 반영합니다.
         BigDecimal multiplier = BigDecimal.ONE.add(captureRateBonus);
-        applyInflowRateMultiplier(store.getId(), day, multiplier);
+        applyCaptureRateMultiplier(store.getId(), day, multiplier);
 
         // actionValue에 유입률 보너스 저장 (이력용)
         actionLogRepository.save(new ActionLog(action, store, day, captureRateBonus));
@@ -318,16 +320,16 @@ public class ActionServiceImpl implements ActionService {
 
     // ── 유입률 헬퍼 ──
 
-    private void applyInflowRateMultiplier(Long storeId, int day, BigDecimal multiplier) {
+    private void applyCaptureRateMultiplier(Long storeId, int day, BigDecimal multiplier) {
         GameDayLiveState state = gameDayStoreStateRedisRepository.find(storeId, day)
                 .orElseThrow(() -> new BaseException(ErrorCode.GAME_STATE_NOT_FOUND));
-        BigDecimal currentRate = state.inflowRate() != null
-                ? state.inflowRate()
+        BigDecimal currentRate = state.captureRate() != null
+                ? state.captureRate()
                 : state.startResponse() != null && state.startResponse().captureRate() != null
                 ? state.startResponse().captureRate()
                 : BigDecimal.ZERO;
-        BigDecimal newRate = currentRate.multiply(multiplier).setScale(4, RoundingMode.HALF_UP);
-        gameDayStoreStateRedisRepository.updateField(storeId, day, "inflow_rate", newRate.toPlainString());
+        BigDecimal newRate = captureRatePolicy.applyMultiplier(currentRate, multiplier);
+        gameDayStoreStateRedisRepository.updateField(storeId, day, "capture_rate", newRate.toPlainString());
     }
 
     // ── 할인 헬퍼 ──
@@ -374,13 +376,13 @@ public class ActionServiceImpl implements ActionService {
     }
 
     private BigDecimal resolveBelowMultiplier(BigDecimal ratio) {
-        if (ratio.compareTo(RATIO_60) <= 0) {
+        if (ratio.compareTo(RATIO_60) < 0) {
             return MULTIPLIER_BELOW_60;
         }
-        if (ratio.compareTo(RATIO_70) <= 0) {
+        if (ratio.compareTo(RATIO_70) < 0) {
             return MULTIPLIER_BELOW_70;
         }
-        if (ratio.compareTo(RATIO_80) <= 0) {
+        if (ratio.compareTo(RATIO_80) < 0) {
             return MULTIPLIER_BELOW_80;
         }
         return MULTIPLIER_BELOW_80;

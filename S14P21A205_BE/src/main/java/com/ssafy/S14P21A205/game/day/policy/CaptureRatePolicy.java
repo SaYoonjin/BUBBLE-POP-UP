@@ -1,58 +1,37 @@
 package com.ssafy.S14P21A205.game.day.policy;
 
-import com.ssafy.S14P21A205.exception.BaseException;
-import com.ssafy.S14P21A205.exception.ErrorCode;
-import com.ssafy.S14P21A205.game.season.entity.DailyReport;
-import com.ssafy.S14P21A205.game.season.repository.DailyReportRepository;
-import com.ssafy.S14P21A205.store.entity.Store;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import lombok.RequiredArgsConstructor;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
 @Component
-@RequiredArgsConstructor
 public class CaptureRatePolicy {
 
-    private static final BigDecimal INITIAL_CAPTURE_RATE = new BigDecimal("0.10");
+    private static final BigDecimal BASE_CAPTURE_RATE = new BigDecimal("0.12");
     private static final BigDecimal DECIMAL_ZERO = new BigDecimal("0.00");
-    private static final String CAPTURE_RATE_KEY_PREFIX = "captureRate:";
+    private static final BigDecimal DECIMAL_ONE = new BigDecimal("1.00");
 
-    private final DailyReportRepository dailyReportRepository;
-    private final StringRedisTemplate stringRedisTemplate;
+    public BigDecimal resolveStartingCaptureRate(BigDecimal priceBandMultiplier) {
+        return applyMultiplier(BASE_CAPTURE_RATE, priceBandMultiplier);
+    }
 
-    public BigDecimal resolveStartingCaptureRate(Store store, int day) {
-        if (day == 1) {
-            return getPersistedInitialCaptureRate(store.getId()).orElse(INITIAL_CAPTURE_RATE);
+    public BigDecimal applyMultiplier(BigDecimal currentCaptureRate, BigDecimal effectMultiplier) {
+        BigDecimal baseRate = normalizeCaptureRate(currentCaptureRate);
+        BigDecimal multiplier = normalizePositiveMultiplier(effectMultiplier);
+        return baseRate.multiply(multiplier).setScale(4, RoundingMode.HALF_UP);
+    }
+
+    public BigDecimal normalizeCaptureRate(BigDecimal value) {
+        if (value == null) {
+            return DECIMAL_ZERO.setScale(4, RoundingMode.HALF_UP);
         }
-
-        DailyReport previousDay = dailyReportRepository.findByStoreIdAndDay(store.getId(), day - 1)
-                .orElseThrow(() -> new BaseException(ErrorCode.RESOURCE_NOT_FOUND));
-        return normalizeScale(previousDay.getCaptureRate());
+        return value.max(DECIMAL_ZERO).setScale(4, RoundingMode.HALF_UP);
     }
 
-    private BigDecimal normalizeScale(BigDecimal value) {
-        return value.setScale(2, RoundingMode.HALF_UP);
-    }
-
-    public BigDecimal resolveInflowRate(BigDecimal baseCaptureRate, BigDecimal actionCaptureRateBoost) {
-        BigDecimal resolved = baseCaptureRate == null ? DECIMAL_ZERO : baseCaptureRate;
-        if (actionCaptureRateBoost != null) {
-            resolved = resolved.add(actionCaptureRateBoost);
+    private BigDecimal normalizePositiveMultiplier(BigDecimal value) {
+        if (value == null || value.signum() <= 0) {
+            return DECIMAL_ONE.setScale(4, RoundingMode.HALF_UP);
         }
-        return resolved.max(DECIMAL_ZERO).setScale(2, RoundingMode.HALF_UP);
-    }
-
-    private java.util.Optional<BigDecimal> getPersistedInitialCaptureRate(Long storeId) {
-        String value = stringRedisTemplate.opsForValue().get(captureRateKey(storeId));
-        if (value == null || value.isBlank()) {
-            return java.util.Optional.empty();
-        }
-        return java.util.Optional.of(normalizeScale(new BigDecimal(value)));
-    }
-
-    private String captureRateKey(Long storeId) {
-        return CAPTURE_RATE_KEY_PREFIX + storeId;
+        return value.setScale(4, RoundingMode.HALF_UP);
     }
 }

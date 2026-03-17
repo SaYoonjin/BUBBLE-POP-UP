@@ -28,16 +28,6 @@ public class EventEffectResolver {
             int currentDay,
             int totalDays,
             LocalDateTime currentDayStart,
-            LocalDateTime effectiveNow
-    ) {
-        return resolve(seasonId, currentDay, totalDays, currentDayStart, effectiveNow, null, null);
-    }
-
-    public EventEffect resolve(
-            Long seasonId,
-            int currentDay,
-            int totalDays,
-            LocalDateTime currentDayStart,
             LocalDateTime effectiveNow,
             Long locationId,
             Long menuId
@@ -97,7 +87,7 @@ public class EventEffectResolver {
                 appliedEvents.add(new GameStateResponse.AppliedEvent(
                         event.getEventType(),
                         event.getEventType(),
-                        resolveNewsTitle(resolvedEvent.dailyEvent(), event),
+                        event.getEventType(),
                         resolvedEvent.appliedAt()
                 ));
             }
@@ -110,6 +100,15 @@ public class EventEffectResolver {
                 ingredientCostMultiplier,
                 appliedEvents
         );
+    }
+
+    private boolean matchesScope(DailyEvent dailyEvent, Long locationId, Long menuId) {
+        Long targetLocationId = dailyEvent.getTargetLocationId();
+        Long targetMenuId = dailyEvent.getTargetMenuId();
+        if (targetLocationId != null && !targetLocationId.equals(locationId)) {
+            return false;
+        }
+        return targetMenuId == null || targetMenuId.equals(menuId);
     }
 
     private int resolveAppliedDay(DailyEvent dailyEvent) {
@@ -130,22 +129,6 @@ public class EventEffectResolver {
             return DECIMAL_ONE;
         }
         return value.setScale(2, RoundingMode.HALF_UP);
-    }
-
-    private boolean matchesScope(DailyEvent dailyEvent, Long locationId, Long menuId) {
-        Long targetLocationId = dailyEvent.getTargetLocationId();
-        Long targetMenuId = dailyEvent.getTargetMenuId();
-        if (targetLocationId != null && !targetLocationId.equals(locationId)) {
-            return false;
-        }
-        return targetMenuId == null || targetMenuId.equals(menuId);
-    }
-
-    private String resolveNewsTitle(DailyEvent dailyEvent, RandomEvent event) {
-        if (dailyEvent.getNewsTitle() != null && !dailyEvent.getNewsTitle().isBlank()) {
-            return dailyEvent.getNewsTitle();
-        }
-        return event.getEventType();
     }
 
     private record ResolvedEvent(
