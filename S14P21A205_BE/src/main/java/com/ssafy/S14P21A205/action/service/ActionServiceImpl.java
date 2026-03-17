@@ -25,7 +25,6 @@ import com.ssafy.S14P21A205.game.day.state.repository.GameDayStoreStateRedisRepo
 import com.ssafy.S14P21A205.game.season.entity.Season;
 import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
 import com.ssafy.S14P21A205.game.season.repository.SeasonRepository;
-import com.ssafy.S14P21A205.game.state.repository.GameStateRedisRepository;
 import com.ssafy.S14P21A205.order.entity.Order;
 import com.ssafy.S14P21A205.order.repository.OrderRepository;
 import com.ssafy.S14P21A205.store.entity.Store;
@@ -60,7 +59,6 @@ public class ActionServiceImpl implements ActionService {
     private static final BigDecimal DONATION_BONUS_PER_UNIT = new BigDecimal("0.01");
     private static final int DONATION_UNIT_SIZE = 5;
 
-    private final GameStateRedisRepository gameStateRedisRepository;
     private final GameDayStoreStateRedisRepository gameDayStoreStateRedisRepository;
     private final ActionRepository actionRepository;
     private final ActionLogRepository actionLogRepository;
@@ -75,7 +73,7 @@ public class ActionServiceImpl implements ActionService {
     public ActionStatusResponse getActionStatus(Integer userId) {
         Store store = findStore(userId);
         int day = getCurrentDay();
-        Map<String, Boolean> actions = gameStateRedisRepository.getActions(store.getId(), day);
+        Map<String, Boolean> actions = gameDayStoreStateRedisRepository.getActions(store.getId(), day);
         return ActionStatusResponse.from(actions);
     }
 
@@ -107,7 +105,7 @@ public class ActionServiceImpl implements ActionService {
         applyInflowRateMultiplier(store.getId(), day, multiplier);
 
         actionLogRepository.save(new ActionLog(action, store, day, null));
-        gameStateRedisRepository.markActionUsed(store.getId(), day, field);
+        gameDayStoreStateRedisRepository.markActionUsed(store.getId(), day, field);
 
         return new ActionResponse(
                 "PROMOTION_" + request.promotionType().name(),
@@ -156,7 +154,7 @@ public class ActionServiceImpl implements ActionService {
 
         // actionValue에 가격구간 배수 저장 (이력용)
         actionLogRepository.save(new ActionLog(action, store, day, priceRange.multiplier));
-        gameStateRedisRepository.markActionUsed(store.getId(), day, "discount");
+        gameDayStoreStateRedisRepository.markActionUsed(store.getId(), day, "discount");
 
         return new DiscountResponse(
                 previousPrice,
@@ -202,7 +200,7 @@ public class ActionServiceImpl implements ActionService {
 
         // actionValue에 유입률 보너스 저장 (이력용)
         actionLogRepository.save(new ActionLog(action, store, day, captureRateBonus));
-        gameStateRedisRepository.markActionUsed(store.getId(), day, "donation");
+        gameDayStoreStateRedisRepository.markActionUsed(store.getId(), day, "donation");
 
         return new DonationResponse(
                 request.quantity(),
@@ -237,7 +235,7 @@ public class ActionServiceImpl implements ActionService {
                 Order.createEmergency(store.getMenu(), store, request.quantity(), totalCost, day, arrivedTime)
         );
 
-        gameStateRedisRepository.markActionUsed(store.getId(), day, "emergency");
+        gameDayStoreStateRedisRepository.markActionUsed(store.getId(), day, "emergency");
 
         return new EmergencyOrderResponse(
                 order.getId(),
@@ -268,7 +266,7 @@ public class ActionServiceImpl implements ActionService {
     }
 
     private void validateNotUsed(Long storeId, int day, String field) {
-        if (gameStateRedisRepository.isActionUsed(storeId, day, field)) {
+        if (gameDayStoreStateRedisRepository.isActionUsed(storeId, day, field)) {
             throw new BaseException(ErrorCode.ACTION_ALREADY_USED);
         }
     }

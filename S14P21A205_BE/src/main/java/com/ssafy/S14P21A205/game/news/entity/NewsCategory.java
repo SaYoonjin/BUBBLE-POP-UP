@@ -1,4 +1,4 @@
-package com.ssafy.S14P21A205.news.entity;
+package com.ssafy.S14P21A205.game.news.entity;
 
 public enum NewsCategory {
     REVENUE,

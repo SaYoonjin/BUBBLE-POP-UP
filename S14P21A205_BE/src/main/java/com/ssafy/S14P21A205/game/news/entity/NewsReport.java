@@ -1,4 +1,4 @@
-package com.ssafy.S14P21A205.news.entity;
+package com.ssafy.S14P21A205.game.news.entity;
 
 import com.ssafy.S14P21A205.game.season.entity.Season;
 import jakarta.persistence.Column;

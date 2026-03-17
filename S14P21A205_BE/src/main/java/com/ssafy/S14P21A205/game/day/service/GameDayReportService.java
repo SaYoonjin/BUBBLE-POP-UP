@@ -14,6 +14,8 @@ import com.ssafy.S14P21A205.game.season.entity.DailyReport;
 import com.ssafy.S14P21A205.game.season.entity.Season;
 import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
 import com.ssafy.S14P21A205.game.season.repository.DailyReportRepository;
+import com.ssafy.S14P21A205.game.time.model.DayWindow;
+import com.ssafy.S14P21A205.game.time.service.SeasonTimelineService;
 import com.ssafy.S14P21A205.store.entity.Store;
 import com.ssafy.S14P21A205.store.repository.StoreRepository;
 import com.ssafy.S14P21A205.user.entity.User;
@@ -38,7 +40,7 @@ public class GameDayReportService {
     private static final int STOCK_DISPOSED_COUNT = 0;
     private static final BigDecimal ZERO_CAPTURE_RATE = new BigDecimal("0.00");
     private static final Set<Integer> REGULAR_ORDER_DAYS = Set.of(2, 4, 6);
-    private static final SeasonTimeline SEASON_TIMELINE_POLICY = new SeasonTimeline();
+    private static final SeasonTimelineService SEASON_TIMELINE_SERVICE = new SeasonTimelineService();
 
     private final UserService userService;
     private final StoreRepository storeRepository;
@@ -63,8 +65,8 @@ public class GameDayReportService {
             return;
         }
 
-        SeasonTimeline.DayTimeline timeline =
-                SEASON_TIMELINE_POLICY.currentDay(state.startedAt(), day, store.getSeason().getTotalDays());
+        DayWindow timeline =
+                SEASON_TIMELINE_SERVICE.currentDay(state.startedAt(), day, store.getSeason().getTotalDays());
         if (LocalDateTime.now(clock).isBefore(timeline.businessEnd())) {
             return;
         }

@@ -16,6 +16,8 @@ import com.ssafy.S14P21A205.game.day.state.GameDayLiveState;
 import com.ssafy.S14P21A205.game.day.state.repository.GameDayStoreStateRedisRepository;
 import com.ssafy.S14P21A205.game.season.entity.Season;
 import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
+import com.ssafy.S14P21A205.game.time.model.DayWindow;
+import com.ssafy.S14P21A205.game.time.service.SeasonTimelineService;
 import com.ssafy.S14P21A205.order.entity.Order;
 import com.ssafy.S14P21A205.order.entity.OrderType;
 import com.ssafy.S14P21A205.order.repository.OrderRepository;
@@ -39,7 +41,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class GameDayStateService {
 
     private static final BigDecimal DECIMAL_ZERO = new BigDecimal("0.00");
-    private static final SeasonTimeline SEASON_TIMELINE_POLICY = new SeasonTimeline();
+    private static final SeasonTimelineService SEASON_TIMELINE_SERVICE = new SeasonTimelineService();
 
     private final UserService userService;
     private final StoreRepository storeRepository;
@@ -75,8 +77,8 @@ public class GameDayStateService {
 
         Order dailyStartOrder = orderRepository.findDailyStartOrder(store.getId(), day).orElse(null);
         GameDayLiveState state = normalizeState(rawState, dailyStartOrder);
-        SeasonTimeline.DayTimeline currentTimeline =
-                SEASON_TIMELINE_POLICY.currentDay(state.startedAt(), day, totalDays);
+        DayWindow currentTimeline =
+                SEASON_TIMELINE_SERVICE.currentDay(state.startedAt(), day, totalDays);
 
         LocalDateTime serverTime = LocalDateTime.now(clock);
         LocalDateTime effectiveNow = min(serverTime, currentTimeline.reportEnd());
@@ -281,7 +283,7 @@ public class GameDayStateService {
     private CalculatedGameState calculateGameState(
             Store store,
             GameDayLiveState state,
-            SeasonTimeline.DayTimeline currentTimeline,
+            DayWindow currentTimeline,
             int tick,
             int purchaseCursor,
             ActionUsage actionUsage,

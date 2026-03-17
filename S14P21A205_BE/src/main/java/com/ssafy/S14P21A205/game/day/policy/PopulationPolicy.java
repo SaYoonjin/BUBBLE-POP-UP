@@ -4,11 +4,13 @@ import com.ssafy.S14P21A205.exception.BaseException;
 import com.ssafy.S14P21A205.exception.ErrorCode;
 import com.ssafy.S14P21A205.game.day.dto.GameDayStartResponse;
 import com.ssafy.S14P21A205.game.day.model.DaySchedule;
-import com.ssafy.S14P21A205.game.day.service.SeasonTimeline;
 import com.ssafy.S14P21A205.game.environment.entity.Population;
 import com.ssafy.S14P21A205.game.environment.entity.Traffic;
 import com.ssafy.S14P21A205.game.environment.repository.PopulationRepository;
 import com.ssafy.S14P21A205.game.environment.repository.TrafficRepository;
+import com.ssafy.S14P21A205.game.time.model.DayWindow;
+import com.ssafy.S14P21A205.game.time.policy.GameTimePolicy;
+import com.ssafy.S14P21A205.game.time.service.SeasonTimelineService;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Duration;
@@ -27,12 +29,12 @@ import org.springframework.stereotype.Component;
 public class PopulationPolicy {
 
     private static final BigDecimal DECIMAL_ONE = new BigDecimal("1.00");
-    private static final int BUSINESS_OPEN_HOUR = SeasonTimeline.BUSINESS_OPEN_HOUR;
-    private static final int BUSINESS_CLOSE_HOUR = SeasonTimeline.BUSINESS_CLOSE_HOUR;
+    private static final int BUSINESS_OPEN_HOUR = GameTimePolicy.BUSINESS_OPEN_HOUR;
+    private static final int BUSINESS_CLOSE_HOUR = GameTimePolicy.BUSINESS_CLOSE_HOUR;
 
     private final PopulationRepository populationRepository;
     private final TrafficRepository trafficRepository;
-    private final SeasonTimeline seasonTimeline = new SeasonTimeline();
+    private final SeasonTimelineService seasonTimelineService = new SeasonTimelineService();
 
     public DaySchedule buildDaySchedule(Long locationId, int day) {
         List<Population> populations = populationRepository.findByLocationIdOrderByDateAsc(locationId);
@@ -82,7 +84,7 @@ public class PopulationPolicy {
 
     public int calculateCurrentPopulation(
             GameDayStartResponse startResponse,
-            SeasonTimeline.DayTimeline currentTimeline,
+            DayWindow currentTimeline,
             BigDecimal populationEventMultiplier,
             LocalDateTime effectiveNow
     ) {
@@ -95,7 +97,7 @@ public class PopulationPolicy {
         }
 
         List<GameDayStartResponse.HourlySchedule> schedules = new ArrayList<>(startResponse.hourlySchedule().values());
-        long totalMillis = seasonTimeline.businessDuration().toMillis();
+        long totalMillis = seasonTimelineService.businessDuration().toMillis();
         long elapsedMillis = Duration.between(currentTimeline.businessStart(), effectiveNow).toMillis();
         long boundedElapsedMillis = Math.max(0L, Math.min(elapsedMillis, totalMillis));
         int scheduleIndex = (int) Math.min(

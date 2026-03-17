@@ -7,6 +7,7 @@ import com.ssafy.S14P21A205.game.day.state.GameDayLiveState;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -15,6 +16,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Repository;
 import org.springframework.util.StringUtils;
+import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
 
 @Repository
@@ -23,6 +25,7 @@ public class GameDayStoreStateRedisRepository {
 
     private static final String STATE_KEY_PATTERN = "game:store:%d:day:%d:state";
     private static final String TICK_LOG_KEY_PATTERN = "game:store:%d:day:%d:tick_log";
+    private static final String ACTIONS_KEY_PATTERN = "game:store:%d:day:%d:actions";
     private static final String FIELD_STARTED_AT = "started_at";
     private static final String FIELD_PURCHASE_LIST = "purchase_list";
     private static final String FIELD_PURCHASE_CURSOR = "purchase_cursor";
@@ -125,12 +128,42 @@ public class GameDayStoreStateRedisRepository {
         }
     }
 
+    public Map<String, Boolean> getActions(Long storeId, int day) {
+        String json = stringRedisTemplate.opsForValue().get(buildActionsKey(storeId, day));
+        if (json == null) {
+            return new HashMap<>();
+        }
+        try {
+            return objectMapper.readValue(json, new TypeReference<>() {});
+        } catch (Exception e) {
+            return new HashMap<>();
+        }
+    }
+
+    public boolean isActionUsed(Long storeId, int day, String actionField) {
+        return Boolean.TRUE.equals(getActions(storeId, day).get(actionField));
+    }
+
+    public void markActionUsed(Long storeId, int day, String actionField) {
+        Map<String, Boolean> actions = getActions(storeId, day);
+        actions.put(actionField, true);
+        try {
+            stringRedisTemplate.opsForValue().set(buildActionsKey(storeId, day), objectMapper.writeValueAsString(actions));
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to serialize actions", e);
+        }
+    }
+
     String buildStateKey(Long storeId, Integer day) {
         return STATE_KEY_PATTERN.formatted(storeId, day);
     }
 
     String buildTickLogKey(Long storeId, Integer day) {
         return TICK_LOG_KEY_PATTERN.formatted(storeId, day);
+    }
+
+    String buildActionsKey(Long storeId, Integer day) {
+        return ACTIONS_KEY_PATTERN.formatted(storeId, day);
     }
 
     private void saveTickLog(Long storeId, Integer day, GameDayLiveState state) {
