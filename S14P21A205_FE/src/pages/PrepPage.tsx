@@ -4,7 +4,6 @@ import CountdownTimer from "../components/common/CountdownTimer";
 import MenuSelector from "../components/game/MenuSelector";
 import PriceSlider from "../components/game/PriceSlider";
 import QuantityCounter from "../components/game/QuantityCounter";
-import RankingPanel from "../components/game/RankingPanel";
 import CozyNewspaper from "../components/game/CozyNewspaper";
 
 const mockMenus = [
@@ -130,20 +129,16 @@ export default function PrepPage() {
             </div>
           ) : (
             /* Tab: 버블 뉴스 */
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-              <div className="flex flex-col gap-8 lg:col-span-4">
-                <RankingPanel title="유동인구 순위" icon="groups" items={mockPopulationRanking} />
-                <RankingPanel title="지역 매출 순위" icon="storefront" items={mockRevenueRanking} />
-              </div>
-              <div className="lg:col-span-8">
-                <CozyNewspaper
-                  items={mockNews}
-                  expandedId={expandedNewsId}
-                  onToggle={(id) => setExpandedNewsId(expandedNewsId === id ? null : id)}
-                  day={day}
-                />
-              </div>
-            </div>
+            <CozyNewspaper
+              items={mockNews}
+              expandedId={expandedNewsId}
+              onToggle={(id) => setExpandedNewsId(expandedNewsId === id ? null : id)}
+              day={day}
+              rankings={[
+                { title: "유동인구 순위", items: mockPopulationRanking },
+                { title: "지역 매출 순위", items: mockRevenueRanking, memo: "성수동 재고와 가격대 다시 확인하기!" },
+              ]}
+            />
           )}
         </div>
       </main>

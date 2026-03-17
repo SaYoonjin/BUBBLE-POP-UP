@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import CozyNewspaper from "../components/game/CozyNewspaper";
-import CozyNotebook from "../components/game/CozyNotebook";
 
 const mockPopulationRanking = [
   { rank: 1, name: "홍대", change: "+2.4%", positive: true },
@@ -73,20 +72,16 @@ export default function CozyPrepPage() {
             </div>
           </section>
 
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-            <div className="lg:col-span-4 flex flex-col gap-6 sticky top-24">
-              <CozyNotebook title="유동인구 순위" items={mockPopulationRanking} compact />
-              <CozyNotebook title="지역 매출 순위" items={mockRevenueRanking} memo="홍대 재고 확인하기!" compact />
-            </div>
-            <div className="lg:col-span-8">
-              <CozyNewspaper
-                items={mockNews}
-                expandedId={expandedNewsId}
-                onToggle={(id) => setExpandedNewsId(expandedNewsId === id ? null : id)}
-                day={day}
-              />
-            </div>
-          </div>
+          <CozyNewspaper
+            items={mockNews}
+            expandedId={expandedNewsId}
+            onToggle={(id) => setExpandedNewsId(expandedNewsId === id ? null : id)}
+            day={day}
+            rankings={[
+              { title: "유동인구 순위", items: mockPopulationRanking },
+              { title: "지역 매출 순위", items: mockRevenueRanking, memo: "홍대 재고 확인하기!" },
+            ]}
+          />
         </div>
       </main>
     </div>
