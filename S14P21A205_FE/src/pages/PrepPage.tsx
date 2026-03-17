@@ -108,17 +108,17 @@ export default function PrepPage() {
       <AppHeader nickname="Owner" />
 
       {/* Main */}
-      <main className="flex-1 flex flex-col items-center py-8 pt-24 px-4 sm:px-10">
-        <div className="w-full max-w-5xl flex flex-col gap-8">
+      <main className="flex-1 flex flex-col items-center py-6 pt-24 px-4 sm:px-8">
+        <div className="w-full max-w-[1000px] flex flex-col gap-6">
           {/* Page Header */}
-          <div className="flex flex-col gap-6">
+          <div className="flex flex-col gap-5">
             <div className="flex items-center justify-between">
                 <div className="flex flex-col gap-1">
                   <div className="flex items-center gap-2 text-slate-400 text-sm font-medium">
                     <span className="material-symbols-outlined text-[1.25rem]">calendar_today</span>
                     <span>2026년 3월 17일 · DAY {day}</span>
                   </div>
-                <h1 className="text-slate-900 text-4xl font-black leading-tight tracking-tight">
+                <h1 className="text-slate-900 text-3xl md:text-[2rem] font-black leading-tight tracking-tight">
                   {tab === "prep" ? "영업 준비" : "버블 뉴스"}
                 </h1>
               </div>
@@ -126,10 +126,10 @@ export default function PrepPage() {
             </div>
 
             {/* Tabs */}
-            <div className="flex items-center gap-8 border-b border-slate-100">
+            <div className="flex items-center gap-6 border-b border-slate-100">
               <button
                 onClick={() => setTab("prep")}
-                className={`pb-3 text-base transition-colors ${
+                className={`pb-2.5 text-[15px] transition-colors ${
                   tab === "prep"
                     ? "border-b-2 border-slate-900 text-slate-900 font-bold"
                     : "text-slate-400 hover:text-slate-600 font-medium"
@@ -139,7 +139,7 @@ export default function PrepPage() {
               </button>
               <button
                 onClick={() => setTab("news")}
-                className={`pb-3 text-base transition-colors ${
+                className={`pb-2.5 text-[15px] transition-colors ${
                   tab === "news"
                     ? "border-b-2 border-slate-900 text-slate-900 font-bold"
                     : "text-slate-400 hover:text-slate-600 font-medium"
@@ -163,15 +163,13 @@ export default function PrepPage() {
                   max={maxSellingPrice}
                   step={100}
                   costPrice={selectedMenuData.costPrice}
-                  recommendedPrice={recommendedPrice}
                   defaultPrice={defaultSellingPrice}
                   defaultPriceLabel={day >= 2 ? "이전 판매가" : "권장가"}
-                  previousPrice={day >= 2 ? selectedMenuData.previousSalePrice : undefined}
                   onChange={setPrice}
                 />
-                <div className="flex flex-col gap-6">
+                <div className="flex flex-col gap-5">
                   <QuantityCounter quantity={quantity} min={50} max={500} step={10} onChange={setQuantity} />
-                  <div className="flex flex-col gap-4">
+                  <div className="flex flex-col gap-3.5">
                     {hasItemDiscount && (
                       <div className="rounded-2xl border border-red-100 bg-red-50/60 px-4 py-3 flex items-center justify-between">
                         <div>
@@ -182,19 +180,19 @@ export default function PrepPage() {
                       </div>
                     )}
                     <div className="flex items-center justify-between px-4 py-2">
-                      <span className="text-slate-500 font-medium">총 예상 비용</span>
+                      <span className="text-sm text-slate-500 font-medium">총 예상 비용</span>
                       <div className="text-right">
                         {hasItemDiscount && (
                           <p className="text-sm font-bold text-red-400 line-through decoration-2">
                             ₩{totalCost.toLocaleString()}
                           </p>
                         )}
-                        <span className="text-3xl font-black text-slate-900 tracking-tight">
+                        <span className="text-[1.75rem] font-black text-slate-900 tracking-tight">
                           ₩{discountedTotalCost.toLocaleString()}
                         </span>
                       </div>
                     </div>
-                    <button className="w-full bg-primary hover:bg-primary-dark text-slate-900 hover:text-white font-bold text-lg py-5 px-8 rounded-2xl shadow-lg shadow-primary/20 transition-all flex items-center justify-center gap-2 group">
+                    <button className="w-full bg-primary hover:bg-primary-dark text-slate-900 hover:text-white font-bold text-base py-4 px-6 rounded-2xl shadow-lg shadow-primary/20 transition-all flex items-center justify-center gap-2 group">
                       <span>준비 완료하기</span>
                       <span className="material-symbols-outlined group-hover:translate-x-1 transition-transform">
                         arrow_forward
