@@ -112,17 +112,17 @@ export default function PrepPage() {
         <div className="w-full max-w-[1000px] flex flex-col gap-6">
           {/* Page Header */}
           <div className="flex flex-col gap-5">
-            <div className="flex items-center justify-between">
-                <div className="flex flex-col gap-1">
+            <div className="flex flex-col gap-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="flex items-center gap-2 text-slate-400 text-sm font-medium">
                     <span className="material-symbols-outlined text-[1.25rem]">calendar_today</span>
-                    <span>2026년 3월 17일 · DAY {day}</span>
+                    <span>DAY {day}</span>
                   </div>
+                  <CountdownTimer initialSeconds={50} label="준비 시간" />
+                </div>
                 <h1 className="text-slate-900 text-3xl md:text-[2rem] font-black leading-tight tracking-tight">
                   {tab === "prep" ? "영업 준비" : "버블 뉴스"}
                 </h1>
-              </div>
-              <CountdownTimer initialSeconds={50} label="준비 시간" />
             </div>
 
             {/* Tabs */}

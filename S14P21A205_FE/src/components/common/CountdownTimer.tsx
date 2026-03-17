@@ -37,14 +37,24 @@ export default function CountdownTimer({
   return (
     <div
       aria-label={`${label} ${formattedTime}`}
-      className={`min-w-[104px] rounded-2xl border px-4 py-3 text-center shadow-soft ${
+      className={`inline-flex items-center gap-2 rounded-full border px-2.5 py-1.5 text-center ${
         isUrgent
-          ? "border-red-100 bg-red-50/90 text-red-500"
-          : "border-slate-200 bg-white text-slate-900"
+          ? "border-red-200 bg-red-50/90 text-red-500"
+          : "border-slate-200 bg-white/90 text-slate-700 shadow-soft"
       }`}
     >
       <span className="sr-only">{label}</span>
-      <div className="font-mono text-xl font-black tracking-tight md:text-[1.35rem]">
+      <span
+        aria-hidden="true"
+        className={`flex size-6 items-center justify-center rounded-full ${
+          isUrgent ? "bg-red-100 text-red-500" : "bg-primary/15 text-primary-dark"
+        }`}
+      >
+        <span className="material-symbols-outlined text-[15px]">schedule</span>
+      </span>
+      <div className={`font-display tabular-nums text-[0.95rem] font-extrabold tracking-[0.02em] md:text-[1rem] ${
+        isUrgent ? "text-red-500" : "text-slate-900"
+      }`}>
         {formattedTime}
       </div>
     </div>
