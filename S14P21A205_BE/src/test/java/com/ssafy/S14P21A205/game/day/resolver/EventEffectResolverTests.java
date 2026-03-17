@@ -49,7 +49,7 @@ class EventEffectResolverTests {
         assertThat(effect.populationEventMultiplier()).isEqualByComparingTo("1.50");
         assertThat(effect.ingredientCostMultiplier()).isEqualByComparingTo("1.05");
         assertThat(effect.appliedEvents()).hasSize(1);
-        assertThat(effect.appliedEvents().get(0).newsTitle()).isEqualTo("Celebrity arrived");
+        assertThat(effect.appliedEvents().get(0).newsTitle()).isEqualTo("CELEBRITY");
     }
 
     @Test
@@ -96,7 +96,6 @@ class EventEffectResolverTests {
         ReflectionTestUtils.setField(dailyEvent, "day", 1);
         ReflectionTestUtils.setField(dailyEvent, "applyOffsetSeconds", 0);
         ReflectionTestUtils.setField(dailyEvent, "expireOffsetSeconds", 120);
-        ReflectionTestUtils.setField(dailyEvent, "newsTitle", "Celebrity arrived");
         ReflectionTestUtils.setField(dailyEvent, "targetLocationId", targetLocationId);
         ReflectionTestUtils.setField(dailyEvent, "targetMenuId", targetMenuId);
         return dailyEvent;

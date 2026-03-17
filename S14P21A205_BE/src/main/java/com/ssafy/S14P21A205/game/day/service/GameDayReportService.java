@@ -39,7 +39,7 @@ public class GameDayReportService {
     private static final int MAX_SUPPORTED_DAY = 7;
     private static final int STOCK_DISPOSED_COUNT = 0;
     private static final BigDecimal ZERO_CAPTURE_RATE = new BigDecimal("0.00");
-    private static final Set<Integer> REGULAR_ORDER_DAYS = Set.of(2, 4, 6);
+    private static final Set<Integer> REGULAR_ORDER_DAYS = Set.of(1, 3, 5, 7);
     private static final SeasonTimelineService SEASON_TIMELINE_SERVICE = new SeasonTimelineService();
 
     private final UserService userService;

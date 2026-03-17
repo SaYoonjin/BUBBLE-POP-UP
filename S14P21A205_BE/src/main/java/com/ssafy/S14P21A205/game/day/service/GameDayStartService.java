@@ -2,19 +2,21 @@ package com.ssafy.S14P21A205.game.day.service;
 
 import com.ssafy.S14P21A205.exception.BaseException;
 import com.ssafy.S14P21A205.exception.ErrorCode;
+import com.ssafy.S14P21A205.game.day.dto.GameDayStartResponse;
 import com.ssafy.S14P21A205.game.day.model.DaySchedule;
 import com.ssafy.S14P21A205.game.day.model.OpeningState;
-import com.ssafy.S14P21A205.game.day.dto.GameDayStartResponse;
 import com.ssafy.S14P21A205.game.day.generator.PurchaseListGenerator;
 import com.ssafy.S14P21A205.game.day.policy.CaptureRatePolicy;
-import com.ssafy.S14P21A205.game.day.resolver.EventScheduleResolver;
-import com.ssafy.S14P21A205.game.day.policy.PopulationPolicy;
 import com.ssafy.S14P21A205.game.day.policy.RentPolicy;
+import com.ssafy.S14P21A205.game.day.policy.StoreRankingPolicy;
+import com.ssafy.S14P21A205.game.day.resolver.EnvironmentScheduleResolver;
+import com.ssafy.S14P21A205.game.day.resolver.EventScheduleResolver;
+import com.ssafy.S14P21A205.game.day.resolver.NewsRankingResolver;
 import com.ssafy.S14P21A205.game.day.state.GameDayLiveState;
 import com.ssafy.S14P21A205.game.day.state.repository.GameDayStoreStateRedisRepository;
-import com.ssafy.S14P21A205.game.environment.entity.Weather;
+import com.ssafy.S14P21A205.game.environment.entity.Festival;
 import com.ssafy.S14P21A205.game.environment.entity.WeatherType;
-import com.ssafy.S14P21A205.game.environment.repository.WeatherRepository;
+import com.ssafy.S14P21A205.game.environment.repository.FestivalRepository;
 import com.ssafy.S14P21A205.game.season.entity.Season;
 import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
 import com.ssafy.S14P21A205.game.time.policy.GameTimePolicy;
@@ -25,7 +27,6 @@ import com.ssafy.S14P21A205.store.repository.StoreRepository;
 import com.ssafy.S14P21A205.user.entity.User;
 import com.ssafy.S14P21A205.user.service.UserService;
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -47,11 +48,13 @@ public class GameDayStartService {
 
     private final UserService userService;
     private final StoreRepository storeRepository;
-    private final WeatherRepository weatherRepository;
+    private final EnvironmentScheduleResolver environmentScheduleResolver;
+    private final FestivalRepository festivalRepository;
     private final OrderRepository orderRepository;
     private final RentPolicy rentPolicy;
-    private final PopulationPolicy populationPolicy;
     private final CaptureRatePolicy captureRatePolicy;
+    private final StoreRankingPolicy marketRankingPolicy;
+    private final NewsRankingResolver newsRankingResolver;
     private final EventScheduleResolver eventScheduleResolver;
     private final GameDayStoreStateRedisRepository gameDayStoreStateRedisRepository;
     private final PurchaseListGenerator purchaseListGenerator;
@@ -63,33 +66,53 @@ public class GameDayStartService {
         Store store = getActiveStore(user.getId());
 
         int day = resolveCurrentDay(store.getSeason());
-        GameDayLiveState existingState = gameDayStoreStateRedisRepository
-                .find(store.getId(), day)
-                .orElse(null);
+        GameDayLiveState existingState = gameDayStoreStateRedisRepository.find(store.getId(), day).orElse(null);
         if (existingState != null && existingState.startResponse() != null) {
             return existingState.startResponse();
         }
 
-        Order existingOrder = orderRepository.findDailyStartOrder(store.getId(), day).orElse(null);
-        OpeningState openingState = rentPolicy.resolveStartingState(store, day, existingOrder);
-
-        DaySchedule daySchedule = populationPolicy.buildDaySchedule(store.getLocation().getId(), day);
-        Weather weather = selectWeather(day);
-        BigDecimal captureRate = captureRatePolicy.resolveStartingCaptureRate(store, day);
+        EnvironmentScheduleResolver.ResolvedEnvironment resolvedEnvironment = environmentScheduleResolver.resolve(
+                store.getSeason().getId(),
+                store.getLocation().getId(),
+                day
+        );
+        DaySchedule daySchedule = resolvedEnvironment.daySchedule();
+        List<Store> seasonStores = storeRepository.findBySeason_IdOrderByIdAsc(store.getSeason().getId());
+        Festival festival = selectFestival(store.getLocation().getId(), store.getSeason().getId(), day);
+        NewsRankingResolver.PreviousDayRanking previousDayRanking = newsRankingResolver.resolve(store, day);
+        GameDayStartResponse.MarketSnapshot marketSnapshot =
+                marketRankingPolicy.resolveSnapshot(
+                        store,
+                        seasonStores,
+                        daySchedule,
+                        festival,
+                        previousDayRanking.areaEntryRank(),
+                        previousDayRanking.trendKeywordRank()
+                );
+        List<Order> existingOrders = orderRepository.findDailyStartOrders(store.getId(), day);
+        OpeningState openingState = rentPolicy.resolveStartingState(store, day, existingOrders, marketSnapshot);
+        BigDecimal captureRate = captureRatePolicy.resolveStartingCaptureRate(marketSnapshot.priceBandMultiplier());
         List<GameDayStartResponse.EventSchedule> eventSchedule =
-                eventScheduleResolver.resolve(store.getSeason().getId(), day);
+                eventScheduleResolver.resolve(
+                        store.getSeason().getId(),
+                        day,
+                        store.getLocation().getId(),
+                        store.getMenu().getId()
+                );
 
         GameDayStartResponse response = new GameDayStartResponse(
                 formatHour(BUSINESS_OPEN_HOUR),
                 formatHour(BUSINESS_CLOSE_HOUR),
                 daySchedule.hourlySchedule(),
-                toWeatherLabel(weather.getWeatherType()),
-                normalizeScale(weather.getPopulationPercent()),
+                toWeatherLabel(resolvedEnvironment.weatherType()),
+                resolvedEnvironment.weatherMultiplier(),
                 daySchedule.dailyTrafficMultiplier(),
                 captureRate,
                 eventSchedule,
                 openingState.initialBalance(),
-                openingState.initialStock()
+                openingState.initialStock(),
+                openingState.openingSummary(),
+                marketSnapshot
         );
 
         writeInitialState(store, day, openingState, response);
@@ -109,12 +132,16 @@ public class GameDayStartService {
         return currentDay;
     }
 
-    private Weather selectWeather(int day) {
-        List<Weather> weathers = weatherRepository.findAllByOrderByIdAsc();
-        if (weathers.isEmpty()) {
-            throw new BaseException(ErrorCode.RESOURCE_NOT_FOUND);
+    private Festival selectFestival(Long locationId, Long seasonId, int day) {
+        if (day != 4) {
+            return null;
         }
-        return weathers.get(Math.floorMod(day - 1, weathers.size()));
+        List<Festival> festivals = festivalRepository.findByLocationIdOrderByIdAsc(locationId);
+        if (festivals.isEmpty()) {
+            return null;
+        }
+        int index = Math.floorMod(Math.toIntExact(seasonId - 1L), festivals.size());
+        return festivals.get(index);
     }
 
     private void writeInitialState(
@@ -135,7 +162,7 @@ public class GameDayStartService {
                         response,
                         0,
                         0,
-                        normalizeCaptureRate(response.captureRate()),
+                        captureRatePolicy.normalizeCaptureRate(response.captureRate()),
                         store.getPrice(),
                         0,
                         0,
@@ -143,7 +170,9 @@ public class GameDayStartService {
                         0,
                         0,
                         0L,
-                        (long) openingState.orderCost(),
+                        response.openingSummary() == null || response.openingSummary().fixedCostTotal() == null
+                                ? 0L
+                                : response.openingSummary().fixedCostTotal().longValue(),
                         (long) openingState.initialBalance(),
                         openingState.initialStock(),
                         startedAt
@@ -153,17 +182,6 @@ public class GameDayStartService {
 
     private String toWeatherLabel(WeatherType weatherType) {
         return weatherType.name();
-    }
-
-    private BigDecimal normalizeScale(BigDecimal value) {
-        return value.setScale(2, RoundingMode.HALF_UP);
-    }
-
-    private BigDecimal normalizeCaptureRate(BigDecimal value) {
-        if (value == null) {
-            return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
-        }
-        return value.max(BigDecimal.ZERO).setScale(2, RoundingMode.HALF_UP);
     }
 
     private String formatHour(int hour) {

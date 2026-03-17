@@ -152,7 +152,9 @@ public final class GameDayTestFixtures {
                 CAPTURE_RATE,
                 eventSchedules,
                 INITIAL_BALANCE,
-                INITIAL_STOCK
+                INITIAL_STOCK,
+                null,
+                null
         );
     }
 
@@ -225,7 +227,6 @@ public final class GameDayTestFixtures {
                 CURRENT_DAY,
                 0,
                 null,
-                "global-support",
                 null,
                 null
         );
@@ -238,7 +239,6 @@ public final class GameDayTestFixtures {
                 CURRENT_DAY,
                 0,
                 null,
-                "menu-cost-up",
                 null,
                 MENU_ID
         );
@@ -251,7 +251,6 @@ public final class GameDayTestFixtures {
                 CURRENT_DAY,
                 60,
                 null,
-                "location-festival",
                 LOCATION_ID,
                 null
         );
@@ -260,7 +259,7 @@ public final class GameDayTestFixtures {
     public static Map<String, GameDayStartResponse.HourlySchedule> hourlySchedule() {
         Map<String, GameDayStartResponse.HourlySchedule> hourlySchedule = new LinkedHashMap<>();
         for (int hour = 10; hour < 22; hour++) {
-            hourlySchedule.put(String.valueOf(hour), new GameDayStartResponse.HourlySchedule(120, BigDecimal.ONE));
+            hourlySchedule.put(String.valueOf(hour), new GameDayStartResponse.HourlySchedule(120, BigDecimal.ONE, BigDecimal.ONE, 120));
         }
         return hourlySchedule;
     }
@@ -271,7 +270,6 @@ public final class GameDayTestFixtures {
             Integer day,
             Integer applyOffsetSeconds,
             Integer expireOffsetSeconds,
-            String newsTitle,
             Long targetLocationId,
             Long targetMenuId
     ) {
@@ -282,7 +280,6 @@ public final class GameDayTestFixtures {
         ReflectionTestUtils.setField(dailyEvent, "day", day);
         ReflectionTestUtils.setField(dailyEvent, "applyOffsetSeconds", applyOffsetSeconds);
         ReflectionTestUtils.setField(dailyEvent, "expireOffsetSeconds", expireOffsetSeconds);
-        ReflectionTestUtils.setField(dailyEvent, "newsTitle", newsTitle);
         ReflectionTestUtils.setField(dailyEvent, "targetLocationId", targetLocationId);
         ReflectionTestUtils.setField(dailyEvent, "targetMenuId", targetMenuId);
         return dailyEvent;

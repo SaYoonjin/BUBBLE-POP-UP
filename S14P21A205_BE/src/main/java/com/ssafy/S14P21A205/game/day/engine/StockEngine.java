@@ -37,13 +37,13 @@ public class StockEngine {
         return tickBoundary.isAfter(currentTimeline.businessEnd()) ? currentTimeline.businessEnd() : tickBoundary;
     }
 
-    public int calculateTickCustomerCount(int populationPerStore, BigDecimal inflowRate) {
-        if (populationPerStore <= 0 || inflowRate == null || inflowRate.signum() <= 0) {
+    public int calculateTickCustomerCount(int populationPerStore, BigDecimal captureRate) {
+        if (populationPerStore <= 0 || captureRate == null || captureRate.signum() <= 0) {
             return 0;
         }
 
         return BigDecimal.valueOf(populationPerStore)
-                .multiply(inflowRate)
+                .multiply(captureRate)
                 .setScale(0, RoundingMode.HALF_UP)
                 .intValue();
     }

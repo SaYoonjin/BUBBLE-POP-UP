@@ -96,7 +96,7 @@ class GameDayStateServiceTests {
         EventEffectResolver eventEffectResolver = new EventEffectResolver(dailyEventRepository);
         StockEngine stockEngine = new StockEngine();
         PopulationPolicy populationPolicy = new PopulationPolicy(null, null);
-        CaptureRatePolicy captureRatePolicy = new CaptureRatePolicy(dailyReportRepository, stringRedisTemplate);
+        CaptureRatePolicy captureRatePolicy = new CaptureRatePolicy();
         CostPolicy costPolicy = new CostPolicy();
         return new GameDayStateService(
                 userService,
@@ -127,7 +127,23 @@ class GameDayStateServiceTests {
                 EventStartTime.IMMEDIATE,
                 EventEndTime.SAME_DAY,
                 40,
-                120
+                120,
+                null,
+                null
+        );
+        DailyEvent ignoredScopedEvent = dailyEvent(
+                store.getSeason(),
+                1,
+                "OTHER_MENU_ONLY",
+                "2.00",
+                999,
+                7,
+                EventStartTime.IMMEDIATE,
+                EventEndTime.SAME_DAY,
+                40,
+                120,
+                null,
+                99L
         );
         GameDayLiveState state = state(
                 500,
@@ -146,7 +162,8 @@ class GameDayStateServiceTests {
         when(orderRepository.findByStoreIdAndOrderedDayAndOrderTypeOrderByArrivedTimeAscIdAsc(15L, 1, OrderType.EMERGENCY))
                 .thenReturn(List.of());
         when(actionLogRepository.findByStore_IdAndGameDayAndIsUsedTrue(15L, 1)).thenReturn(List.of());
-        when(dailyEventRepository.findBySeasonIdAndDayBetweenOrderByDayAscIdAsc(9L, 1, 1)).thenReturn(List.of(dailyEvent));
+        when(dailyEventRepository.findBySeasonIdAndDayBetweenOrderByDayAscIdAsc(9L, 1, 1))
+                .thenReturn(List.of(dailyEvent, ignoredScopedEvent));
 
         GameStateResponse response = gameDayStateService.getGameState(mock(Authentication.class));
 
@@ -438,7 +455,9 @@ class GameDayStateServiceTests {
                         new BigDecimal("0.10"),
                         List.of(),
                         initialBalance,
-                        initialStock
+                        initialStock,
+                        null,
+                        null
                 ),
                 0,
                 0,
@@ -459,9 +478,9 @@ class GameDayStateServiceTests {
 
     private Map<String, GameDayStartResponse.HourlySchedule> hourlySchedule() {
         Map<String, GameDayStartResponse.HourlySchedule> hourlySchedule = new LinkedHashMap<>();
-        hourlySchedule.put("10", new GameDayStartResponse.HourlySchedule(100, BigDecimal.ONE));
-        hourlySchedule.put("11", new GameDayStartResponse.HourlySchedule(200, BigDecimal.ONE));
-        hourlySchedule.put("12", new GameDayStartResponse.HourlySchedule(300, BigDecimal.ONE));
+        hourlySchedule.put("10", new GameDayStartResponse.HourlySchedule(100, BigDecimal.ONE, BigDecimal.ONE, 110));
+        hourlySchedule.put("11", new GameDayStartResponse.HourlySchedule(200, BigDecimal.ONE, BigDecimal.ONE, 220));
+        hourlySchedule.put("12", new GameDayStartResponse.HourlySchedule(300, BigDecimal.ONE, BigDecimal.ONE, 330));
         return hourlySchedule;
     }
 
@@ -514,7 +533,9 @@ class GameDayStateServiceTests {
             EventStartTime startTime,
             EventEndTime endTime,
             Integer applyOffsetSeconds,
-            Integer expireOffsetSeconds
+            Integer expireOffsetSeconds,
+            Long targetLocationId,
+            Long targetMenuId
     ) {
         RandomEvent randomEvent = instantiate(RandomEvent.class);
         ReflectionTestUtils.setField(randomEvent, "id", 2L);
@@ -533,7 +554,8 @@ class GameDayStateServiceTests {
         ReflectionTestUtils.setField(dailyEvent, "day", day);
         ReflectionTestUtils.setField(dailyEvent, "applyOffsetSeconds", applyOffsetSeconds);
         ReflectionTestUtils.setField(dailyEvent, "expireOffsetSeconds", expireOffsetSeconds);
-        ReflectionTestUtils.setField(dailyEvent, "newsTitle", eventType);
+        ReflectionTestUtils.setField(dailyEvent, "targetLocationId", targetLocationId);
+        ReflectionTestUtils.setField(dailyEvent, "targetMenuId", targetMenuId);
         return dailyEvent;
     }
 
