@@ -8,7 +8,10 @@ const config: Config = {
         // Modern
         primary: "#A8BFA9",
         "primary-dark": "#8DA98E",
+        "primary-light": "#d3e0d4",
         "accent-rose": "#D4A5A5",
+        "rose-soft": "#e6a5a5",
+        "rose-dark": "#d18a8a",
         "background-light": "#FDFDFB",
         "background-dark": "#171b18",
         "card-light": "#FFFFFF",
