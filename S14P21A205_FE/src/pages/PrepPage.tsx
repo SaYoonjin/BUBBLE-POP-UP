@@ -1,17 +1,24 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useParams } from "react-router-dom";
 import AppHeader from "../components/common/AppHeader";
 import CountdownTimer from "../components/common/CountdownTimer";
 import MenuSelector from "../components/game/MenuSelector";
 import PriceSlider from "../components/game/PriceSlider";
 import QuantityCounter from "../components/game/QuantityCounter";
 import CozyNewspaper from "../components/game/CozyNewspaper";
+import { DASHBOARD_SELECTED_ITEMS_STORAGE_KEY } from "../constants";
 
 const mockMenus = [
-  { id: 1, emoji: "🍜", name: "마라탕" },
-  { id: 2, emoji: "🐟", name: "붕어빵" },
-  { id: 3, emoji: "🍪", name: "쿠키" },
-  { id: 4, emoji: "🧋", name: "버블티" },
-  { id: 5, emoji: "🥪", name: "샌드위치" },
+  { id: 1, emoji: "🍞", name: "빵", costPrice: 1800, previousSalePrice: 3200 },
+  { id: 2, emoji: "🍢", name: "마라꼬치", costPrice: 2200, previousSalePrice: 3900 },
+  { id: 3, emoji: "🍬", name: "젤리", costPrice: 900, previousSalePrice: 1800 },
+  { id: 4, emoji: "🍽️", name: "떡볶이", costPrice: 2500, previousSalePrice: 4300 },
+  { id: 5, emoji: "🍔", name: "햄버거", costPrice: 3100, previousSalePrice: 5600 },
+  { id: 6, emoji: "🍨", name: "아이스크림", costPrice: 1400, previousSalePrice: 2600 },
+  { id: 7, emoji: "🍗", name: "닭강정", costPrice: 2800, previousSalePrice: 4900 },
+  { id: 8, emoji: "🌮", name: "타코", costPrice: 2600, previousSalePrice: 4500 },
+  { id: 9, emoji: "🌭", name: "핫도그", costPrice: 1700, previousSalePrice: 3000 },
+  { id: 10, emoji: "🧋", name: "버블티", costPrice: 2300, previousSalePrice: 4100 },
 ];
 
 const mockPopulationRanking = [
@@ -35,17 +42,66 @@ const mockNews = [
 ];
 
 type Tab = "prep" | "news";
+const ITEM_DISCOUNT_RATE = 10;
+
+function roundToHundreds(value: number) {
+  return Math.round(value / 100) * 100;
+}
+
+function getRecommendedPrice(costPrice: number) {
+  return roundToHundreds(costPrice * 1.6);
+}
+
+function getSellingPriceDefault(
+  costPrice: number,
+  previousSalePrice: number,
+  day: number,
+) {
+  if (day >= 2) {
+    return previousSalePrice;
+  }
+
+  return getRecommendedPrice(costPrice);
+}
+
+function getSelectedDashboardItemIds() {
+  try {
+    const stored = localStorage.getItem(DASHBOARD_SELECTED_ITEMS_STORAGE_KEY);
+    if (!stored) return [];
+    const parsed = JSON.parse(stored);
+    return Array.isArray(parsed) ? parsed.filter((value): value is number => typeof value === "number") : [];
+  } catch {
+    return [];
+  }
+}
 
 export default function PrepPage() {
+  const { day: dayParam } = useParams<{ day: string }>();
   const [tab, setTab] = useState<Tab>("prep");
-  const [selectedMenu, setSelectedMenu] = useState<number | null>(3);
-  const [price, setPrice] = useState(5000);
+  const [selectedMenu, setSelectedMenu] = useState<number | null>(1);
+  const [selectedDashboardItemIds] = useState<number[]>(getSelectedDashboardItemIds);
   const [quantity, setQuantity] = useState(120);
   const [expandedNewsId, setExpandedNewsId] = useState<number | null>(1);
+  const parsedDay = Number(dayParam);
+  const day = Number.isNaN(parsedDay) ? 0 : parsedDay;
+  const selectedMenuData = mockMenus.find((menu) => menu.id === selectedMenu) ?? mockMenus[0];
+  const recommendedPrice = getRecommendedPrice(selectedMenuData.costPrice);
+  const maxSellingPrice = roundToHundreds(recommendedPrice * 2);
+  const defaultSellingPrice = getSellingPriceDefault(
+    selectedMenuData.costPrice,
+    selectedMenuData.previousSalePrice,
+    day,
+  );
+  const [price, setPrice] = useState(defaultSellingPrice);
+  const totalCost = selectedMenuData.costPrice * quantity;
+  const hasItemDiscount = selectedDashboardItemIds.length > 0;
+  const discountRate = hasItemDiscount ? ITEM_DISCOUNT_RATE : 0;
+  const discountAmount = Math.round(totalCost * (discountRate / 100));
+  const discountedTotalCost = totalCost - discountAmount;
 
-  const costPrice = 4000;
-  const totalCost = costPrice * quantity;
-  const day = 3;
+  useEffect(() => {
+    setPrice(defaultSellingPrice);
+  }, [defaultSellingPrice]);
 
   return (
     <div className="min-h-screen bg-[#FDFDFB] text-slate-900 font-display flex flex-col">
@@ -57,11 +113,11 @@ export default function PrepPage() {
           {/* Page Header */}
           <div className="flex flex-col gap-6">
             <div className="flex items-center justify-between">
-              <div className="flex flex-col gap-1">
-                <div className="flex items-center gap-2 text-slate-400 text-sm font-medium">
-                  <span className="material-symbols-outlined text-[1.25rem]">calendar_today</span>
-                  <span>2026년 3월 17일 · DAY {day}</span>
-                </div>
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-center gap-2 text-slate-400 text-sm font-medium">
+                    <span className="material-symbols-outlined text-[1.25rem]">calendar_today</span>
+                    <span>2026년 3월 17일 · DAY {day}</span>
+                  </div>
                 <h1 className="text-slate-900 text-4xl font-black leading-tight tracking-tight">
                   {tab === "prep" ? "영업 준비" : "버블 뉴스"}
                 </h1>
@@ -101,21 +157,42 @@ export default function PrepPage() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <PriceSlider
+                  menuName={selectedMenuData.name}
                   price={price}
-                  min={1000}
-                  max={10000}
-                  step={500}
-                  costPrice={costPrice}
+                  min={selectedMenuData.costPrice}
+                  max={maxSellingPrice}
+                  step={100}
+                  costPrice={selectedMenuData.costPrice}
+                  recommendedPrice={recommendedPrice}
+                  defaultPrice={defaultSellingPrice}
+                  defaultPriceLabel={day >= 2 ? "이전 판매가" : "권장가"}
+                  previousPrice={day >= 2 ? selectedMenuData.previousSalePrice : undefined}
                   onChange={setPrice}
                 />
                 <div className="flex flex-col gap-6">
-                  <QuantityCounter quantity={quantity} min={50} max={500} onChange={setQuantity} />
+                  <QuantityCounter quantity={quantity} min={50} max={500} step={10} onChange={setQuantity} />
                   <div className="flex flex-col gap-4">
+                    {hasItemDiscount && (
+                      <div className="rounded-2xl border border-red-100 bg-red-50/60 px-4 py-3 flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-bold text-red-500">선택 아이템 혜택 적용</p>
+                          <p className="text-xs text-red-400 mt-1">아이템 사용으로 원재료 비용 {discountRate}% 할인</p>
+                        </div>
+                        <span className="text-lg font-bold text-red-500">-₩{discountAmount.toLocaleString()}</span>
+                      </div>
+                    )}
                     <div className="flex items-center justify-between px-4 py-2">
                       <span className="text-slate-500 font-medium">총 예상 비용</span>
-                      <span className="text-3xl font-black text-slate-900 tracking-tight">
-                        ₩{totalCost.toLocaleString()}
-                      </span>
+                      <div className="text-right">
+                        {hasItemDiscount && (
+                          <p className="text-sm font-bold text-red-400 line-through decoration-2">
+                            ₩{totalCost.toLocaleString()}
+                          </p>
+                        )}
+                        <span className="text-3xl font-black text-slate-900 tracking-tight">
+                          ₩{discountedTotalCost.toLocaleString()}
+                        </span>
+                      </div>
                     </div>
                     <button className="w-full bg-primary hover:bg-primary-dark text-slate-900 hover:text-white font-bold text-lg py-5 px-8 rounded-2xl shadow-lg shadow-primary/20 transition-all flex items-center justify-center gap-2 group">
                       <span>준비 완료하기</span>
@@ -135,8 +212,8 @@ export default function PrepPage() {
               onToggle={(id) => setExpandedNewsId(expandedNewsId === id ? null : id)}
               day={day}
               rankings={[
-                { title: "유동인구 순위", items: mockPopulationRanking },
-                { title: "지역 매출 순위", items: mockRevenueRanking, memo: "성수동 재고와 가격대 다시 확인하기!" },
+                { title: "유동인구 순위", eyebrow: "Foot Traffic Ranking", items: mockPopulationRanking },
+                { title: "지역 매출 순위", eyebrow: "Regional Revenue Ranking", items: mockRevenueRanking },
               ]}
             />
           )}

@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import AppHeader from "../components/common/AppHeader";
 import FloatingBubbles from "../components/common/FloatingBubbles";
 import ItemSelector from "../components/common/ItemSelector";
 import SeasonCTA from "../components/common/SeasonCTA";
 import BankruptWarning from "../components/common/BankruptWarning";
+import { DASHBOARD_SELECTED_ITEMS_STORAGE_KEY } from "../constants";
 
 const dashBubbles = [
   { size: "w-64 h-64", position: "top-[5%] left-[-5%]", opacity: "opacity-40", delay: "0s", variant: "glass" as const },
@@ -17,14 +18,29 @@ const mockItems = [
   { id: 3, name: "☕ 성수 한정 쿠폰", desc: "단골 고객들에게 쿠폰을 발행하여 재방문율을 높입니다.", price: "20P" },
 ];
 
+function getInitialSelectedItemIds() {
+  try {
+    const stored = localStorage.getItem(DASHBOARD_SELECTED_ITEMS_STORAGE_KEY);
+    if (!stored) return [1];
+    const parsed = JSON.parse(stored);
+    return Array.isArray(parsed) ? parsed.filter((value): value is number => typeof value === "number") : [1];
+  } catch {
+    return [1];
+  }
+}
+
 export default function DashboardPage() {
-  const [selectedItemIds, setSelectedItemIds] = useState<number[]>([1]);
+  const [selectedItemIds, setSelectedItemIds] = useState<number[]>(getInitialSelectedItemIds);
 
   const handleToggle = (id: number) => {
     setSelectedItemIds((prev) =>
       prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
     );
   };
+
+  useEffect(() => {
+    localStorage.setItem(DASHBOARD_SELECTED_ITEMS_STORAGE_KEY, JSON.stringify(selectedItemIds));
+  }, [selectedItemIds]);
 
   return (
     <div className="relative min-h-screen w-full flex flex-col bg-[#FDFDFB] text-slate-900 overflow-x-hidden font-display">

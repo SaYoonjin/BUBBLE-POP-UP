@@ -3,19 +3,19 @@ import { Link } from "react-router-dom";
 import CozyNewspaper from "../components/game/CozyNewspaper";
 
 const mockPopulationRanking = [
-  { rank: 1, name: "홍대", change: "+2.4%", positive: true },
-  { rank: 2, name: "성수", change: "-", positive: true },
-  { rank: 3, name: "부산", change: "-0.8%", positive: false },
-  { rank: 4, name: "이태원", change: "+5%", positive: true },
-  { rank: 5, name: "성수동", change: "+1%", positive: true },
+  { rank: 1, name: "홍대", change: "+2.4%", positive: true, barWidth: "92%" },
+  { rank: 2, name: "성수", change: "-", positive: true, barWidth: "78%" },
+  { rank: 3, name: "부산", change: "-0.8%", positive: false, barWidth: "58%" },
+  { rank: 4, name: "이태원", change: "+5%", positive: true, barWidth: "44%" },
+  { rank: 5, name: "성수동", change: "+1%", positive: true, barWidth: "32%" },
 ];
 
 const mockRevenueRanking = [
-  { rank: 1, name: "홍대", change: "+5.2%", positive: true },
-  { rank: 2, name: "성수", change: "-", positive: true },
-  { rank: 3, name: "부산", change: "-", positive: true },
-  { rank: 4, name: "명동", change: "+3%", positive: true },
-  { rank: 5, name: "강남", change: "-1.2%", positive: false },
+  { rank: 1, name: "홍대", change: "+5.2%", positive: true, barWidth: "96%" },
+  { rank: 2, name: "성수", change: "-", positive: true, barWidth: "74%" },
+  { rank: 3, name: "부산", change: "-", positive: true, barWidth: "56%" },
+  { rank: 4, name: "명동", change: "+3%", positive: true, barWidth: "46%" },
+  { rank: 5, name: "강남", change: "-1.2%", positive: false, barWidth: "38%" },
 ];
 
 const mockNews = [
@@ -78,8 +78,8 @@ export default function CozyPrepPage() {
             onToggle={(id) => setExpandedNewsId(expandedNewsId === id ? null : id)}
             day={day}
             rankings={[
-              { title: "유동인구 순위", items: mockPopulationRanking },
-              { title: "지역 매출 순위", items: mockRevenueRanking, memo: "홍대 재고 확인하기!" },
+              { title: "유동인구 순위", eyebrow: "Foot Traffic Ranking", items: mockPopulationRanking },
+              { title: "지역 매출 순위", eyebrow: "Regional Revenue Ranking", items: mockRevenueRanking },
             ]}
           />
         </div>

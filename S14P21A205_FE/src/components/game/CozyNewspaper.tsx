@@ -9,12 +9,13 @@ interface RankingItem {
   name: string;
   change: string;
   positive: boolean;
+  barWidth?: string;
 }
 
 interface RankingSection {
   title: string;
+  eyebrow: string;
   items: RankingItem[];
-  memo?: string;
 }
 
 interface CozyNewspaperProps {
@@ -56,7 +57,7 @@ export default function CozyNewspaper({ items, expandedId, onToggle, day, rankin
             {leadStory && (
               <article className="pb-6 border-b-2 border-cozy-ink/15">
                 <div className="flex items-center gap-3 mb-4">
-                  <span className="inline-block bg-cozy-primary text-white text-[10px] font-bold uppercase tracking-[0.25em] px-3 py-1 rounded-sm">
+                  <span className="inline-block bg-red-600 text-white text-[10px] font-bold uppercase tracking-[0.25em] px-3 py-1 rounded-sm">
                     Top Story
                   </span>
                   <span className="text-[11px] uppercase tracking-[0.3em] text-cozy-ink/35 font-bold">
@@ -83,7 +84,7 @@ export default function CozyNewspaper({ items, expandedId, onToggle, day, rankin
                       <h4 className={`leading-tight transition-colors ${
                         isExpanded
                           ? "font-cozy-serif text-xl font-bold text-cozy-ink"
-                          : "font-cozy-serif text-lg text-cozy-ink/80 group-hover:text-cozy-primary italic"
+                          : "font-cozy-serif text-lg text-cozy-ink/80 group-hover:text-[#8DA98EFF] italic"
                       }`}>
                         {news.title}
                       </h4>
@@ -109,9 +110,9 @@ export default function CozyNewspaper({ items, expandedId, onToggle, day, rankin
                   <div className="flex items-end justify-between gap-4 mb-4">
                     <div>
                       <p className="text-[10px] uppercase tracking-[0.3em] text-cozy-ink/35 font-bold">
-                        Market Index
+                        {section.eyebrow}
                       </p>
-                      <h4 className="font-cozy-serif text-2xl font-bold italic text-cozy-ink">
+                      <h4 className="font-display text-[22px] font-bold tracking-tight text-slate-800">
                         {section.title}
                       </h4>
                     </div>
@@ -121,32 +122,50 @@ export default function CozyNewspaper({ items, expandedId, onToggle, day, rankin
                   <ul className="flex flex-col gap-3">
                     {section.items.map((item) => (
                       <li key={`${section.title}-${item.rank}-${item.name}`} className="flex items-center gap-3 border-b border-cozy-ink/10 pb-2 last:border-b-0 last:pb-0">
-                        <span className="font-cozy-hand text-2xl text-cozy-dusty-rose w-7 shrink-0">
+                        <span className="font-mono text-lg font-bold text-slate-500 w-7 shrink-0">
                           {item.rank}.
                         </span>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-baseline justify-between gap-3">
-                            <span className="font-cozy-hand text-lg text-cozy-ink/85 truncate">
+                            <span className="font-body text-[15px] font-semibold text-slate-800 truncate">
                               {item.name}
                             </span>
-                            <span className={`text-xs font-mono px-1.5 py-0.5 rounded font-bold ${
-                              item.positive ? "bg-cozy-sage/20 text-cozy-sage" : "bg-red-100 text-red-400"
+                            <span className={`text-[11px] font-mono px-1.5 py-0.5 rounded-sm font-bold border ${
+                              item.positive
+                                ? "bg-[#ece4d8] text-[#5d554a] border-[#d5cab8]"
+                                : "bg-[#f1e4de] text-[#8a6258] border-[#e2c7bd]"
                             }`}>
                               {item.change}
                             </span>
+                          </div>
+                          <div className="mt-2.5 relative h-7 border border-cozy-ink/15 bg-[#f5efe4] overflow-hidden">
+                            <div
+                              className="absolute inset-0 opacity-40"
+                              style={{
+                                backgroundImage:
+                                  "linear-gradient(to right, rgba(44,44,44,0.08) 1px, transparent 1px)",
+                                backgroundSize: "18px 100%",
+                              }}
+                            />
+                            <div
+                              className={`absolute left-0 top-0 h-full border-r ${
+                                item.positive ? "border-black/20" : "border-black/10"
+                              }`}
+                              style={{
+                                width: item.barWidth ?? `${Math.max(36, 100 - item.rank * 16)}%`,
+                                backgroundImage: item.positive
+                                  ? "repeating-linear-gradient(135deg, rgba(44,44,44,0.16) 0px, rgba(44,44,44,0.16) 4px, rgba(44,44,44,0.3) 4px, rgba(44,44,44,0.3) 8px)"
+                                  : "repeating-linear-gradient(45deg, rgba(90,74,66,0.1) 0px, rgba(90,74,66,0.1) 4px, rgba(90,74,66,0.22) 4px, rgba(90,74,66,0.22) 8px)",
+                              }}
+                            />
+                            <div className="absolute left-2 top-1/2 -translate-y-1/2 text-[9px] font-mono uppercase tracking-[0.25em] text-cozy-ink/35">
+                              Index
+                            </div>
                           </div>
                         </div>
                       </li>
                     ))}
                   </ul>
-
-                  {section.memo && (
-                    <div className="mt-5 -rotate-[2deg]">
-                      <div className="bg-yellow-200/80 p-3 shadow-sm inline-block max-w-[90%]">
-                        <p className="font-cozy-hand text-sm text-cozy-ink/70">{section.memo}</p>
-                      </div>
-                    </div>
-                  )}
                 </section>
               ))}
             </aside>
