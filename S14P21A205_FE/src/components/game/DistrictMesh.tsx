@@ -118,10 +118,6 @@ export function BackgroundMesh({ polygon, name, center }: { polygon: [number, nu
       <mesh geometry={geometry} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
         <meshStandardMaterial color="#e8e4dd" metalness={0} roughness={0.9} transparent opacity={0.7} />
       </mesh>
-      {/* Border */}
-      <mesh geometry={geometry} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.001, 0]}>
-        <meshBasicMaterial color="#c8c2b8" wireframe transparent opacity={0.3} />
-      </mesh>
       {/* Label */}
       <Html
         position={new Vector3(center[0], 0.08, center[1])}
