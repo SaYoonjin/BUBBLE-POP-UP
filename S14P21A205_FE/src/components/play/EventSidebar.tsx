@@ -89,9 +89,9 @@ function AlertCard({ alert }: { alert: GameAlert }) {
           <div className={`mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full ${iconStyle.chip}`}>
             <span className={`material-symbols-outlined text-[15px] ${iconStyle.icon}`}>{typeIcons[alert.type]}</span>
           </div>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <p className="truncate text-[12px] font-bold text-slate-700">{alert.title}</p>
-            <p className="mt-0.5 text-[11px] leading-relaxed text-slate-500">{alert.description}</p>
+            <p className="mt-0.5 truncate text-[11px] text-slate-500">{alert.description}</p>
           </div>
         </div>
         <span className="shrink-0 text-[10px] text-slate-400">{alert.time}</span>

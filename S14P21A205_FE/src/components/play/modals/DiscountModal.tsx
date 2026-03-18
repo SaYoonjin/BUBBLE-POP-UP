@@ -33,7 +33,7 @@ export default function DiscountModal({ currentPrice, onClose, onSubmit }: Disco
           <input
             type="range"
             min={0}
-            max={50}
+            max={100}
             step={5}
             value={rate}
             onChange={(event) => setRate(Number(event.target.value))}
@@ -41,7 +41,7 @@ export default function DiscountModal({ currentPrice, onClose, onSubmit }: Disco
           />
           <div className="flex justify-between px-1 text-xs font-medium text-slate-400">
             <span>0%</span>
-            <span>50%</span>
+            <span>100%</span>
           </div>
         </div>
 

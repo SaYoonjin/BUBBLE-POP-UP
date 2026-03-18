@@ -3,5 +3,7 @@ import DashboardPage from "./DashboardPage";
 
 export default function HomePage() {
   const token = localStorage.getItem("accessToken");
-  return token ? <DashboardPage /> : <LobbyPage />;
+  const shouldBypassAuth = import.meta.env.DEV;
+
+  return token || shouldBypassAuth ? <DashboardPage /> : <LobbyPage />;
 }
