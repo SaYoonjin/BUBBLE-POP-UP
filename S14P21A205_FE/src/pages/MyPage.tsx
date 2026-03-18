@@ -1,122 +1,217 @@
 import { useState } from "react";
 import AppHeader from "../components/common/AppHeader";
-import SeasonCard from "../components/common/SeasonCard";
+import Badge from "../components/common/Badge";
+import NicknameEditModal from "../components/mypage/NicknameEditModal";
+import ProfileSummaryCard from "../components/mypage/ProfileSummaryCard";
+import SeasonHistoryCard from "../components/mypage/SeasonHistoryCard";
+import SeasonHistoryEmptyState from "../components/mypage/SeasonHistoryEmptyState";
 
-const allSeasons = [
+type RankVariant = "gold" | "gray" | "rose";
+type SeasonStatus = "default" | "bankrupt" | "comeback";
+
+interface SeasonHistoryItem {
+  season: number;
+  rank: string;
+  rankValue: number | null;
+  rankVariant: RankVariant;
+  status: SeasonStatus;
+  location: string;
+  storeName: string;
+  revenue: string;
+  rewardPoints: string;
+}
+
+const seasonHistory: SeasonHistoryItem[] = [
   {
-    season: "Season 3", rank: "1st", rankVariant: "gold" as const,
-    location: "강남", storeName: "디저트 팝업 스토어",
-    revenue: "₩1,250,000", rewardPoints: "500P", usedPoints: "1,200 P",
-    pointDetails: [
-      { label: "임대료 할인", value: "300P" },
-      { label: "원재료값 할인", value: "200P" },
-      { label: "광고 패키지", value: "500P" },
-      { label: "알바 고용", value: "200P" },
-    ],
+    season: 5,
+    rank: "2위",
+    rankValue: 2,
+    rankVariant: "gray",
+    status: "comeback",
+    location: "강남",
+    storeName: "디저트 팝업 스토어",
+    revenue: "₩1,120,000",
+    rewardPoints: "420P",
   },
   {
-    season: "Season 2", rank: "4th", rankVariant: "normal" as const,
-    location: "홍대", storeName: "패션 악세사리 팝업",
-    revenue: "₩890,000", rewardPoints: "200P", usedPoints: "800 P",
-    pointDetails: [
-      { label: "인테리어", value: "500P" },
-      { label: "임대료 할인", value: "300P" },
-    ],
+    season: 4,
+    rank: "파산",
+    rankValue: null,
+    rankVariant: "rose",
+    status: "bankrupt",
+    location: "성수",
+    storeName: "수제 맥주 팝업",
+    revenue: "₩0",
+    rewardPoints: "0P",
   },
   {
-    season: "Season 1.5", rank: "파산", rankVariant: "bankrupt" as const,
-    location: "이태원", storeName: "수제 맥주 팝업",
-    revenue: "₩0", rewardPoints: "0P", usedPoints: "350 P", isBankrupt: true,
-    pointDetails: [
-      { label: "초기 투자", value: "150P" },
-      { label: "긴급 자금", value: "200P" },
-    ],
+    season: 3,
+    rank: "1위",
+    rankValue: 1,
+    rankVariant: "gold",
+    status: "default",
+    location: "홍대",
+    storeName: "패션 악세사리 팝업",
+    revenue: "₩1,340,000",
+    rewardPoints: "500P",
   },
   {
-    season: "Season 1", rank: "12th", rankVariant: "normal" as const,
-    location: "성수", storeName: "비건 베이커리",
-    revenue: "₩450,000", rewardPoints: "50P", usedPoints: "500 P",
-    pointDetails: [{ label: "임대료 할인", value: "500P" }],
+    season: 2,
+    rank: "4위",
+    rankValue: 4,
+    rankVariant: "gray",
+    status: "default",
+    location: "이태원",
+    storeName: "비건 베이커리",
+    revenue: "₩780,000",
+    rewardPoints: "180P",
   },
   {
-    season: "Season 0.5", rank: "8th", rankVariant: "normal" as const,
-    location: "명동", storeName: "타코야끼 팝업",
-    revenue: "₩320,000", rewardPoints: "30P", usedPoints: "200 P",
-    pointDetails: [{ label: "광고", value: "200P" }],
+    season: 1,
+    rank: "8위",
+    rankValue: 8,
+    rankVariant: "gray",
+    status: "default",
+    location: "명동",
+    storeName: "타코야끼 팝업",
+    revenue: "₩320,000",
+    rewardPoints: "30P",
   },
 ];
 
-const INITIAL_SHOW = 3;
+const MAX_VISIBLE_SEASONS = 10;
 
 export default function MyPage() {
-  const [showAll, setShowAll] = useState(false);
-  const visibleSeasons = showAll ? allSeasons : allSeasons.slice(0, INITIAL_SHOW);
+  const [nickname, setNickname] = useState("버블킹");
+  const [isNicknameModalOpen, setIsNicknameModalOpen] = useState(false);
+  const [draftNickname, setDraftNickname] = useState("버블킹");
+  const [nicknameError, setNicknameError] = useState("");
+
+  const visibleSeasons = seasonHistory.slice(0, MAX_VISIBLE_SEASONS);
+  const rankedSeasons = visibleSeasons.filter(
+    (season): season is SeasonHistoryItem & { rankValue: number } => season.rankValue !== null,
+  );
+  const bestRankLabel =
+    rankedSeasons.length > 0
+      ? `${Math.min(...rankedSeasons.map((season) => season.rankValue))}위`
+      : "-";
+  const summaryBadges = [
+    `참여 시즌 ${visibleSeasons.length}회`,
+    `최고 순위 ${bestRankLabel}`,
+  ];
+
+  const openNicknameModal = () => {
+    setDraftNickname(nickname);
+    setNicknameError("");
+    setIsNicknameModalOpen(true);
+  };
+
+  const closeNicknameModal = () => {
+    setDraftNickname(nickname);
+    setNicknameError("");
+    setIsNicknameModalOpen(false);
+  };
+
+  const saveNickname = () => {
+    const nextNickname = draftNickname.trim();
+
+    if (!nextNickname) {
+      setNicknameError("닉네임을 입력해 주세요.");
+      return;
+    }
+
+    setNickname(nextNickname);
+    setDraftNickname(nextNickname);
+    setNicknameError("");
+    setIsNicknameModalOpen(false);
+  };
 
   return (
-    <div className="min-h-screen bg-[#FDFDFB] text-slate-900 font-display flex flex-col">
-      <AppHeader nickname="버블킹" />
+    <div className="flex min-h-screen flex-col bg-[#FDFDFB] font-display text-slate-900">
+      <AppHeader nickname={nickname} />
 
-      <main className="flex-grow w-full max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10 pt-24 space-y-8">
-        {/* Profile */}
-        <section>
-          <div className="bg-white rounded-xl shadow-soft p-8 flex flex-col sm:flex-row items-center justify-between gap-6">
-            <div className="flex-grow text-center sm:text-left space-y-2">
-              <div className="flex items-center justify-center sm:justify-start gap-2">
-                <h1 className="text-2xl font-bold">버블킹</h1>
-                <button className="text-gray-400 hover:text-primary transition-colors" title="닉네임 수정">
-                  <span className="material-symbols-outlined text-lg">edit</span>
-                </button>
+      <main className="flex-grow w-full max-w-6xl mx-auto px-4 py-10 pt-24 sm:px-6 lg:px-8">
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-[320px_minmax(0,1fr)] lg:items-start">
+          <section className="lg:sticky lg:top-24">
+            <ProfileSummaryCard
+              nickname={nickname}
+              email="user@ssafy.com"
+              summaryBadges={summaryBadges}
+              onEditNickname={openNicknameModal}
+            />
+          </section>
+
+          <section className="space-y-6">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+              <div className="space-y-2">
+                <p className="text-sm font-semibold uppercase tracking-[0.24em] text-primary-dark/80">
+                  History
+                </p>
+                <div>
+                  <h2 className="text-3xl font-bold tracking-tight text-slate-900">
+                    시즌 기록
+                  </h2>
+                  <p className="mt-2 text-sm leading-6 text-slate-500">
+                    최근 10개 시즌 기준으로 핵심 기록만 정리해서 보여드려요.
+                  </p>
+                </div>
               </div>
-              <p className="text-gray-500 font-mono text-sm">user@ssafy.com</p>
-            </div>
-            <button className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-500 hover:bg-gray-50 transition-colors">
-              로그아웃
-            </button>
-          </div>
-        </section>
 
-        {/* Season History */}
-        <section className="space-y-6">
-          <h2 className="text-xl font-bold border-l-4 border-primary pl-3">시즌 기록</h2>
-          <div className="space-y-4">
-            {visibleSeasons.map((s, i) => (
-              <SeasonCard key={i} {...s} />
-            ))}
-          </div>
-          {!showAll && allSeasons.length > INITIAL_SHOW && (
-            <div className="flex justify-center mt-8">
-              <button
-                onClick={() => setShowAll(true)}
-                className="flex items-center gap-2 text-sm text-gray-500 hover:text-primary transition-colors"
-              >
-                <span>더 보기 ({allSeasons.length - INITIAL_SHOW}개)</span>
-                <span className="material-symbols-outlined text-lg">expand_more</span>
-              </button>
+              <Badge variant="gray" size="md">
+                {visibleSeasons.length > 0 ? `최근 ${visibleSeasons.length}개 시즌` : "기록 없음"}
+              </Badge>
             </div>
-          )}
-          {showAll && allSeasons.length > INITIAL_SHOW && (
-            <div className="flex justify-center mt-8">
-              <button
-                onClick={() => setShowAll(false)}
-                className="flex items-center gap-2 text-sm text-gray-500 hover:text-primary transition-colors"
-              >
-                <span>접기</span>
-                <span className="material-symbols-outlined text-lg">expand_less</span>
-              </button>
-            </div>
-          )}
-        </section>
+
+            {visibleSeasons.length > 0 ? (
+              <div className="space-y-4">
+                {visibleSeasons.map((season) => (
+                  <SeasonHistoryCard
+                    key={season.season}
+                    season={season.season}
+                    location={season.location}
+                    storeName={season.storeName}
+                    revenue={season.revenue}
+                    rewardPoints={season.rewardPoints}
+                    rank={season.rank}
+                    rankVariant={season.rankVariant}
+                    status={season.status}
+                  />
+                ))}
+              </div>
+            ) : (
+              <SeasonHistoryEmptyState nickname={nickname} />
+            )}
+          </section>
+        </div>
       </main>
 
-      <footer className="bg-white border-t border-gray-100 mt-12 py-8">
-        <div className="max-w-4xl mx-auto px-4 text-center text-xs text-gray-400">
+      <footer className="mt-12 border-t border-gray-100 bg-white py-8">
+        <div className="mx-auto max-w-6xl px-4 text-center text-xs text-gray-400">
           <p>© 2026 BubbleBubble. All rights reserved.</p>
           <div className="mt-2 space-x-4">
-            <a className="hover:underline" href="#">이용약관</a>
-            <a className="hover:underline" href="#">개인정보처리방침</a>
+            <a className="hover:underline" href="#">
+              이용약관
+            </a>
+            <a className="hover:underline" href="#">
+              개인정보처리방침
+            </a>
           </div>
         </div>
       </footer>
+
+      <NicknameEditModal
+        isOpen={isNicknameModalOpen}
+        nickname={draftNickname}
+        error={nicknameError}
+        onChange={(value) => {
+          setDraftNickname(value);
+          if (nicknameError) {
+            setNicknameError("");
+          }
+        }}
+        onClose={closeNicknameModal}
+        onSave={saveNickname}
+      />
     </div>
   );
 }
