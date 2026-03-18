@@ -115,8 +115,8 @@ export function BackgroundMesh({ polygon, name, center }: { polygon: [number, nu
 
   return (
     <group>
-      <mesh geometry={geometry} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-        <meshStandardMaterial color="#e8e4dd" metalness={0} roughness={0.9} transparent opacity={0.7} />
+      <mesh geometry={geometry} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.05, 0]} receiveShadow>
+        <meshStandardMaterial color="#e8e4dd" metalness={0} roughness={0.9} />
       </mesh>
       {/* Label */}
       <Html
