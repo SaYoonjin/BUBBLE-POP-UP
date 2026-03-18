@@ -59,4 +59,23 @@ public interface StoreRepository extends JpaRepository<Store, Long> {
     default Optional<Store> findFirstActiveByUser_IdAndSeasonStatusOrderByIdDesc(Integer userId, SeasonStatus seasonStatus) {
         return findActiveStoresByUserIdAndSeasonStatusOrderByIdDesc(userId, seasonStatus).stream().findFirst();
     }
+
+    @Query("""
+            SELECT s.menu.menuName, COUNT(s)
+            FROM Store s
+            WHERE s.season.id = :seasonId
+            GROUP BY s.menu.menuName
+            ORDER BY COUNT(s) DESC
+            """)
+    List<Object[]> countStoresByMenu(@Param("seasonId") Long seasonId);
+
+    @Query("""
+            SELECT s.location.locationName, COUNT(s)
+            FROM Store s
+            WHERE s.season.id = :seasonId
+            GROUP BY s.location.locationName
+            ORDER BY COUNT(s) DESC
+            """)
+    List<Object[]> countStoresByLocation(@Param("seasonId") Long seasonId);
+
 }
