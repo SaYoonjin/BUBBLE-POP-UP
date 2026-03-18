@@ -105,7 +105,7 @@ deploy-web:
     - sed -i 's/\r$//' .env.prod
     - grep '^NGINX_SERVER_NAME=' .env.prod
     - scp .env.prod "$WEB_USER@$WEB_SERVER_IP:$WEB_APP_DIR/.env.prod"
-    - ssh "$WEB_USER@$WEB_SERVER_IP" "cd '$WEB_APP_DIR' && docker compose up -d --build --remove-orphans"
+    - ssh "$WEB_USER@$WEB_SERVER_IP" "cd '$WEB_APP_DIR' && docker compose down && docker compose up -d --build --force-recreate --remove-orphans && docker image prune -f"
   rules:
     - if: '$CI_COMMIT_BRANCH == "master"'
 
@@ -121,7 +121,7 @@ deploy-web-exporter:
   script:
     - ssh "$WEB_USER@$WEB_SERVER_IP" "mkdir -p '$WEB_APP_DIR'"
     - rsync -az "$BACKEND_DIR/docker-compose.exporter.yml" "$WEB_USER@$WEB_SERVER_IP:$WEB_APP_DIR/"
-    - ssh "$WEB_USER@$WEB_SERVER_IP" "cd '$WEB_APP_DIR' && docker compose -p web-exporter -f docker-compose.exporter.yml up -d --remove-orphans"
+    - ssh "$WEB_USER@$WEB_SERVER_IP" "cd '$WEB_APP_DIR' && docker compose -p web-exporter -f docker-compose.exporter.yml down && docker compose -p web-exporter -f docker-compose.exporter.yml up -d --force-recreate --remove-orphans && docker image prune -f"
   rules:
     - if: '$CI_COMMIT_BRANCH == "master"'
 
@@ -139,7 +139,7 @@ deploy-data:
     - rsync -az "$BACKEND_DIR/docker-compose.data.yml" "$BACKEND_DIR/hadoop.env" "$DATA_USER@$DATA_SERVER_IP:$DATA_APP_DIR/"
     - rsync -az "$BACKEND_DIR/data/" "$DATA_USER@$DATA_SERVER_IP:$DATA_APP_DIR/data/"
     - rsync -az "$BACKEND_DIR/spark/" "$DATA_USER@$DATA_SERVER_IP:$DATA_APP_DIR/spark/"
-    - ssh "$DATA_USER@$DATA_SERVER_IP" "cd '$DATA_APP_DIR' && docker compose -f docker-compose.data.yml up -d --build --remove-orphans"
+    - ssh "$DATA_USER@$DATA_SERVER_IP" "cd '$DATA_APP_DIR' && docker compose -f docker-compose.data.yml down && docker compose -f docker-compose.data.yml up -d --build --force-recreate --remove-orphans && docker image prune -f"
   rules:
     - if: '$CI_COMMIT_BRANCH == "master"'
 
@@ -155,7 +155,7 @@ deploy-data-exporter:
   script:
     - ssh "$DATA_USER@$DATA_SERVER_IP" "mkdir -p '$DATA_APP_DIR'"
     - rsync -az "$BACKEND_DIR/docker-compose.exporter.yml" "$DATA_USER@$DATA_SERVER_IP:$DATA_APP_DIR/"
-    - ssh "$DATA_USER@$DATA_SERVER_IP" "cd '$DATA_APP_DIR' && docker compose -p data-exporter -f docker-compose.exporter.yml up -d --remove-orphans"
+    - ssh "$DATA_USER@$DATA_SERVER_IP" "cd '$DATA_APP_DIR' && docker compose -p data-exporter -f docker-compose.exporter.yml down && docker compose -p data-exporter -f docker-compose.exporter.yml up -d --force-recreate --remove-orphans && docker image prune -f"
   rules:
     - if: '$CI_COMMIT_BRANCH == "master"'
 
@@ -192,9 +192,13 @@ deploy-monitoring:
       ssh "$MONITOR_USER@$MONITOR_SERVER_IP" "cd '$MONITOR_APP_DIR' && \
       if [ -f .env.monitoring ]; then \
         cp .env.monitoring .env && \
-        docker compose --env-file .env.monitoring -f docker-compose.monitoring.yml up -d --remove-orphans; \
+        docker compose --env-file .env.monitoring -f docker-compose.monitoring.yml down && \
+        docker compose --env-file .env.monitoring -f docker-compose.monitoring.yml up -d --force-recreate --remove-orphans && \
+        docker image prune -f; \
       else \
-        docker compose -f docker-compose.monitoring.yml up -d --remove-orphans; \
+        docker compose -f docker-compose.monitoring.yml down && \
+        docker compose -f docker-compose.monitoring.yml up -d --force-recreate --remove-orphans && \
+        docker image prune -f; \
       fi"
   rules:
     - if: '$CI_COMMIT_BRANCH == "master"'
