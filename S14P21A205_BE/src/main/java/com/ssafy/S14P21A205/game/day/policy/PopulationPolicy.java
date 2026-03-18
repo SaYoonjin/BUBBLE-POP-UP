@@ -36,7 +36,7 @@ public class PopulationPolicy {
     private final TrafficRepository trafficRepository;
     private final SeasonTimelineService seasonTimelineService = new SeasonTimelineService();
 
-    public DaySchedule buildDaySchedule(Long locationId, int day) {
+    public DaySchedule buildDaySchedule(Long locationId, int day, BigDecimal weatherMultiplier) {
         List<Population> populations = populationRepository.findByLocationIdOrderByDateAsc(locationId);
         List<Traffic> traffics = trafficRepository.findByLocationIdOrderByDateAsc(locationId);
         if (populations.isEmpty() || traffics.isEmpty()) {
@@ -65,15 +65,26 @@ public class PopulationPolicy {
 
         LinkedHashMap<String, GameDayStartResponse.HourlySchedule> hourlySchedule = new LinkedHashMap<>();
         List<BigDecimal> hourlyMultipliers = new ArrayList<>();
+        BigDecimal resolvedWeatherMultiplier = normalizeRate(weatherMultiplier);
         for (int hour = BUSINESS_OPEN_HOUR; hour < BUSINESS_CLOSE_HOUR; hour++) {
             BigDecimal trafficMultiplier = trafficByHour.containsKey(hour)
                     ? ratio(trafficByHour.get(hour), trafficBaseline)
                     : DECIMAL_ONE;
+            BigDecimal eventMultiplier = DECIMAL_ONE;
+            int population = populationByHour.getOrDefault(hour, 0);
+            int effectivePopulation = BigDecimal.valueOf(population)
+                    .multiply(resolvedWeatherMultiplier)
+                    .multiply(normalizeRate(trafficMultiplier))
+                    .multiply(eventMultiplier)
+                    .setScale(0, RoundingMode.HALF_UP)
+                    .intValue();
             hourlySchedule.put(
                     String.valueOf(hour),
                     new GameDayStartResponse.HourlySchedule(
-                            populationByHour.getOrDefault(hour, 0),
-                            trafficMultiplier
+                            population,
+                            trafficMultiplier,
+                            eventMultiplier,
+                            effectivePopulation
                     )
             );
             hourlyMultipliers.add(trafficMultiplier);
@@ -106,9 +117,14 @@ public class PopulationPolicy {
         );
         GameDayStartResponse.HourlySchedule schedule = schedules.get(scheduleIndex);
 
-        BigDecimal population = BigDecimal.valueOf(schedule.population())
+        BigDecimal populationBase = schedule.effectivePopulation() != null
+                ? BigDecimal.valueOf(schedule.effectivePopulation())
+                : BigDecimal.valueOf(schedule.population())
                 .multiply(normalizeRate(startResponse.weatherMultiplier()))
                 .multiply(normalizeRate(schedule.trafficMultiplier()))
+                .multiply(normalizeRate(schedule.eventMultiplier()));
+
+        BigDecimal population = populationBase
                 .multiply(normalizeRate(populationEventMultiplier));
         return population.setScale(0, RoundingMode.HALF_UP).intValue();
     }

@@ -41,5 +41,9 @@ public class DailyEvent {
 
     @Column(name = "expire_offset_seconds")
     private Integer expireOffsetSeconds;
+    @Column(name = "target_location_id")
+    private Long targetLocationId;
 
+    @Column(name = "target_menu_id")
+    private Long targetMenuId;
 }

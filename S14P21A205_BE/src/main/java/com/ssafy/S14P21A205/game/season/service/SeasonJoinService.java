@@ -32,10 +32,12 @@ public class SeasonJoinService {
 
     private static final int INITIAL_CAPITAL = 10_000_000;
     private static final BigDecimal INTERIOR_RATE = new BigDecimal("0.10");
+    private static final BigDecimal INITIAL_CAPTURE_RATE = new BigDecimal("0.10");
     private static final int STORE_NAME_MIN_LENGTH = 2;
     private static final int STORE_NAME_MAX_LENGTH = 20;
     private static final String BALANCE_KEY_PREFIX = "balance:";
     private static final String STOCK_KEY_PREFIX = "stock:";
+    private static final String CAPTURE_RATE_KEY_PREFIX = "captureRate:";
     private static final Pattern STORE_NAME_PATTERN = Pattern.compile("^[\\p{IsHangul}A-Za-z0-9 ]+$");
 
     private final UserService userService;
@@ -86,6 +88,7 @@ public class SeasonJoinService {
         var valueOperations = stringRedisTemplate.opsForValue();
         valueOperations.set(balanceKey(savedStore.getId()), String.valueOf(remainingBalance));
         valueOperations.set(stockKey(savedStore.getId()), "0");
+        valueOperations.set(captureRateKey(savedStore.getId()), INITIAL_CAPTURE_RATE.toPlainString());
 
         return new SeasonJoinResponse(
                 savedStore.getId(),
@@ -152,5 +155,9 @@ public class SeasonJoinService {
 
     private String stockKey(Long storeId) {
         return STOCK_KEY_PREFIX + storeId;
+    }
+
+    private String captureRateKey(Long storeId) {
+        return CAPTURE_RATE_KEY_PREFIX + storeId;
     }
 }

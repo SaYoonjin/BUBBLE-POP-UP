@@ -2,6 +2,7 @@ package com.ssafy.S14P21A205.game.day.state.repository;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -74,7 +75,7 @@ class GameDayStoreStateRedisRepositoryTests {
         entries.put("start_response", objectMapper.writeValueAsString(state.startResponse()));
         entries.put("tick", "4");
         entries.put("population_per_store", "80");
-        entries.put("inflow_rate", "0.25");
+        entries.put("capture_rate", "0.25");
         entries.put("sale_price", "5000");
         entries.put("tick_customer_count", "12");
         entries.put("tick_purchase_count", "8");
@@ -110,6 +111,23 @@ class GameDayStoreStateRedisRepositoryTests {
                 });
     }
 
+    @Test
+    void saveStateAndTickLogUsesTickPrefixedFieldNames() {
+        GameDayLiveState state = state();
+
+        repository.saveStateAndTickLog(15L, 3, state);
+
+        ArgumentCaptor<Map<String, String>> tickLogCaptor = ArgumentCaptor.forClass(Map.class);
+        verify(hashOperations).putAll(eq("game:store:15:day:3:tick_log"), tickLogCaptor.capture());
+
+        Map<String, String> tickLogEntries = tickLogCaptor.getValue();
+        assertThat(tickLogEntries)
+                .containsEntry("tick:4:tick_customer_count", "12")
+                .containsEntry("tick:4:tick_purchase_count", "8")
+                .containsEntry("tick:4:tick_sales", "40000")
+                .containsEntry("tick:4:cumulative_customer_count", "30");
+    }
+
     private GameDayLiveState state() {
         return new GameDayLiveState(
                 LocalDateTime.of(2026, 3, 14, 22, 5),
@@ -118,14 +136,16 @@ class GameDayStoreStateRedisRepositoryTests {
                 new GameDayStartResponse(
                         "10:00",
                         "22:00",
-                        Map.of("10", new GameDayStartResponse.HourlySchedule(100, BigDecimal.ONE)),
+                        Map.of("10", new GameDayStartResponse.HourlySchedule(100, BigDecimal.ONE, BigDecimal.ONE, 110)),
                         "SUNNY",
                         BigDecimal.ONE,
                         BigDecimal.ONE,
                         new BigDecimal("0.15"),
                         List.of(),
                         10_000_000,
-                        100
+                        100,
+                        null,
+                        null
                 ),
                 4,
                 80,

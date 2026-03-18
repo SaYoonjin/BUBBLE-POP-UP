@@ -1,43 +1,37 @@
 package com.ssafy.S14P21A205.game.day.policy;
 
-import com.ssafy.S14P21A205.exception.BaseException;
-import com.ssafy.S14P21A205.exception.ErrorCode;
-import com.ssafy.S14P21A205.game.season.entity.DailyReport;
-import com.ssafy.S14P21A205.game.season.repository.DailyReportRepository;
-import com.ssafy.S14P21A205.store.entity.Store;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 @Component
-@RequiredArgsConstructor
 public class CaptureRatePolicy {
 
-    private static final BigDecimal INITIAL_CAPTURE_RATE = new BigDecimal("0.00");
+    private static final BigDecimal BASE_CAPTURE_RATE = new BigDecimal("0.12");
     private static final BigDecimal DECIMAL_ZERO = new BigDecimal("0.00");
+    private static final BigDecimal DECIMAL_ONE = new BigDecimal("1.00");
 
-    private final DailyReportRepository dailyReportRepository;
-
-    public BigDecimal resolveStartingCaptureRate(Store store, int day) {
-        if (day == 1) {
-            return INITIAL_CAPTURE_RATE;
-        }
-
-        DailyReport previousDay = dailyReportRepository.findByStoreIdAndDay(store.getId(), day - 1)
-                .orElseThrow(() -> new BaseException(ErrorCode.RESOURCE_NOT_FOUND));
-        return normalizeScale(previousDay.getCaptureRate());
+    public BigDecimal resolveStartingCaptureRate(BigDecimal priceBandMultiplier) {
+        return applyMultiplier(BASE_CAPTURE_RATE, priceBandMultiplier);
     }
 
-    private BigDecimal normalizeScale(BigDecimal value) {
-        return value.setScale(2, RoundingMode.HALF_UP);
+    public BigDecimal applyMultiplier(BigDecimal currentCaptureRate, BigDecimal effectMultiplier) {
+        BigDecimal baseRate = normalizeCaptureRate(currentCaptureRate);
+        BigDecimal multiplier = normalizePositiveMultiplier(effectMultiplier);
+        return baseRate.multiply(multiplier).setScale(4, RoundingMode.HALF_UP);
     }
 
-    public BigDecimal resolveInflowRate(BigDecimal baseCaptureRate, BigDecimal actionCaptureRateBoost) {
-        BigDecimal resolved = baseCaptureRate == null ? DECIMAL_ZERO : baseCaptureRate;
-        if (actionCaptureRateBoost != null) {
-            resolved = resolved.add(actionCaptureRateBoost);
+    public BigDecimal normalizeCaptureRate(BigDecimal value) {
+        if (value == null) {
+            return DECIMAL_ZERO.setScale(4, RoundingMode.HALF_UP);
         }
-        return resolved.max(DECIMAL_ZERO).setScale(2, RoundingMode.HALF_UP);
+        return value.max(DECIMAL_ZERO).setScale(4, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal normalizePositiveMultiplier(BigDecimal value) {
+        if (value == null || value.signum() <= 0) {
+            return DECIMAL_ONE.setScale(4, RoundingMode.HALF_UP);
+        }
+        return value.setScale(4, RoundingMode.HALF_UP);
     }
 }

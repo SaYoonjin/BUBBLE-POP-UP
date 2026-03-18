@@ -3,6 +3,8 @@ package com.ssafy.S14P21A205.game.day.engine;
 import com.ssafy.S14P21A205.game.day.state.GameDayLiveState;
 import com.ssafy.S14P21A205.game.time.model.DayWindow;
 import com.ssafy.S14P21A205.game.time.service.SeasonTimelineService;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -26,6 +28,41 @@ public class StockEngine {
         return (int) Math.min(totalTickCount(), Math.max(0L, elapsedMillis / TICK_INTERVAL.toMillis()));
     }
 
+    public LocalDateTime resolveTickBoundary(DayWindow currentTimeline, int tick) {
+        if (tick <= 0) {
+            return currentTimeline.businessStart();
+        }
+
+        LocalDateTime tickBoundary = currentTimeline.businessStart().plus(TICK_INTERVAL.multipliedBy(tick));
+        return tickBoundary.isAfter(currentTimeline.businessEnd()) ? currentTimeline.businessEnd() : tickBoundary;
+    }
+
+    public int calculateTickCustomerCount(int populationPerStore, BigDecimal captureRate) {
+        if (populationPerStore <= 0 || captureRate == null || captureRate.signum() <= 0) {
+            return 0;
+        }
+
+        return BigDecimal.valueOf(populationPerStore)
+                .multiply(captureRate)
+                .setScale(0, RoundingMode.HALF_UP)
+                .intValue();
+    }
+
+    public int advancePurchaseCursor(GameDayLiveState state, int tickCustomerCount) {
+        return advancePurchaseCursor(
+                state.purchaseList(),
+                state.purchaseCursor() == null ? 0 : state.purchaseCursor(),
+                tickCustomerCount
+        );
+    }
+
+    public int advancePurchaseCursor(List<Integer> purchaseList, int purchaseCursor, int tickCustomerCount) {
+        if (purchaseList == null || purchaseList.isEmpty() || tickCustomerCount <= 0) {
+            return purchaseCursor;
+        }
+        return Math.min(purchaseList.size(), purchaseCursor + tickCustomerCount);
+    }
+
     public int resolvePurchaseCursorAtTick(
             GameDayLiveState state,
             DayWindow currentTimeline,
@@ -35,21 +72,23 @@ public class StockEngine {
             return 0;
         }
 
-        LocalDateTime tickBoundary = currentTimeline.businessStart().plus(TICK_INTERVAL.multipliedBy(tick));
-        if (tickBoundary.isAfter(currentTimeline.businessEnd())) {
-            tickBoundary = currentTimeline.businessEnd();
-        }
+        LocalDateTime tickBoundary = resolveTickBoundary(currentTimeline, tick);
         return resolvePurchaseCursor(state, currentTimeline, tickBoundary);
     }
 
     public long calculateDemandUnits(List<Integer> purchaseList, int purchaseCursor) {
-        if (purchaseList == null || purchaseList.isEmpty() || purchaseCursor <= 0) {
+        return calculateDemandUnits(purchaseList, 0, purchaseCursor);
+    }
+
+    public long calculateDemandUnits(List<Integer> purchaseList, int fromCursor, int toCursor) {
+        if (purchaseList == null || purchaseList.isEmpty() || toCursor <= fromCursor) {
             return 0L;
         }
 
         long demandUnits = 0L;
-        int cursor = Math.min(purchaseCursor, purchaseList.size());
-        for (int index = 0; index < cursor; index++) {
+        int start = Math.max(0, Math.min(fromCursor, purchaseList.size()));
+        int end = Math.max(start, Math.min(toCursor, purchaseList.size()));
+        for (int index = start; index < end; index++) {
             demandUnits += purchaseList.get(index);
         }
         return demandUnits;

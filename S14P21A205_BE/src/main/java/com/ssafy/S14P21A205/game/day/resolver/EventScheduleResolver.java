@@ -19,10 +19,13 @@ public class EventScheduleResolver {
     private final DailyEventRepository dailyEventRepository;
     private final SeasonTimelineService seasonTimelineService = new SeasonTimelineService();
 
-    public List<GameDayStartResponse.EventSchedule> resolve(Long seasonId, int day) {
+    public List<GameDayStartResponse.EventSchedule> resolve(Long seasonId, int day, Long locationId, Long menuId) {
         List<DailyEvent> dailyEvents = dailyEventRepository.findBySeasonIdAndDayOrderByIdAsc(seasonId, day);
         List<GameDayStartResponse.EventSchedule> eventSchedule = new ArrayList<>();
         for (DailyEvent dailyEvent : dailyEvents) {
+            if (!matchesScope(dailyEvent, locationId, menuId)) {
+                continue;
+            }
             RandomEvent event = dailyEvent.getEvent();
             Integer balanceChange = event.getCapitalFlat() == null || event.getCapitalFlat() == 0
                     ? null
@@ -30,13 +33,27 @@ public class EventScheduleResolver {
             eventSchedule.add(new GameDayStartResponse.EventSchedule(
                     seasonTimelineService.formatGameTime(dailyEvent.getApplyOffsetSeconds()),
                     event.getEventType(),
-                    new GameDayStartResponse.Scope(null, null),
+                    resolveScope(dailyEvent),
                     event.getEventType(),
                     normalizeScale(event.getPopulationRate()),
                     balanceChange
             ));
         }
         return eventSchedule;
+    }
+
+    private boolean matchesScope(DailyEvent dailyEvent, Long locationId, Long menuId) {
+        if (dailyEvent.getTargetLocationId() != null && !dailyEvent.getTargetLocationId().equals(locationId)) {
+            return false;
+        }
+        return dailyEvent.getTargetMenuId() == null || dailyEvent.getTargetMenuId().equals(menuId);
+    }
+
+    private GameDayStartResponse.Scope resolveScope(DailyEvent dailyEvent) {
+        if (dailyEvent.getTargetLocationId() == null && dailyEvent.getTargetMenuId() == null) {
+            return null;
+        }
+        return new GameDayStartResponse.Scope(dailyEvent.getTargetLocationId(), dailyEvent.getTargetMenuId());
     }
 
     private BigDecimal normalizeScale(BigDecimal value) {

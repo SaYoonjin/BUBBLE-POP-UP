@@ -28,9 +28,10 @@ public class EventEffectResolver {
             int currentDay,
             int totalDays,
             LocalDateTime currentDayStart,
-            LocalDateTime effectiveNow
+            LocalDateTime effectiveNow,
+            Long locationId,
+            Long menuId
     ) {
-        // TODO: Extend this resolver when event cost/festival-style modifiers are added to live gameplay.
         List<DailyEvent> dailyEvents = dailyEventRepository.findBySeasonIdAndDayBetweenOrderByDayAscIdAsc(
                 seasonId,
                 1,
@@ -40,9 +41,14 @@ public class EventEffectResolver {
         long capitalChange = 0L;
         int stockChange = 0;
         BigDecimal populationEventMultiplier = DECIMAL_ONE;
+        BigDecimal ingredientCostMultiplier = DECIMAL_ONE;
         List<GameStateResponse.AppliedEvent> appliedEvents = new ArrayList<>();
 
         for (DailyEvent dailyEvent : dailyEvents) {
+            if (!matchesScope(dailyEvent, locationId, menuId)) {
+                continue;
+            }
+
             int appliedDay = resolveAppliedDay(dailyEvent);
             if (appliedDay < 1 || appliedDay > currentDay) {
                 continue;
@@ -69,9 +75,6 @@ public class EventEffectResolver {
             );
             ResolvedEvent resolvedEvent = new ResolvedEvent(dailyEvent, appliedDay, appliedAt, endedAt);
             RandomEvent event = resolvedEvent.dailyEvent().getEvent();
-            if (!resolvedEvent.appliedAt().isAfter(currentDayStart)) {
-                continue;
-            }
 
             if (resolvedEvent.appliedDay() == currentDay) {
                 capitalChange += event.getCapitalFlat() == null ? 0L : event.getCapitalFlat();
@@ -80,6 +83,7 @@ public class EventEffectResolver {
 
             if (resolvedEvent.isActiveAt(effectiveNow)) {
                 populationEventMultiplier = populationEventMultiplier.multiply(normalizeRate(event.getPopulationRate()));
+                ingredientCostMultiplier = ingredientCostMultiplier.multiply(normalizeRate(event.getCostRate()));
                 appliedEvents.add(new GameStateResponse.AppliedEvent(
                         event.getEventType(),
                         event.getEventType(),
@@ -89,7 +93,22 @@ public class EventEffectResolver {
             }
         }
 
-        return new EventEffect(capitalChange, stockChange, populationEventMultiplier, appliedEvents);
+        return new EventEffect(
+                capitalChange,
+                stockChange,
+                populationEventMultiplier,
+                ingredientCostMultiplier,
+                appliedEvents
+        );
+    }
+
+    private boolean matchesScope(DailyEvent dailyEvent, Long locationId, Long menuId) {
+        Long targetLocationId = dailyEvent.getTargetLocationId();
+        Long targetMenuId = dailyEvent.getTargetMenuId();
+        if (targetLocationId != null && !targetLocationId.equals(locationId)) {
+            return false;
+        }
+        return targetMenuId == null || targetMenuId.equals(menuId);
     }
 
     private int resolveAppliedDay(DailyEvent dailyEvent) {
@@ -127,6 +146,7 @@ public class EventEffectResolver {
             long capitalChange,
             int stockChange,
             BigDecimal populationEventMultiplier,
+            BigDecimal ingredientCostMultiplier,
             List<GameStateResponse.AppliedEvent> appliedEvents
     ) {
     }

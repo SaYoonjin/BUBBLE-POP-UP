@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 interface MenuItem {
   id: number;
   emoji: string;
@@ -11,6 +13,8 @@ interface MenuSelectorProps {
 }
 
 export default function MenuSelector({ menus, selectedId, onSelect }: MenuSelectorProps) {
+  const [showTooltip, setShowTooltip] = useState(false);
+
   return (
     <div className="bg-white rounded-[1.5rem] p-6 md:p-7 shadow-soft border border-transparent">
       <div className="flex items-center justify-between mb-6">
@@ -18,7 +22,21 @@ export default function MenuSelector({ menus, selectedId, onSelect }: MenuSelect
           <h3 className="text-lg font-bold text-slate-900">오늘의 메뉴</h3>
           <p className="text-slate-500 text-sm mt-1">10개 메뉴 중 오늘의 대표 메뉴를 골라 가격과 수량을 준비하세요.</p>
         </div>
-        <span className="material-symbols-outlined text-slate-300 text-[28px]">restaurant_menu</span>
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setShowTooltip((prev) => !prev)}
+            className="size-9 rounded-full bg-slate-50 border border-slate-200 text-slate-400 hover:text-primary-dark hover:border-primary/20 hover:bg-primary/5 transition-colors flex items-center justify-center"
+            aria-label="오늘의 메뉴 안내 보기"
+          >
+            <span className="material-symbols-outlined text-[20px]">restaurant_menu</span>
+          </button>
+          {showTooltip && (
+            <div className="absolute right-0 top-11 z-10 w-60 rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-[13px] leading-relaxed text-slate-600 shadow-lg">
+              오늘은 대표 메뉴 1개만 선택할 수 있습니다. 선택한 메뉴를 기준으로 판매 가격과 준비 수량이 설정됩니다.
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">

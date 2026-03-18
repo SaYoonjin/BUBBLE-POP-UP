@@ -31,7 +31,8 @@ public class GameDayStoreStateRedisRepository {
     private static final String FIELD_PURCHASE_CURSOR = "purchase_cursor";
     private static final String FIELD_START_RESPONSE = "start_response";
     private static final String FIELD_POPULATION_PER_STORE = "population_per_store";
-    private static final String FIELD_INFLOW_RATE = "inflow_rate";
+    private static final String FIELD_CAPTURE_RATE = "capture_rate";
+    private static final String LEGACY_FIELD_CAPTURE_RATE = "inflow_rate";
     private static final String FIELD_SALE_PRICE = "sale_price";
     private static final String FIELD_TICK_CUSTOMER_COUNT = "tick_customer_count";
     private static final String FIELD_TICK_PURCHASE_COUNT = "tick_purchase_count";
@@ -62,7 +63,7 @@ public class GameDayStoreStateRedisRepository {
                     parseStartResponse(entries.get(FIELD_START_RESPONSE)),
                     parseInteger(entries.get(FIELD_TICK)),
                     parseInteger(entries.get(FIELD_POPULATION_PER_STORE)),
-                    parseBigDecimal(entries.get(FIELD_INFLOW_RATE)),
+                    parseCaptureRate(entries),
                     parseInteger(entries.get(FIELD_SALE_PRICE)),
                     parseInteger(entries.get(FIELD_TICK_CUSTOMER_COUNT)),
                     parseInteger(entries.get(FIELD_TICK_PURCHASE_COUNT)),
@@ -192,7 +193,7 @@ public class GameDayStoreStateRedisRepository {
         put(entries, FIELD_PURCHASE_CURSOR, state.purchaseCursor());
         put(entries, FIELD_TICK, state.tick());
         put(entries, FIELD_POPULATION_PER_STORE, state.populationPerStore());
-        put(entries, FIELD_INFLOW_RATE, state.inflowRate());
+        put(entries, FIELD_CAPTURE_RATE, state.captureRate());
         put(entries, FIELD_SALE_PRICE, state.salePrice());
         put(entries, FIELD_TICK_CUSTOMER_COUNT, state.tickCustomerCount());
         put(entries, FIELD_TICK_PURCHASE_COUNT, state.tickPurchaseCount());
@@ -211,11 +212,11 @@ public class GameDayStoreStateRedisRepository {
         String prefix = "tick:%d:".formatted(state.tick());
         Map<String, String> entries = new LinkedHashMap<>();
         put(entries, prefix + "population_per_store", state.populationPerStore());
-        put(entries, prefix + "inflow_rate", state.inflowRate());
+        put(entries, prefix + "capture_rate", state.captureRate());
         put(entries, prefix + "sale_price", state.salePrice());
-        put(entries, prefix + "customer_count", state.tickCustomerCount());
-        put(entries, prefix + "purchase_count", state.tickPurchaseCount());
-        put(entries, prefix + "sales", state.tickSales());
+        put(entries, prefix + "tick_customer_count", state.tickCustomerCount());
+        put(entries, prefix + "tick_purchase_count", state.tickPurchaseCount());
+        put(entries, prefix + "tick_sales", state.tickSales());
         put(entries, prefix + "cumulative_customer_count", state.cumulativeCustomerCount());
         put(entries, prefix + "cumulative_purchase_count", state.cumulativePurchaseCount());
         put(entries, prefix + "cumulative_sales", state.cumulativeSales());
@@ -277,6 +278,14 @@ public class GameDayStoreStateRedisRepository {
             return null;
         }
         return new BigDecimal(text);
+    }
+
+    private BigDecimal parseCaptureRate(Map<Object, Object> entries) {
+        BigDecimal captureRate = parseBigDecimal(entries.get(FIELD_CAPTURE_RATE));
+        if (captureRate != null) {
+            return captureRate;
+        }
+        return parseBigDecimal(entries.get(LEGACY_FIELD_CAPTURE_RATE));
     }
 
     private List<Integer> parsePurchaseList(Object value) throws Exception {

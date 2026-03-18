@@ -16,12 +16,16 @@ public record GameDayStartResponse(
         BigDecimal captureRate,
         List<EventSchedule> eventSchedule,
         Integer initialBalance,
-        Integer initialStock
+        Integer initialStock,
+        OpeningSummary openingSummary,
+        MarketSnapshot marketSnapshot
 ) {
     public record HourlySchedule(
             Integer population,
-            BigDecimal trafficMultiplier
-    ) {
+            BigDecimal trafficMultiplier,
+            BigDecimal eventMultiplier,
+            Integer effectivePopulation
+        ) {
     }
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
@@ -38,6 +42,48 @@ public record GameDayStartResponse(
     public record Scope(
             Long region,
             Long menu
+    ) {
+    }
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public record OpeningSummary(
+            Integer previousClosingBalance,
+            Integer previousClosingStock,
+            Integer regularOrderQuantity,
+            Integer regularOrderCost,
+            Integer dailyRentApplied,
+            Integer interiorCost,
+            Integer disposalQuantity,
+            Integer disposalLoss,
+            Integer governmentSupportCash,
+            Integer appliedUnitCost,
+            Integer openingFreshStock,
+            Integer openingAgedStock,
+            Integer fixedCostTotal,
+            BigDecimal rentMultiplier,
+            BigDecimal rentCouponMultiplier,
+            BigDecimal ingredientDiscountMultiplier,
+            BigDecimal persistentCostEventMultiplier,
+            BigDecimal todayCostEventMultiplier,
+            BigDecimal trendCostMultiplier
+    ) {
+    }
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public record MarketSnapshot(
+            Integer avgMenuPrice,
+            Integer regionStoreCount,
+            Integer totalFloatingPopulation,
+            Integer totalPopulationPerStore,
+            Integer locationPopularityRank,
+            Integer menuTrendRank,
+            BigDecimal priceRatio,
+            String priceBand,
+            BigDecimal priceBandMultiplier,
+            BigDecimal trendMultiplier,
+            BigDecimal reputationMultiplier,
+            String festivalName,
+            BigDecimal festivalMultiplier
     ) {
     }
 }

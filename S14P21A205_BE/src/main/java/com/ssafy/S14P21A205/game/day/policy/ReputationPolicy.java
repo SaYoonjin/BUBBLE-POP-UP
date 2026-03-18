@@ -14,8 +14,8 @@ public class ReputationPolicy {
     private static final BigDecimal REPUTATION_MULTIPLIER = new BigDecimal("5");
 
     public BigDecimal resolveCaptureRate(GameDayLiveState state) {
-        if (state.inflowRate() != null) {
-            return state.inflowRate();
+        if (state.captureRate() != null) {
+            return state.captureRate();
         }
         if (state.startResponse() != null && state.startResponse().captureRate() != null) {
             return state.startResponse().captureRate();
