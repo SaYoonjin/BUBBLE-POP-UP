@@ -29,6 +29,14 @@ public enum ErrorCode {
     // Store
     STORE_NOT_FOUND(HttpStatus.NOT_FOUND, "STORE-001", "Store was not found."),
 
+    // Order
+    ORDER_NOT_AVAILABLE_DAY(HttpStatus.BAD_REQUEST, "ORDER-001", "Regular orders are not available today."),
+    ORDER_DAY_ALREADY_STARTED(HttpStatus.CONFLICT, "ORDER-002", "Regular orders are unavailable after the day has started."),
+    ORDER_ALREADY_EXISTS(HttpStatus.CONFLICT, "ORDER-003", "A regular order already exists for this day."),
+    ORDER_INVALID_QUANTITY(HttpStatus.BAD_REQUEST, "ORDER-004", "Order quantity must be between 50 and 500."),
+    ORDER_INVALID_SELLING_PRICE(HttpStatus.BAD_REQUEST, "ORDER-005", "Selling price is out of the allowed range."),
+    ORDER_INSUFFICIENT_BALANCE(HttpStatus.BAD_REQUEST, "ORDER-006", "Insufficient balance for this regular order."),
+
     // Shop
     SHOP_ITEM_NOT_FOUND(HttpStatus.NOT_FOUND, "SHOP-001", "Shop item was not found."),
     SHOP_ITEM_ALREADY_PURCHASED(HttpStatus.CONFLICT, "SHOP-002", "Shop item is already purchased."),

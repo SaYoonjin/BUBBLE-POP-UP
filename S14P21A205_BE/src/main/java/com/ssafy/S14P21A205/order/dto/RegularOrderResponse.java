@@ -8,6 +8,7 @@ public record RegularOrderResponse(
         Integer menuId,
         Integer quantity,
         Integer costPrice,
+        Integer sellingPrice,
         Integer totalCost,
         Float discount
 ) {
