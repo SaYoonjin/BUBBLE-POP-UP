@@ -49,7 +49,7 @@ export default function LocationSelectPage() {
       {/* Top bar */}
       <div className="absolute top-0 left-0 w-full z-[60] p-4 sm:p-6 pointer-events-none">
         <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
-          <div className="pointer-events-auto flex items-center gap-4">
+          <div className="flex items-center gap-4">
             <div className="flex h-16 items-center gap-3 rounded-[22px] border border-white/70 bg-white/90 px-6 shadow-premium backdrop-blur">
               <div className="flex size-10 items-center justify-center rounded-2xl bg-primary/15 text-primary-dark">
                 <span className="material-symbols-outlined text-2xl">location_on</span>
@@ -64,7 +64,7 @@ export default function LocationSelectPage() {
             </p>
           </div>
 
-          <div className="pointer-events-auto flex flex-col gap-3 sm:flex-row sm:items-stretch">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-stretch">
             <div className="flex min-h-16 items-center gap-3 rounded-[22px] border border-white/70 bg-white/90 px-5 py-3 shadow-premium backdrop-blur">
               <div className="flex size-10 items-center justify-center rounded-2xl bg-amber-100 text-amber-600">
                 <span className="material-symbols-outlined text-xl">account_balance_wallet</span>
