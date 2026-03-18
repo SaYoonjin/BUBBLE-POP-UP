@@ -1,5 +1,4 @@
 import { useState } from "react";
-import ActionBalanceSummary from "../../common/ActionBalanceSummary";
 import { DASHBOARD_SELECTED_ITEMS_STORAGE_KEY } from "../../../constants";
 import ModalWrapper from "./ModalWrapper";
 
@@ -9,10 +8,18 @@ interface MenuItem {
   emoji: string;
 }
 
+export type DeliveryTrafficLevel =
+  | "very_relaxed"
+  | "relaxed"
+  | "normal"
+  | "crowded"
+  | "very_crowded";
+
 interface EmergencyOrderModalProps {
   currentBalance: number;
   menuItems: MenuItem[];
   currentMenuName: string;
+  deliveryTraffic: DeliveryTrafficLevel;
   onClose: () => void;
   onSubmit: (payload: {
     menuIndex: number;
@@ -23,6 +30,42 @@ interface EmergencyOrderModalProps {
 
 const SURCHARGE_RATE = 0.5;
 const ITEM_DISCOUNT_RATE = 10;
+
+const deliveryTrafficMap: Record<
+  DeliveryTrafficLevel,
+  { label: string; color: string; etaMinutes: number; iconBg: string }
+> = {
+  very_relaxed: {
+    label: "매우 원활",
+    color: "text-sky-500",
+    etaMinutes: 8,
+    iconBg: "bg-sky-50",
+  },
+  relaxed: {
+    label: "원활",
+    color: "text-emerald-500",
+    etaMinutes: 12,
+    iconBg: "bg-emerald-50",
+  },
+  normal: {
+    label: "보통",
+    color: "text-slate-600",
+    etaMinutes: 18,
+    iconBg: "bg-slate-100",
+  },
+  crowded: {
+    label: "혼잡",
+    color: "text-amber-500",
+    etaMinutes: 26,
+    iconBg: "bg-amber-50",
+  },
+  very_crowded: {
+    label: "매우 혼잡",
+    color: "text-rose-500",
+    etaMinutes: 35,
+    iconBg: "bg-rose-50",
+  },
+};
 
 function getSelectedDashboardItemIds() {
   try {
@@ -41,10 +84,15 @@ function getSelectedDashboardItemIds() {
   }
 }
 
+function formatWon(amount: number) {
+  return `₩${amount.toLocaleString()}`;
+}
+
 export default function EmergencyOrderModal({
   currentBalance,
   menuItems,
   currentMenuName,
+  deliveryTraffic,
   onClose,
   onSubmit,
 }: EmergencyOrderModalProps) {
@@ -67,7 +115,9 @@ export default function EmergencyOrderModal({
   const materialsCost = discountedUnitPrice * quantity;
   const surcharge = Math.round(materialsCost * SURCHARGE_RATE);
   const totalCost = materialsCost + surcharge;
+  const remainingBalance = currentBalance - totalCost;
   const canAfford = currentBalance >= totalCost;
+  const trafficInfo = deliveryTrafficMap[deliveryTraffic];
 
   return (
     <ModalWrapper onClose={onClose}>
@@ -94,9 +144,7 @@ export default function EmergencyOrderModal({
             </button>
             {showWarningTooltip && (
               <div className="absolute right-0 top-[calc(100%+0.5rem)] z-10 w-64 rounded-2xl border border-rose-200 bg-white px-3.5 py-3 text-xs leading-relaxed text-slate-600 shadow-lg">
-                긴급 발주는 원가의 50% 수수료가 추가됩니다.
-                <br />
-                일반 발주보다 비용이 크게 올라가므로 꼭 필요한 수량만 주문하는 편이 좋습니다.
+                긴급 발주에는 기본 재료비 외에 50% 수수료가 추가되므로 일반 발주보다 비용이 높아 필요한 수량만 주문하는 편이 좋습니다.
               </div>
             )}
           </div>
@@ -158,7 +206,7 @@ export default function EmergencyOrderModal({
                       <div className="mt-0.5 flex items-center gap-1.5 text-[11px]">
                         {hasItemDiscount && (
                           <span className="text-rose-300 line-through decoration-2">
-                            ₩{menu.price.toLocaleString()}
+                            {formatWon(menu.price)}
                           </span>
                         )}
                         <span
@@ -168,7 +216,7 @@ export default function EmergencyOrderModal({
                               : "text-slate-400"
                           }
                         >
-                          ₩{listDiscountedPrice.toLocaleString()}
+                          {formatWon(listDiscountedPrice)}
                         </span>
                       </div>
                     </div>
@@ -201,7 +249,7 @@ export default function EmergencyOrderModal({
           <div>
             <h3 className="text-sm font-bold text-slate-800">수량 설정</h3>
             <p className="mt-1 text-xs text-slate-400">
-              50개부터 500개까지 설정할 수 있습니다.
+              50개부터 500개까지 조정할 수 있습니다.
             </p>
           </div>
 
@@ -229,38 +277,100 @@ export default function EmergencyOrderModal({
           </div>
         </section>
 
+        <section className="space-y-3 rounded-2xl border border-slate-100 bg-white p-5 shadow-soft">
+          <div>
+            <h3 className="text-sm font-bold text-slate-800">배송 정보</h3>
+            <p className="mt-1 text-xs text-slate-400">
+              현재 교통 상황을 기준으로 예상 도착 시간을 안내합니다.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex min-h-[144px] flex-col items-center justify-center rounded-2xl border border-slate-100 bg-slate-50/80 p-4 text-center">
+              <div className="mb-3 flex items-center justify-center gap-2">
+                <div
+                  className={`flex size-8 items-center justify-center rounded-full ${trafficInfo.iconBg}`}
+                >
+                  <span className="material-symbols-outlined text-[16px] text-slate-500">
+                    traffic
+                  </span>
+                </div>
+                <span className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">
+                  현재 교통량
+                </span>
+              </div>
+              <p className={`text-[1.65rem] font-black tracking-tight ${trafficInfo.color}`}>
+                {trafficInfo.label}
+              </p>
+            </div>
+
+            <div className="flex min-h-[144px] flex-col items-center justify-center rounded-2xl border border-slate-100 bg-slate-50/80 p-4 text-center">
+              <div className="mb-3 flex items-center justify-center gap-2">
+                <div className="flex size-8 items-center justify-center rounded-full bg-primary/10">
+                  <span className="material-symbols-outlined text-[16px] text-primary-dark">
+                    schedule
+                  </span>
+                </div>
+                <span className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">
+                  예상 도착시간
+                </span>
+              </div>
+              <p className="text-[1.65rem] font-black tracking-tight text-slate-800">
+                약 {trafficInfo.etaMinutes}분
+              </p>
+            </div>
+          </div>
+        </section>
+
         <section className="rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
           <p className="mb-3 text-xs font-bold uppercase tracking-[0.18em] text-slate-500">
             결제 요약
           </p>
           <div className="space-y-2.5">
             <div className="flex items-center justify-between text-sm text-slate-600">
-              <span>원재료 단가 x 수량</span>
+              <span>현재 잔액</span>
               <span className="font-medium text-slate-800">
-                ₩{materialsCost.toLocaleString()}
+                {formatWon(currentBalance)}
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-sm text-slate-600">
+              <span>원가 x 수량</span>
+              <span className="font-medium text-slate-800">
+                {formatWon(materialsCost)}
               </span>
             </div>
             <div className="flex items-center justify-between text-sm text-slate-600">
               <span>긴급 발주 수수료 ({SURCHARGE_RATE * 100}%)</span>
               <span className="font-medium text-slate-800">
-                ₩{surcharge.toLocaleString()}
+                {formatWon(surcharge)}
               </span>
             </div>
             <div className="h-px w-full bg-slate-200" />
             <div className="flex items-center justify-between">
-              <span className="text-sm font-bold text-slate-700">총 결제 금액</span>
+              <span className="text-sm font-bold text-slate-700">총 결제 비용</span>
               <span className="text-xl font-bold text-primary-dark">
-                ₩{totalCost.toLocaleString()}
+                {formatWon(totalCost)}
+              </span>
+            </div>
+            <div className="h-px w-full bg-slate-200" />
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-bold text-slate-700">결제 후 잔액</span>
+              <span
+                className={`text-lg font-bold ${
+                  remainingBalance < 0 ? "text-rose-500" : "text-primary-dark"
+                }`}
+              >
+                {formatWon(remainingBalance)}
               </span>
             </div>
           </div>
-        </section>
 
-        <ActionBalanceSummary
-          currentBalance={currentBalance}
-          actionCost={totalCost}
-          costLabel="이번 발주 비용"
-        />
+          {!canAfford && (
+            <p className="mt-3 text-xs font-medium text-rose-500">
+              잔액이 부족해 긴급 발주를 실행할 수 없습니다.
+            </p>
+          )}
+        </section>
 
         <button
           type="button"

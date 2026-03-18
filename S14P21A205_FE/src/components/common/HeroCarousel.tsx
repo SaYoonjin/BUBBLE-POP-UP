@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, type ComponentType } from "react";
 import { Link } from "react-router-dom";
 
 const INTERVAL = 6000;
@@ -177,7 +177,7 @@ function DataSlide() {
 }
 
 /* ─── Config ─── */
-interface SlideConfig { badge:string; title:string; desc:string; gradient:string; accentColor:string; component:()=>JSX.Element }
+interface SlideConfig { badge:string; title:string; desc:string; gradient:string; accentColor:string; component:ComponentType }
 const slides: SlideConfig[] = [
   { badge:"Popup Store Simulation", title:"나만의 팝업스토어를 운영하세요", desc:"메뉴 선택부터 가격 전략까지, 경영의 모든 것을 체험해보세요.", gradient:"from-[#F0F7F0] to-[#FEFCE8]", accentColor:"text-emerald-600", component:StoreSlide },
   { badge:"Seoul Hot Place", title:"서울 핫플에서 최고의 입지를 선점하세요", desc:"성수, 홍대, 강남, 명동 — 8개 인기 지역에서 가게를 열어보세요.", gradient:"from-[#EEF2FF] to-[#F0F9FF]", accentColor:"text-indigo-600", component:LocationSlide },
