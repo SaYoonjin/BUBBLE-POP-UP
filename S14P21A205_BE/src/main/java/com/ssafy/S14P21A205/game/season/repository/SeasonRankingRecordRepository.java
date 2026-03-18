@@ -25,4 +25,6 @@ public interface SeasonRankingRecordRepository extends JpaRepository<SeasonRanki
     Optional<SeasonRankingRecord> findFirstByStore_Season_IdAndStore_User_IdOrderByIdDesc(Long seasonId, Integer userId);
 
     boolean existsByStore_Id(Long storeId);
+
+    boolean existsByStore_Season_Id(Long seasonId);
 }

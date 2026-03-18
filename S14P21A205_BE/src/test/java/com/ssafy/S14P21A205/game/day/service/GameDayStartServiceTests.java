@@ -207,7 +207,7 @@ class GameDayStartServiceTests {
         assertThat(response.startTime()).isEqualTo("10:00");
         assertThat(response.endTime()).isEqualTo("22:00");
         assertThat(response.weatherMultiplier()).isEqualByComparingTo("1.10");
-        assertThat(response.captureRate()).isEqualByComparingTo("0.12");
+        assertThat(response.captureRate()).isEqualByComparingTo("0.10");
         assertThat(response.hourlySchedule().get("10").population()).isEqualTo(500);
         assertThat(response.hourlySchedule().get("11").trafficMultiplier()).isEqualByComparingTo("0.75");
         assertThat(response.hourlySchedule().get("10").effectivePopulation()).isEqualTo(550);
@@ -388,6 +388,9 @@ class GameDayStartServiceTests {
                 [{"name":"gangnam","storeCount":2},{"name":"hongdae","storeCount":2},{"name":"myeongdong","storeCount":1}]
                 """,
                 """
+                [{"menuName":"taco","storeCount":3},{"menuName":"hotdog","storeCount":2},{"menuName":"tteokbokki","storeCount":1}]
+                """,
+                """
                 [{"menuName":"taco","mentionCount":19},{"menuName":"hotdog","mentionCount":7},{"menuName":"tteokbokki","mentionCount":6},{"menuName":"bread","mentionCount":6},{"menuName":"hamburger","mentionCount":5},{"menuName":"icecream","mentionCount":2},{"menuName":"dakgangjeong","mentionCount":1},{"menuName":"bubbletea","mentionCount":1}]
                 """
         )));
@@ -397,12 +400,14 @@ class GameDayStartServiceTests {
         NewsRankingResolver.PreviousDayRanking previousDayRanking =
                 new NewsRankingResolver(newsReportRepository, new ObjectMapper()).resolve(store, 2);
         assertThat(previousDayRanking.areaEntryRank()).isEqualTo(2);
+        assertThat(previousDayRanking.menuEntryRank()).isEqualTo(2);
         assertThat(previousDayRanking.trendKeywordRank()).isEqualTo(2);
 
         GameDayStartResponse response = gameDayStartService.startDay(mock(Authentication.class));
 
         assertThat(response.marketSnapshot().locationPopularityRank()).isEqualTo(2);
         assertThat(response.marketSnapshot().menuTrendRank()).isEqualTo(2);
+        assertThat(response.captureRate()).isEqualByComparingTo("0.1100");
         assertThat(response.openingSummary().dailyRentApplied()).isEqualTo(120_000);
         assertThat(response.openingSummary().interiorCost()).isZero();
         assertThat(response.openingSummary().appliedUnitCost()).isEqualTo(2_200);
@@ -492,6 +497,7 @@ class GameDayStartServiceTests {
             Season season,
             int day,
             String areaEntryRanking,
+            String menuEntryRanking,
             String trendKeywordRanking
     ) {
         NewsReport newsReport = instantiate(NewsReport.class);
@@ -499,8 +505,8 @@ class GameDayStartServiceTests {
         ReflectionTestUtils.setField(newsReport, "season", season);
         ReflectionTestUtils.setField(newsReport, "day", day);
         ReflectionTestUtils.setField(newsReport, "areaRevenueRanking", "[]");
-        ReflectionTestUtils.setField(newsReport, "areaTrafficRanking", "[]");
-        ReflectionTestUtils.setField(newsReport, "menuEntryRanking", "[]");
+        ReflectionTestUtils.setField(newsReport, "areaPopulationRanking", "[]");
+        ReflectionTestUtils.setField(newsReport, "menuEntryRanking", menuEntryRanking);
         ReflectionTestUtils.setField(newsReport, "trendKeywordRanking", trendKeywordRanking);
         ReflectionTestUtils.setField(newsReport, "areaEntryRanking", areaEntryRanking);
         return newsReport;

@@ -21,10 +21,14 @@ public class StoreRankingPolicy {
     private static final BigDecimal RENT_MULTIPLIER_FIRST = new BigDecimal("1.30");
     private static final BigDecimal RENT_MULTIPLIER_SECOND = new BigDecimal("1.20");
     private static final BigDecimal RENT_MULTIPLIER_THIRD = new BigDecimal("1.10");
-    private static final BigDecimal TREND_MULTIPLIER_FIRST = new BigDecimal("1.20");
-    private static final BigDecimal TREND_MULTIPLIER_SECOND = new BigDecimal("1.10");
-    private static final BigDecimal TREND_MULTIPLIER_SEVENTH = new BigDecimal("0.90");
-    private static final BigDecimal TREND_MULTIPLIER_EIGHTH = new BigDecimal("0.80");
+    private static final BigDecimal MENU_ENTRY_MULTIPLIER_FIRST = new BigDecimal("1.20");
+    private static final BigDecimal MENU_ENTRY_MULTIPLIER_SECOND = new BigDecimal("1.10");
+    private static final BigDecimal MENU_ENTRY_MULTIPLIER_NINTH = new BigDecimal("0.90");
+    private static final BigDecimal MENU_ENTRY_MULTIPLIER_TENTH = new BigDecimal("0.80");
+    private static final BigDecimal TREND_KEYWORD_MULTIPLIER_FIRST = new BigDecimal("1.20");
+    private static final BigDecimal TREND_KEYWORD_MULTIPLIER_SECOND = new BigDecimal("1.10");
+    private static final BigDecimal TREND_KEYWORD_MULTIPLIER_SEVENTH = new BigDecimal("0.90");
+    private static final BigDecimal TREND_KEYWORD_MULTIPLIER_EIGHTH = new BigDecimal("0.80");
 
     public GameDayStartResponse.MarketSnapshot resolveSnapshot(
             Store store,
@@ -119,20 +123,43 @@ public class StoreRankingPolicy {
     }
 
     public BigDecimal resolveTrendMultiplier(Integer rank) {
+        return resolveMenuEntryMultiplier(rank);
+    }
+
+    public BigDecimal resolveMenuEntryMultiplier(Integer rank) {
         if (rank == null || rank <= 0) {
             return DECIMAL_ONE;
         }
         if (rank == 1) {
-            return TREND_MULTIPLIER_FIRST;
+            return MENU_ENTRY_MULTIPLIER_FIRST;
         }
         if (rank == 2) {
-            return TREND_MULTIPLIER_SECOND;
+            return MENU_ENTRY_MULTIPLIER_SECOND;
         }
         if (rank == 9) {
-            return TREND_MULTIPLIER_SEVENTH;
+            return MENU_ENTRY_MULTIPLIER_NINTH;
         }
         if (rank == 10) {
-            return TREND_MULTIPLIER_EIGHTH;
+            return MENU_ENTRY_MULTIPLIER_TENTH;
+        }
+        return DECIMAL_ONE;
+    }
+
+    public BigDecimal resolveTrendKeywordCaptureMultiplier(Integer rank) {
+        if (rank == null || rank <= 0) {
+            return DECIMAL_ONE;
+        }
+        if (rank == 1) {
+            return TREND_KEYWORD_MULTIPLIER_FIRST;
+        }
+        if (rank == 2) {
+            return TREND_KEYWORD_MULTIPLIER_SECOND;
+        }
+        if (rank == 7) {
+            return TREND_KEYWORD_MULTIPLIER_SEVENTH;
+        }
+        if (rank == 8) {
+            return TREND_KEYWORD_MULTIPLIER_EIGHTH;
         }
         return DECIMAL_ONE;
     }
