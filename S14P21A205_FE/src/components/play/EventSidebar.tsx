@@ -14,11 +14,30 @@ interface EventSidebarProps {
   alerts: GameAlert[];
 }
 
-const typeStyles: Record<AlertType, { border: string; icon: string; iconColor: string }> = {
-  event: { border: "border-primary", icon: "celebration", iconColor: "text-primary" },
-  deadline: { border: "border-red-400", icon: "alarm", iconColor: "text-red-500" },
-  stock: { border: "border-amber-400", icon: "inventory_2", iconColor: "text-amber-500" },
-  action: { border: "border-blue-400", icon: "task_alt", iconColor: "text-blue-500" },
+const typeIcons: Record<AlertType, string> = {
+  event: "celebration",
+  deadline: "alarm",
+  stock: "inventory_2",
+  action: "task_alt",
+};
+
+const typeIconStyles: Record<AlertType, { chip: string; icon: string }> = {
+  event: {
+    chip: "bg-cozy-primary/10",
+    icon: "text-cozy-primary",
+  },
+  deadline: {
+    chip: "bg-accent-rose/15",
+    icon: "text-rose-dark",
+  },
+  stock: {
+    chip: "bg-amber-50",
+    icon: "text-amber-600",
+  },
+  action: {
+    chip: "bg-primary/15",
+    icon: "text-primary-dark",
+  },
 };
 
 export default function EventSidebar({ alerts }: EventSidebarProps) {
@@ -28,33 +47,26 @@ export default function EventSidebar({ alerts }: EventSidebarProps) {
   return (
     <aside className="absolute top-20 right-4 z-10 w-72 pointer-events-none">
       <div className="glass-panel rounded-2xl shadow-lg pointer-events-auto overflow-hidden">
-        {/* Header - always visible */}
         <button
-          onClick={() => setExpanded(!expanded)}
+          type="button"
+          onClick={() => setExpanded((prev) => !prev)}
           className="w-full px-4 py-3 flex items-center justify-between hover:bg-white/40 transition-colors"
         >
           <h2 className="font-bold text-slate-800 text-sm flex items-center gap-2">
             <span className="material-symbols-outlined text-primary text-[18px]">notifications_active</span>
             실시간 알림
-            {alerts.length > 0 && (
-              <span className="bg-primary text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
-                {alerts.length}
-              </span>
-            )}
           </h2>
           <span className={`material-symbols-outlined text-slate-400 text-[18px] transition-transform duration-200 ${expanded ? "rotate-180" : ""}`}>
             expand_more
           </span>
         </button>
 
-        {/* Latest alert - always visible */}
         {latest && !expanded && (
           <div className="px-4 pb-3">
             <AlertCard alert={latest} />
           </div>
         )}
 
-        {/* Expanded list */}
         {expanded && (
           <div className="px-4 pb-3 space-y-2 max-h-[400px] overflow-y-auto custom-scrollbar">
             {alerts.map((alert) => (
@@ -68,17 +80,22 @@ export default function EventSidebar({ alerts }: EventSidebarProps) {
 }
 
 function AlertCard({ alert }: { alert: GameAlert }) {
-  const style = typeStyles[alert.type];
+  const iconStyle = typeIconStyles[alert.type];
+
   return (
-    <div className={`bg-white p-3 rounded-xl border-l-[3px] ${style.border} shadow-sm`}>
-      <div className="flex justify-between items-start mb-0.5">
-        <div className="flex items-center gap-1.5">
-          <span className={`material-symbols-outlined text-[14px] ${style.iconColor}`}>{style.icon}</span>
-          <span className="text-[12px] font-bold text-slate-700">{alert.title}</span>
+    <div className="rounded-xl border border-slate-200 bg-white px-3 py-3 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-start gap-2.5">
+          <div className={`mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full ${iconStyle.chip}`}>
+            <span className={`material-symbols-outlined text-[15px] ${iconStyle.icon}`}>{typeIcons[alert.type]}</span>
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[12px] font-bold text-slate-700">{alert.title}</p>
+            <p className="mt-0.5 truncate text-[11px] text-slate-500">{alert.description}</p>
+          </div>
         </div>
-        <span className="text-[10px] text-slate-400 shrink-0 ml-2">{alert.time}</span>
+        <span className="shrink-0 text-[10px] text-slate-400">{alert.time}</span>
       </div>
-      <p className="text-[11px] text-slate-500 mt-0.5 pl-5">{alert.description}</p>
     </div>
   );
 }
