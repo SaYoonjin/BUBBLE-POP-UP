@@ -109,11 +109,14 @@ public class GameDayStartService {
                 daySchedule,
                 festival,
                 previousDayRanking.areaEntryRank(),
-                previousDayRanking.trendKeywordRank()
+                previousDayRanking.menuEntryRank()
         );
         List<Order> existingOrders = orderRepository.findDailyStartOrders(store.getId(), day);
         OpeningState openingState = rentPolicy.resolveStartingState(store, day, existingOrders, marketSnapshot);
-        BigDecimal captureRate = captureRatePolicy.resolveStartingCaptureRate(marketSnapshot.priceBandMultiplier());
+        BigDecimal captureRate = captureRatePolicy.resolveStartingCaptureRate(
+                marketSnapshot.priceBandMultiplier(),
+                marketRankingPolicy.resolveTrendKeywordCaptureMultiplier(previousDayRanking.trendKeywordRank())
+        );
         List<GameDayStartResponse.EventSchedule> eventSchedule = eventScheduleResolver.resolve(
                 store.getSeason().getId(),
                 day,

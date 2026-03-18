@@ -22,24 +22,50 @@ public class NewsRankingResolver {
     private final ObjectMapper objectMapper;
 
     public PreviousDayRanking resolve(Store store, int day) {
-        if (day <= 1) {
-            return new PreviousDayRanking(null, null);
-        }
-
-        return newsReportRepository.findFirstBySeason_IdAndDay(store.getSeason().getId(), day - 1)
+        return findPreviousReport(store.getSeason().getId(), day)
                 .map(report -> new PreviousDayRanking(
                         resolveAreaEntryRank(report, store.getLocation()),
+                        resolveMenuEntryRank(report, store.getMenu()),
                         resolveTrendKeywordRank(report, store.getMenu())
                 ))
-                .orElse(new PreviousDayRanking(null, null));
+                .orElse(new PreviousDayRanking(null, null, null));
+    }
+
+    public Integer resolveAreaEntryRank(Long seasonId, int day, Location location) {
+        return findPreviousReport(seasonId, day)
+                .map(report -> resolveAreaEntryRank(report, location))
+                .orElse(null);
+    }
+
+    public Integer resolveMenuEntryRank(Long seasonId, int day, Menu menu) {
+        return findPreviousReport(seasonId, day)
+                .map(report -> resolveMenuEntryRank(report, menu))
+                .orElse(null);
+    }
+
+    public Integer resolveTrendKeywordRank(Long seasonId, int day, Menu menu) {
+        return findPreviousReport(seasonId, day)
+                .map(report -> resolveTrendKeywordRank(report, menu))
+                .orElse(null);
     }
 
     private Integer resolveAreaEntryRank(NewsReport report, Location location) {
         return resolveRank(report.getAreaEntryRanking(), location.getId(), location.getLocationName(), true);
     }
 
+    private Integer resolveMenuEntryRank(NewsReport report, Menu menu) {
+        return resolveRank(report.getMenuEntryRanking(), menu.getId(), menu.getMenuName(), false);
+    }
+
     private Integer resolveTrendKeywordRank(NewsReport report, Menu menu) {
         return resolveRank(report.getTrendKeywordRanking(), menu.getId(), menu.getMenuName(), false);
+    }
+
+    private Optional<NewsReport> findPreviousReport(Long seasonId, int day) {
+        if (day <= 1) {
+            return Optional.empty();
+        }
+        return newsReportRepository.findFirstBySeason_IdAndDay(seasonId, day - 1);
     }
 
     private Integer resolveRank(String payload, Long targetId, String targetName, boolean areaRanking) {
@@ -207,6 +233,7 @@ public class NewsRankingResolver {
 
     public record PreviousDayRanking(
             Integer areaEntryRank,
+            Integer menuEntryRank,
             Integer trendKeywordRank
     ) {
     }

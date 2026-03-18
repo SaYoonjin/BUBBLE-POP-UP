@@ -19,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class SeasonLifecycleService {
 
     private final SeasonRepository seasonRepository;
+    private final SeasonFinalRankingService seasonFinalRankingService;
 
     private final SeasonTimelineService seasonTimelineService = new SeasonTimelineService();
 
@@ -67,6 +68,7 @@ public class SeasonLifecycleService {
 
         if (!now.isBefore(seasonEndAt)) {
             season.finish();
+            seasonFinalRankingService.saveFinalRankings(season);
             scheduleNextSeasonIfNeeded(season, seasonEndAt);
         }
     }

@@ -65,4 +65,58 @@ public class SeasonRankingRecord {
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
+
+    private SeasonRankingRecord(
+            Store store,
+            Integer finalRank,
+            BigDecimal reputationScore,
+            Integer totalRevenue,
+            Integer totalCost,
+            Integer totalNetProfit,
+            Integer totalVisitors,
+            Float roi,
+            Integer daysPlayed,
+            Integer rewardPoints,
+            Boolean isBankruptcy
+    ) {
+        this.store = store;
+        this.finalRank = finalRank;
+        this.reputationScore = reputationScore;
+        this.totalRevenue = totalRevenue;
+        this.totalCost = totalCost;
+        this.totalNetProfit = totalNetProfit;
+        this.totalVisitors = totalVisitors;
+        this.roi = roi;
+        this.daysPlayed = daysPlayed;
+        this.rewardPoints = rewardPoints;
+        this.isBankruptcy = isBankruptcy;
+    }
+
+    public static SeasonRankingRecord create(
+            Store store,
+            Integer finalRank,
+            BigDecimal reputationScore,
+            Integer totalRevenue,
+            Integer totalCost,
+            Integer totalNetProfit,
+            Integer totalVisitors,
+            Float roi,
+            Integer daysPlayed,
+            Integer rewardPoints,
+            Boolean isBankruptcy
+    ) {
+        return new SeasonRankingRecord(
+                store,
+                finalRank,
+                reputationScore,
+                totalRevenue,
+                totalCost,
+                totalNetProfit,
+                totalVisitors,
+                roi,
+                daysPlayed,
+                rewardPoints,
+                isBankruptcy
+        );
+    }
 }

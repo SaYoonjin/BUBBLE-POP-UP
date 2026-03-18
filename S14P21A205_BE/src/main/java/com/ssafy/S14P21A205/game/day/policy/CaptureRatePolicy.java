@@ -7,12 +7,19 @@ import org.springframework.stereotype.Component;
 @Component
 public class CaptureRatePolicy {
 
-    private static final BigDecimal BASE_CAPTURE_RATE = new BigDecimal("0.12");
+    private static final BigDecimal BASE_CAPTURE_RATE = new BigDecimal("0.10");
     private static final BigDecimal DECIMAL_ZERO = new BigDecimal("0.00");
     private static final BigDecimal DECIMAL_ONE = new BigDecimal("1.00");
 
-    public BigDecimal resolveStartingCaptureRate(BigDecimal priceBandMultiplier) {
-        return applyMultiplier(BASE_CAPTURE_RATE, priceBandMultiplier);
+    public BigDecimal resolveStartingCaptureRate(BigDecimal... multipliers) {
+        BigDecimal captureRate = BASE_CAPTURE_RATE;
+        if (multipliers == null) {
+            return normalizeCaptureRate(captureRate);
+        }
+        for (BigDecimal multiplier : multipliers) {
+            captureRate = applyMultiplier(captureRate, multiplier);
+        }
+        return normalizeCaptureRate(captureRate);
     }
 
     public BigDecimal applyMultiplier(BigDecimal currentCaptureRate, BigDecimal effectMultiplier) {

@@ -3,6 +3,7 @@ package com.ssafy.S14P21A205.order.service;
 import com.ssafy.S14P21A205.exception.BaseException;
 import com.ssafy.S14P21A205.exception.ErrorCode;
 import com.ssafy.S14P21A205.game.day.policy.StoreRankingPolicy;
+import com.ssafy.S14P21A205.game.day.resolver.NewsRankingResolver;
 import com.ssafy.S14P21A205.game.day.state.repository.GameDayStoreStateRedisRepository;
 import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
 import com.ssafy.S14P21A205.game.season.repository.DailyReportRepository;
@@ -50,6 +51,7 @@ public class OrderServiceImpl implements OrderService {
     private final ItemUserRepository itemUserRepository;
     private final StringRedisTemplate stringRedisTemplate;
     private final StoreRankingPolicy marketRankingPolicy;
+    private final NewsRankingResolver newsRankingResolver;
     private final Clock clock;
 
     private final SeasonTimelineService seasonTimelineService = new SeasonTimelineService();
@@ -63,7 +65,7 @@ public class OrderServiceImpl implements OrderService {
         List<Store> seasonStores = storeRepository.findBySeason_IdOrderByIdAsc(store.getSeason().getId());
 
         BigDecimal ingredientDiscountRate = getIngredientDiscountRate(store.getUser().getId());
-        int menuTrendRank = marketRankingPolicy.resolveMenuTrendRank(menu.getId(), seasonStores);
+        int menuTrendRank = resolveMenuEntryRank(store, currentDay, menu, seasonStores);
         PricingPolicy pricingPolicy = resolvePricingPolicy(menu, ingredientDiscountRate, menuTrendRank);
         Integer stock = resolveStock(storeId, currentDay);
 
@@ -97,7 +99,7 @@ public class OrderServiceImpl implements OrderService {
         List<Store> seasonStores = storeRepository.findBySeason_IdOrderByIdAsc(store.getSeason().getId());
 
         BigDecimal discountRate = getIngredientDiscountRate(store.getUser().getId());
-        int menuTrendRank = marketRankingPolicy.resolveMenuTrendRank(menu.getId(), seasonStores);
+        int menuTrendRank = resolveMenuEntryRank(store, regularOrderDay, menu, seasonStores);
         PricingPolicy pricingPolicy = resolvePricingPolicy(menu, discountRate, menuTrendRank);
         Integer sellingPrice = resolveSellingPrice(request.price(), sameMenu, store.getPrice(), pricingPolicy);
         validateSellingPrice(sellingPrice, pricingPolicy);
@@ -151,7 +153,7 @@ public class OrderServiceImpl implements OrderService {
     private Integer resolveCostPrice(Menu menu, BigDecimal discountRate, int menuTrendRank) {
         return marketRankingPolicy.apply(
                 menu.getOriginPrice(),
-                marketRankingPolicy.resolveTrendMultiplier(menuTrendRank),
+                marketRankingPolicy.resolveMenuEntryMultiplier(menuTrendRank),
                 discountRate
         );
     }
@@ -159,7 +161,7 @@ public class OrderServiceImpl implements OrderService {
     private Integer resolveMinimumSellingPrice(Menu menu, int menuTrendRank) {
         return marketRankingPolicy.apply(
                 menu.getOriginPrice(),
-                marketRankingPolicy.resolveTrendMultiplier(menuTrendRank)
+                marketRankingPolicy.resolveMenuEntryMultiplier(menuTrendRank)
         );
     }
 
@@ -255,7 +257,7 @@ public class OrderServiceImpl implements OrderService {
 
     private void validateAffordableOrder(Store store, int day, int totalCost, List<Store> seasonStores) {
         int carriedBalance = resolveCarriedBalance(store, day);
-        int locationRank = marketRankingPolicy.resolveLocationPopularityRank(store.getLocation().getId(), seasonStores);
+        int locationRank = resolveAreaEntryRank(store, day, seasonStores);
         int dailyRentApplied = marketRankingPolicy.apply(
                 store.getLocation().getRent(),
                 marketRankingPolicy.resolveRentMultiplier(locationRank),
@@ -266,6 +268,30 @@ public class OrderServiceImpl implements OrderService {
         if (carriedBalance - dailyRentApplied - interiorCost < totalCost) {
             throw new BaseException(ErrorCode.ORDER_INSUFFICIENT_BALANCE);
         }
+    }
+
+    private int resolveAreaEntryRank(Store store, int day, List<Store> seasonStores) {
+        Integer newsRank = newsRankingResolver.resolveAreaEntryRank(
+                store.getSeason().getId(),
+                day,
+                store.getLocation()
+        );
+        if (newsRank != null) {
+            return newsRank;
+        }
+        return marketRankingPolicy.resolveLocationPopularityRank(store.getLocation().getId(), seasonStores);
+    }
+
+    private int resolveMenuEntryRank(Store store, int day, Menu menu, List<Store> seasonStores) {
+        Integer newsRank = newsRankingResolver.resolveMenuEntryRank(
+                store.getSeason().getId(),
+                day,
+                menu
+        );
+        if (newsRank != null) {
+            return newsRank;
+        }
+        return marketRankingPolicy.resolveMenuTrendRank(menu.getId(), seasonStores);
     }
 
     private int resolveCarriedBalance(Store store, int day) {

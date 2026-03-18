@@ -29,11 +29,14 @@ class SeasonLifecycleServiceTests {
     @Mock
     private SeasonRepository seasonRepository;
 
+    @Mock
+    private SeasonFinalRankingService seasonFinalRankingService;
+
     private SeasonLifecycleService seasonLifecycleService;
 
     @BeforeEach
     void setUp() {
-        seasonLifecycleService = new SeasonLifecycleService(seasonRepository);
+        seasonLifecycleService = new SeasonLifecycleService(seasonRepository, seasonFinalRankingService);
     }
 
     @Test
@@ -58,10 +61,11 @@ class SeasonLifecycleServiceTests {
         assertThat(scheduledSeason.getCurrentDay()).isEqualTo(1);
         assertThat(scheduledSeason.getEndTime()).isEqualTo(seasonStartAt.plusSeconds(1800));
         verify(seasonRepository, never()).save(any(Season.class));
+        verify(seasonFinalRankingService, never()).saveFinalRankings(any(Season.class));
     }
 
     @Test
-    void synchronizeFinishesInProgressSeasonAndCreatesNextSeasonWhenSeasonEnds() {
+    void synchronizeFinishesInProgressSeasonCreatesNextSeasonAndSavesFinalRankings() {
         LocalDateTime seasonStartAt = LocalDateTime.of(2026, 3, 18, 10, 0, 0);
         LocalDateTime now = seasonStartAt.plusSeconds(1800);
         Season inProgressSeason = Season.createScheduled(7, seasonStartAt, seasonStartAt.plusMinutes(30));
@@ -86,6 +90,7 @@ class SeasonLifecycleServiceTests {
         assertThat(inProgressSeason.getStatus()).isEqualTo(SeasonStatus.FINISHED);
         assertThat(inProgressSeason.getCurrentDay()).isEqualTo(7);
         assertThat(inProgressSeason.getEndTime()).isEqualTo(seasonStartAt.plusSeconds(1800));
+        verify(seasonFinalRankingService).saveFinalRankings(inProgressSeason);
 
         ArgumentCaptor<Season> seasonCaptor = ArgumentCaptor.forClass(Season.class);
         verify(seasonRepository).save(seasonCaptor.capture());
