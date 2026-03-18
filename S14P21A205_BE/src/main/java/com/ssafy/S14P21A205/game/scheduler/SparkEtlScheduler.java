@@ -1,5 +1,10 @@
 package com.ssafy.S14P21A205.game.scheduler;
 
+import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
+import com.ssafy.S14P21A205.game.season.repository.SeasonRepository;
+import com.ssafy.S14P21A205.news.repository.NewsReportRepository;
+import com.ssafy.S14P21A205.news.service.NewsService;
+
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
@@ -7,15 +12,21 @@ import java.util.List;
 import java.util.Random;
 import java.util.concurrent.TimeUnit;
 
+import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 @Component
+@RequiredArgsConstructor
 public class SparkEtlScheduler {
 
     private static final Logger log = LoggerFactory.getLogger(SparkEtlScheduler.class);
+
+    private final SeasonRepository seasonRepository;
+    private final NewsReportRepository newsReportRepository;
+    private final NewsService newsService;
 
     private static final LocalDate START_BOUND = LocalDate.of(2023, 1, 1);
     private static final LocalDate END_BOUND = LocalDate.of(2024, 12, 25);
@@ -29,6 +40,19 @@ public class SparkEtlScheduler {
         log.info("Spark ETL started. date={}", randomDate);
         submitSparkJob("etl_population_score.py", randomDate);
         submitSparkJob("etl_traffic_score.py", randomDate);
+
+        // TODO: 수동 호출과 중복 방지 후 활성화
+        // generateNewsIfNeeded();
+    }
+
+    private void generateNewsIfNeeded() {
+        seasonRepository.findFirstByStatusOrderByIdDesc(SeasonStatus.IN_PROGRESS)
+                .ifPresent(season -> {
+                    if (!newsReportRepository.existsBySeasonId(season.getId())) {
+                        log.info("Generating news for season {}", season.getId());
+                        newsService.generateSeasonNews(season.getId());
+                    }
+                });
     }
 
     private String pickRandomDate() {
