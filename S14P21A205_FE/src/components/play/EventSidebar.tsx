@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 
 export type AlertType = "event" | "deadline" | "stock" | "action";
 
@@ -38,6 +38,24 @@ const typeIconStyles: Record<AlertType, { chip: string; icon: string }> = {
     chip: "bg-primary/15",
     icon: "text-primary-dark",
   },
+};
+
+const titleClampStyle: CSSProperties = {
+  display: "-webkit-box",
+  overflow: "hidden",
+  wordBreak: "keep-all",
+  overflowWrap: "break-word",
+  WebkitBoxOrient: "vertical",
+  WebkitLineClamp: 2,
+};
+
+const descriptionClampStyle: CSSProperties = {
+  display: "-webkit-box",
+  overflow: "hidden",
+  wordBreak: "keep-all",
+  overflowWrap: "break-word",
+  WebkitBoxOrient: "vertical",
+  WebkitLineClamp: 2,
 };
 
 export default function EventSidebar({ alerts }: EventSidebarProps) {
@@ -84,17 +102,29 @@ function AlertCard({ alert }: { alert: GameAlert }) {
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white px-3 py-3 shadow-sm">
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex min-w-0 items-start gap-2.5">
-          <div className={`mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full ${iconStyle.chip}`}>
-            <span className={`material-symbols-outlined text-[15px] ${iconStyle.icon}`}>{typeIcons[alert.type]}</span>
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-[12px] font-bold text-slate-700">{alert.title}</p>
-            <p className="mt-0.5 truncate text-[11px] text-slate-500">{alert.description}</p>
-          </div>
+      <div className="flex items-start gap-2.5">
+        <div className={`mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full ${iconStyle.chip}`}>
+          <span className={`material-symbols-outlined text-[15px] ${iconStyle.icon}`}>{typeIcons[alert.type]}</span>
         </div>
-        <span className="shrink-0 text-[10px] text-slate-400">{alert.time}</span>
+
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start gap-2">
+            <p
+              className="min-w-0 flex-1 whitespace-normal text-[12px] font-bold leading-[1.35] text-slate-700"
+              style={titleClampStyle}
+            >
+              {alert.title}
+            </p>
+            <span className="mt-0.5 shrink-0 text-[10px] leading-none text-slate-400">{alert.time}</span>
+          </div>
+
+          <p
+            className="mt-1 whitespace-normal text-[11px] leading-[1.45] text-slate-500"
+            style={descriptionClampStyle}
+          >
+            {alert.description}
+          </p>
+        </div>
       </div>
     </div>
   );

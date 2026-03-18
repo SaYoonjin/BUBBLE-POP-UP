@@ -7,7 +7,15 @@ interface DiscountModalProps {
   onSubmit: (discountRate: number) => void;
 }
 
-export default function DiscountModal({ currentPrice, onClose, onSubmit }: DiscountModalProps) {
+function formatWon(value: number) {
+  return `₩${value.toLocaleString()}`;
+}
+
+export default function DiscountModal({
+  currentPrice,
+  onClose,
+  onSubmit,
+}: DiscountModalProps) {
   const [rate, setRate] = useState(20);
   const discountedPrice = Math.round(currentPrice * (1 - rate / 100));
 
@@ -18,7 +26,9 @@ export default function DiscountModal({ currentPrice, onClose, onSubmit }: Disco
           <span>🏷️</span>
           할인 이벤트
         </h2>
-        <p className="mt-1 text-sm text-slate-500">현재 판매가를 기준으로 할인율을 적용합니다.</p>
+        <p className="mt-1 text-sm text-slate-500">
+          현재 판매가를 기준으로 할인율을 적용합니다.
+        </p>
       </div>
 
       <div className="space-y-7 px-8 py-4">
@@ -48,12 +58,18 @@ export default function DiscountModal({ currentPrice, onClose, onSubmit }: Disco
         <div className="space-y-3 rounded-2xl border border-slate-100 bg-slate-50 p-5">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 text-slate-600">
-              <span className="material-symbols-outlined text-xl text-primary">local_offer</span>
+              <span className="material-symbols-outlined text-xl text-primary">
+                local_offer
+              </span>
               <span className="text-sm font-medium">할인 적용가</span>
             </div>
             <div className="text-right">
-              <span className="mr-2 text-xs text-slate-400 line-through">₩{currentPrice.toLocaleString()}</span>
-              <span className="text-lg font-bold text-slate-800">₩{discountedPrice.toLocaleString()}</span>
+              <span className="mr-2 text-xs text-slate-400 line-through">
+                {formatWon(currentPrice)}
+              </span>
+              <span className="text-lg font-bold text-slate-800">
+                {formatWon(discountedPrice)}
+              </span>
             </div>
           </div>
         </div>
@@ -72,13 +88,6 @@ export default function DiscountModal({ currentPrice, onClose, onSubmit }: Disco
           className="w-full rounded-xl bg-primary py-3 text-base font-bold text-white shadow-md shadow-primary/25 transition-all active:scale-[0.98] hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-40"
         >
           할인 시작하기
-        </button>
-        <button
-          type="button"
-          onClick={onClose}
-          className="mt-2.5 w-full py-2.5 text-sm font-medium text-slate-400 transition-colors hover:text-slate-600"
-        >
-          취소
         </button>
       </div>
     </ModalWrapper>
