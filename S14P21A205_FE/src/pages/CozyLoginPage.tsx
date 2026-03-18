@@ -1,6 +1,14 @@
 import CozyWoodBackground from "../components/cozy/CozyWoodBackground";
 
 export default function CozyLoginPage() {
+  const startLogin = (provider: "google" | "ssafy") => {
+    const query = new URLSearchParams({
+      provider,
+      redirect: "/auth/callback",
+    });
+    window.location.href = `/api/auth/login?${query.toString()}`;
+  };
+
   return (
     <CozyWoodBackground>
       {/* Minimal header */}
@@ -35,7 +43,11 @@ export default function CozyLoginPage() {
           </p>
 
           <div className="w-full flex flex-col gap-5">
-            <button className="w-full h-[58px] bg-white border-b-4 border-r-2 border-gray-200 hover:border-gray-300 hover:translate-y-[1px] text-cozy-ink rounded-sm flex items-center justify-center gap-3 transition-all shadow-sm font-bold text-[15px] relative overflow-hidden">
+            <button
+              type="button"
+              onClick={() => startLogin("google")}
+              className="w-full h-[58px] bg-white border-b-4 border-r-2 border-gray-200 hover:border-gray-300 hover:translate-y-[1px] text-cozy-ink rounded-sm flex items-center justify-center gap-3 transition-all shadow-sm font-bold text-[15px] relative overflow-hidden"
+            >
               <svg className="w-5 h-5" viewBox="0 0 24 24">
                 <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
                 <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
@@ -44,7 +56,11 @@ export default function CozyLoginPage() {
               </svg>
               <span className="font-cozy-serif uppercase tracking-widest">Sign in with Google</span>
             </button>
-            <button className="w-full h-[58px] bg-[#f0eadd] border-b-4 border-r-2 border-[#d6cfbe] hover:translate-y-[1px] text-cozy-ink rounded-sm flex items-center justify-center gap-3 transition-all shadow-sm font-bold text-[15px] relative overflow-hidden">
+            <button
+              type="button"
+              onClick={() => startLogin("ssafy")}
+              className="w-full h-[58px] bg-[#f0eadd] border-b-4 border-r-2 border-[#d6cfbe] hover:translate-y-[1px] text-cozy-ink rounded-sm flex items-center justify-center gap-3 transition-all shadow-sm font-bold text-[15px] relative overflow-hidden"
+            >
               <div className="absolute left-0 top-0 bottom-0 w-2 bg-cozy-sage/40" />
               <span className="text-cozy-primary font-black font-cozy-serif italic">SSAFY</span>
               <span className="font-cozy-serif uppercase tracking-widest ml-1">Staff Access</span>

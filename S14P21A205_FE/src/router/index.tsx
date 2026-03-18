@@ -18,10 +18,12 @@ import CozyLobbyPage from "../pages/CozyLobbyPage";
 import CozyLoginPage from "../pages/CozyLoginPage";
 import CozyDashboardPage from "../pages/CozyDashboardPage";
 import CozyMyPage from "../pages/CozyMyPage";
+import AuthCallbackPage from "../pages/AuthCallbackPage";
 
 const router = createBrowserRouter([
   { path: "/", element: <LobbyPage /> },
   { path: "/login", element: <LoginPage /> },
+  { path: "/auth/callback", element: <AuthCallbackPage /> },
   { path: "/test", element: <ComponentTestPage /> },
   { path: "/test/cozy", element: <CozyTestPage /> },
   { path: "/news", element: <NewsPage /> },
