@@ -1,38 +1,81 @@
-import { useState, useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 
 interface CountdownTimerProps {
-  /** 남은 시간 (초) */
   initialSeconds: number;
-  /** 0에 도달했을 때 콜백 */
   onComplete?: () => void;
-  /** 라벨 */
   label?: string;
+  variant?: "pill" | "display" | "inline";
+  showIcon?: boolean;
 }
 
 export default function CountdownTimer({
   initialSeconds,
   onComplete,
   label = "남은 시간",
+  variant = "pill",
+  showIcon = true,
 }: CountdownTimerProps) {
-  const [seconds, setSeconds] = useState(initialSeconds);
-
-  useEffect(() => {
-    setSeconds(initialSeconds);
-  }, [initialSeconds]);
+  const [seconds, setSeconds] = useState(() => initialSeconds);
+  const hasCompletedRef = useRef(false);
 
   useEffect(() => {
     if (seconds <= 0) {
-      onComplete?.();
+      if (!hasCompletedRef.current) {
+        hasCompletedRef.current = true;
+        onComplete?.();
+      }
       return;
     }
-    const timer = setInterval(() => setSeconds((s) => s - 1), 1000);
-    return () => clearInterval(timer);
+
+    const timer = window.setInterval(() => {
+      setSeconds((currentSeconds) => currentSeconds - 1);
+    }, 1000);
+
+    return () => window.clearInterval(timer);
   }, [seconds, onComplete]);
 
-  const min = Math.floor(seconds / 60);
-  const sec = seconds % 60;
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
   const isUrgent = seconds <= 10;
-  const formattedTime = `${String(min).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
+  const formattedTime = `${String(minutes).padStart(2, "0")}:${String(remainingSeconds).padStart(2, "0")}`;
+
+  if (variant === "display") {
+    return (
+      <div
+        aria-label={`${label} ${formattedTime}`}
+        className={`font-display text-[2rem] font-black tabular-nums leading-none tracking-[0.06em] sm:text-[2.4rem] ${
+          isUrgent ? "text-red-500" : "text-slate-900"
+        }`}
+      >
+        {formattedTime}
+      </div>
+    );
+  }
+
+  if (variant === "inline") {
+    return (
+      <div
+        aria-label={`${label} ${formattedTime}`}
+        className={`inline-flex items-center gap-2 ${
+          isUrgent ? "text-red-500" : "text-slate-900"
+        }`}
+      >
+        {showIcon && (
+          <span
+            aria-hidden="true"
+            className={`flex size-7 items-center justify-center rounded-full ${
+              isUrgent ? "bg-red-100 text-red-500" : "bg-primary/15 text-primary-dark"
+            }`}
+          >
+            <span className="material-symbols-outlined text-[16px]">schedule</span>
+          </span>
+        )}
+        <span className="font-display text-[1.4rem] font-black tabular-nums tracking-[0.04em]">
+          {formattedTime}
+        </span>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -44,17 +87,21 @@ export default function CountdownTimer({
       }`}
     >
       <span className="sr-only">{label}</span>
-      <span
-        aria-hidden="true"
-        className={`flex size-6 items-center justify-center rounded-full ${
-          isUrgent ? "bg-red-100 text-red-500" : "bg-primary/15 text-primary-dark"
+      {showIcon && (
+        <span
+          aria-hidden="true"
+          className={`flex size-6 items-center justify-center rounded-full ${
+            isUrgent ? "bg-red-100 text-red-500" : "bg-primary/15 text-primary-dark"
+          }`}
+        >
+          <span className="material-symbols-outlined text-[15px]">schedule</span>
+        </span>
+      )}
+      <div
+        className={`font-display text-[0.95rem] font-extrabold tabular-nums tracking-[0.02em] md:text-[1rem] ${
+          isUrgent ? "text-red-500" : "text-slate-900"
         }`}
       >
-        <span className="material-symbols-outlined text-[15px]">schedule</span>
-      </span>
-      <div className={`font-display tabular-nums text-[0.95rem] font-extrabold tracking-[0.02em] md:text-[1rem] ${
-        isUrgent ? "text-red-500" : "text-slate-900"
-      }`}>
         {formattedTime}
       </div>
     </div>
