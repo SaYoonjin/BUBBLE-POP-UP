@@ -172,7 +172,7 @@ class GameDayStateServiceTests {
         assertThat(response.cash()).isEqualTo(3_700L);
         assertThat(response.customerCount()).isEqualTo(6);
         assertThat(response.inventory().totalStock()).isEqualTo(7);
-        assertThat(response.population()).isEqualTo("495");
+        assertThat(response.population()).isEqualTo("330");
         assertThat(response.appliedEvents()).hasSize(1);
         assertThat(response.appliedEvents().get(0).eventType()).isEqualTo("CELEBRITY");
 
@@ -203,7 +203,7 @@ class GameDayStateServiceTests {
 
     @Test
     void getGameStateAppliesSharedDayFourFixtureBeforeLocationFestival() {
-        gameDayStateService = createService(GameDayTestFixtures.fixedClockAt(LocalDateTime.of(2026, 3, 17, 10, 1, 5)));
+        gameDayStateService = createService(GameDayTestFixtures.fixedClockAt(LocalDateTime.of(2026, 3, 17, 10, 0, 55)));
 
         User user = GameDayTestFixtures.user(GameDayTestFixtures.USER_ID);
         User dummyUser = GameDayTestFixtures.user(GameDayTestFixtures.DUMMY_USER_ID);
@@ -252,9 +252,9 @@ class GameDayStateServiceTests {
 
         assertThat(dummyStore.getPrice()).isEqualTo(2_000);
         assertThat(response.population()).isEqualTo("63");
-        assertThat(response.cash()).isEqualTo(9_632_000L);
-        assertThat(response.customerCount()).isEqualTo(6);
-        assertThat(response.inventory().totalStock()).isEqualTo(122);
+        assertThat(response.cash()).isEqualTo(9_752_000L);
+        assertThat(response.customerCount()).isEqualTo(30);
+        assertThat(response.inventory().totalStock()).isEqualTo(92);
         assertThat(response.appliedEvents()).extracting(GameStateResponse.AppliedEvent::eventType)
                 .containsExactly("TEST_GLOBAL_SUPPORT", "TEST_MENU_COST_UP");
 
@@ -264,15 +264,15 @@ class GameDayStateServiceTests {
                 org.mockito.ArgumentMatchers.eq(GameDayTestFixtures.CURRENT_DAY),
                 stateCaptor.capture()
         );
-        assertThat(stateCaptor.getValue().purchaseCursor()).isEqualTo(6);
+        assertThat(stateCaptor.getValue().purchaseCursor()).isEqualTo(30);
         assertThat(stateCaptor.getValue().tickPurchaseCount()).isEqualTo(8);
-        assertThat(stateCaptor.getValue().cumulativeSales()).isEqualTo(32_000L);
+        assertThat(stateCaptor.getValue().cumulativeSales()).isEqualTo(152_000L);
         assertThat(stateCaptor.getValue().cumulativeTotalCost()).isEqualTo(300_000L);
     }
 
     @Test
     void getGameStateAppliesSharedDayFourFixtureAfterLocationFestival() {
-        gameDayStateService = createService(GameDayTestFixtures.fixedClockAt(LocalDateTime.of(2026, 3, 17, 10, 2, 5)));
+        gameDayStateService = createService(GameDayTestFixtures.fixedClockAt(LocalDateTime.of(2026, 3, 17, 10, 1, 5)));
 
         User user = GameDayTestFixtures.user(GameDayTestFixtures.USER_ID);
         Location location = GameDayTestFixtures.location();
@@ -322,7 +322,7 @@ class GameDayStateServiceTests {
 
     @Test
     void getGameStateExposesPendingEmergencyOrderBeforeArrival() {
-        gameDayStateService = createService(GameDayTestFixtures.fixedClockAt(LocalDateTime.of(2026, 3, 17, 10, 1, 5)));
+        gameDayStateService = createService(GameDayTestFixtures.fixedClockAt(LocalDateTime.of(2026, 3, 17, 10, 0, 55)));
 
         User user = GameDayTestFixtures.user(GameDayTestFixtures.USER_ID);
         Location location = GameDayTestFixtures.location();
@@ -430,8 +430,8 @@ class GameDayStateServiceTests {
         GameStateResponse response = gameDayStateService.getGameState(mock(Authentication.class));
 
         assertThat(response.actionStatus().emergencyOrderPending()).isFalse();
-        assertThat(response.inventory().totalStock()).isEqualTo(127);
-        assertThat(response.cash()).isEqualTo(9_629_000L);
+        assertThat(response.inventory().totalStock()).isEqualTo(90);
+        assertThat(response.cash()).isEqualTo(9_777_000L);
     }
 
     private GameDayLiveState state(
@@ -507,11 +507,15 @@ class GameDayStateServiceTests {
         Menu menu = instantiate(Menu.class);
         ReflectionTestUtils.setField(menu, "id", menuId);
 
-        Season season = instantiate(Season.class);
+                Season season = instantiate(Season.class);
         ReflectionTestUtils.setField(season, "id", seasonId);
         ReflectionTestUtils.setField(season, "status", SeasonStatus.IN_PROGRESS);
         ReflectionTestUtils.setField(season, "currentDay", currentDay);
         ReflectionTestUtils.setField(season, "totalDays", totalDays);
+        LocalDateTime currentBusinessAt = LocalDateTime.of(2026, 3, 9, 14, 32, 10);
+        LocalDateTime seasonStartAt = currentBusinessAt.minusSeconds(120L + (currentDay - 1L) * 180L + 50L + 60L);
+        ReflectionTestUtils.setField(season, "startTime", seasonStartAt);
+        ReflectionTestUtils.setField(season, "endTime", seasonStartAt.plusSeconds(120L + totalDays * 180L + 120L));
 
         Store store = instantiate(Store.class);
         ReflectionTestUtils.setField(store, "id", storeId);

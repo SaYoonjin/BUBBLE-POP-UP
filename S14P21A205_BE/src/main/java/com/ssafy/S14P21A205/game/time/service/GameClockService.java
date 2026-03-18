@@ -1,52 +1,33 @@
 package com.ssafy.S14P21A205.game.time.service;
 
-import com.ssafy.S14P21A205.game.time.model.DayWindow;
-import com.ssafy.S14P21A205.game.time.model.GamePhase;
-import com.ssafy.S14P21A205.game.time.model.GameTimePoint;
-import java.time.Duration;
+import com.ssafy.S14P21A205.game.time.model.SeasonPhase;
+import com.ssafy.S14P21A205.game.time.model.SeasonTimePoint;
+import com.ssafy.S14P21A205.game.time.policy.GameTimePolicy;
 import java.time.LocalDateTime;
 
 public class GameClockService {
 
-    public GameTimePoint resolve(LocalDateTime currentTime, DayWindow dayWindow) {
-        LocalDateTime occurredAt = clamp(currentTime, dayWindow.dayStart(), dayWindow.reportEnd());
-        return new GameTimePoint(
-                occurredAt,
-                resolvePhase(occurredAt, dayWindow),
-                resolveElapsedBusinessSeconds(occurredAt, dayWindow)
+    private final GameTimePolicy gameTimePolicy = new GameTimePolicy();
+
+    public SeasonTimePoint resolve(LocalDateTime currentTime, LocalDateTime seasonStartTime, int totalDays) {
+        SeasonPhase phase = gameTimePolicy.resolveSeasonPhase(seasonStartTime, totalDays, currentTime);
+        LocalDateTime phaseStartAt = gameTimePolicy.resolvePhaseStartAt(seasonStartTime, totalDays, currentTime);
+        LocalDateTime phaseEndAt = gameTimePolicy.resolvePhaseEndAt(seasonStartTime, totalDays, currentTime);
+        return new SeasonTimePoint(
+                currentTime,
+                phase,
+                gameTimePolicy.resolveCurrentDay(seasonStartTime, totalDays, currentTime),
+                phaseStartAt,
+                phaseEndAt,
+                gameTimePolicy.resolveElapsedPhaseSeconds(seasonStartTime, totalDays, currentTime),
+                gameTimePolicy.resolveRemainingPhaseSeconds(seasonStartTime, totalDays, currentTime),
+                gameTimePolicy.resolveElapsedBusinessSeconds(seasonStartTime, totalDays, currentTime),
+                gameTimePolicy.resolveGameTime(seasonStartTime, totalDays, currentTime),
+                gameTimePolicy.resolveTick(seasonStartTime, totalDays, currentTime),
+                gameTimePolicy.isJoinEnabled(seasonStartTime, totalDays, currentTime),
+                gameTimePolicy.resolveJoinPlayableFromDay(seasonStartTime, totalDays, currentTime),
+                gameTimePolicy.resolveNextSeasonStartAt(seasonStartTime, totalDays)
         );
     }
-
-    public GamePhase resolvePhase(LocalDateTime currentTime, DayWindow dayWindow) {
-        if (currentTime.isBefore(dayWindow.businessStart())) {
-            return GamePhase.PREPARING;
-        }
-        if (currentTime.isBefore(dayWindow.businessEnd())) {
-            return GamePhase.BUSINESS;
-        }
-        if (currentTime.isBefore(dayWindow.reportEnd())) {
-            return GamePhase.REPORT;
-        }
-        return GamePhase.CLOSED;
-    }
-
-    private long resolveElapsedBusinessSeconds(LocalDateTime currentTime, DayWindow dayWindow) {
-        if (!currentTime.isAfter(dayWindow.businessStart())) {
-            return 0L;
-        }
-        LocalDateTime boundedTime = currentTime.isAfter(dayWindow.businessEnd())
-                ? dayWindow.businessEnd()
-                : currentTime;
-        return Duration.between(dayWindow.businessStart(), boundedTime).toSeconds();
-    }
-
-    private LocalDateTime clamp(LocalDateTime currentTime, LocalDateTime lowerBound, LocalDateTime upperBound) {
-        if (currentTime.isBefore(lowerBound)) {
-            return lowerBound;
-        }
-        if (currentTime.isAfter(upperBound)) {
-            return upperBound;
-        }
-        return currentTime;
-    }
 }
+

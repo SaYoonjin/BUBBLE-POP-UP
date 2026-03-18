@@ -17,6 +17,7 @@ import com.ssafy.S14P21A205.game.day.state.repository.GameDayStoreStateRedisRepo
 import com.ssafy.S14P21A205.game.season.entity.Season;
 import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
 import com.ssafy.S14P21A205.game.time.model.DayWindow;
+import com.ssafy.S14P21A205.game.time.model.SeasonTimePoint;
 import com.ssafy.S14P21A205.game.time.service.SeasonTimelineService;
 import com.ssafy.S14P21A205.order.entity.Order;
 import com.ssafy.S14P21A205.order.entity.OrderType;
@@ -32,11 +33,13 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
+@Slf4j
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class GameDayStateService {
@@ -65,7 +68,9 @@ public class GameDayStateService {
 
     @Transactional
     public Optional<GameStateResponse> refreshGameState(Store store) {
-        int day = resolveCurrentDay(store.getSeason());
+        LocalDateTime serverTime = LocalDateTime.now(clock);
+        SeasonTimePoint seasonTimePoint = SEASON_TIMELINE_SERVICE.resolve(store.getSeason(), serverTime);
+        int day = resolveCurrentDay(store.getSeason(), seasonTimePoint);
         int totalDays = store.getSeason().getTotalDays();
 
         GameDayLiveState rawState = gameDayStoreStateRedisRepository.find(store.getId(), day)
@@ -76,11 +81,21 @@ public class GameDayStateService {
 
         Order dailyStartOrder = orderRepository.findDailyStartOrder(store.getId(), day).orElse(null);
         GameDayLiveState state = normalizeState(rawState, dailyStartOrder);
-        DayWindow currentTimeline = SEASON_TIMELINE_SERVICE.currentDay(state.startedAt(), day, totalDays);
+        DayWindow currentTimeline = SEASON_TIMELINE_SERVICE.day(store.getSeason(), day);
 
-        LocalDateTime serverTime = LocalDateTime.now(clock);
         LocalDateTime effectiveNow = min(serverTime, currentTimeline.reportEnd());
         int tick = stockEngine.resolveCurrentTick(currentTimeline, effectiveNow);
+        log.info(
+                "state-timeline storeId={} seasonId={} now={} phase={} day={} gameTime={} tick={} effectiveNow={}",
+                store.getId(),
+                store.getSeason().getId(),
+                serverTime,
+                seasonTimePoint.phase(),
+                day,
+                seasonTimePoint.gameTime(),
+                tick,
+                effectiveNow
+        );
         ActionUsage actionUsage = resolveActionUsage(store.getId(), day);
         long regionStoreCount = resolveRegionStoreCount(store);
 
@@ -98,6 +113,16 @@ public class GameDayStateService {
         );
 
         gameDayStoreStateRedisRepository.saveStateAndTickLog(store.getId(), day, calculatedState.liveState());
+        log.info(
+                "state-updated storeId={} seasonId={} day={} tick={} populationPerStore={} cash={} stock={}",
+                store.getId(),
+                store.getSeason().getId(),
+                day,
+                tick,
+                calculatedState.populationPerStore(),
+                calculatedState.cash(),
+                calculatedState.totalStock()
+        );
 
         return Optional.of(new GameStateResponse(
                 serverTime,
@@ -127,9 +152,9 @@ public class GameDayStateService {
                 .orElseThrow(() -> new BaseException(ErrorCode.RESOURCE_NOT_FOUND));
     }
 
-    private int resolveCurrentDay(Season season) {
-        int currentDay = season.getCurrentDay() == null ? 1 : season.getCurrentDay();
-        if (currentDay < 1 || currentDay > season.getTotalDays()) {
+    private int resolveCurrentDay(Season season, SeasonTimePoint seasonTimePoint) {
+        Integer currentDay = seasonTimePoint.currentDay();
+        if (currentDay == null || currentDay < 1 || currentDay > season.getTotalDays()) {
             throw new BaseException(ErrorCode.INVALID_INPUT_VALUE, "Current season day is out of range.");
         }
         return currentDay;
@@ -351,12 +376,12 @@ public class GameDayStateService {
         int stock = state.stock() == null ? initialStockOf(state) : state.stock();
 
         LocalDateTime baselineTime = state.lastCalculatedAt();
-        EventEffectResolver.EventEffect baselineEffect = resolveEventEffect(store, state, day, totalDays, baselineTime);
+        EventEffectResolver.EventEffect baselineEffect = resolveEventEffect(store, day, baselineTime);
         EmergencyOrderState baselineEmergency = resolveEmergencyOrderState(store.getId(), day, baselineTime);
 
         for (int nextTick = processedTick + 1; nextTick <= currentTick; nextTick++) {
             LocalDateTime tickBoundary = stockEngine.resolveTickBoundary(currentTimeline, nextTick);
-            EventEffectResolver.EventEffect tickEffect = resolveEventEffect(store, state, day, totalDays, tickBoundary);
+            EventEffectResolver.EventEffect tickEffect = resolveEventEffect(store, day, tickBoundary);
             EmergencyOrderState tickEmergency = resolveEmergencyOrderState(store.getId(), day, tickBoundary);
 
             int populationPerStore = resolvePopulationPerStore(
@@ -390,7 +415,7 @@ public class GameDayStateService {
             baselineEmergency = tickEmergency;
         }
 
-        EventEffectResolver.EventEffect currentEffect = resolveEventEffect(store, state, day, totalDays, effectiveNow);
+        EventEffectResolver.EventEffect currentEffect = resolveEventEffect(store, day, effectiveNow);
         EmergencyOrderState currentEmergency = resolveEmergencyOrderState(store.getId(), day, effectiveNow);
         int stockNow = Math.max(
                 0,
@@ -421,18 +446,10 @@ public class GameDayStateService {
         );
     }
 
-    private EventEffectResolver.EventEffect resolveEventEffect(
-            Store store,
-            GameDayLiveState state,
-            int day,
-            int totalDays,
-            LocalDateTime effectiveNow
-    ) {
+    private EventEffectResolver.EventEffect resolveEventEffect(Store store, int day, LocalDateTime effectiveNow) {
         return eventEffectResolver.resolve(
-                store.getSeason().getId(),
+                store.getSeason(),
                 day,
-                totalDays,
-                state.startedAt(),
                 effectiveNow,
                 store.getLocation().getId(),
                 store.getMenu().getId()
@@ -540,3 +557,4 @@ public class GameDayStateService {
     ) {
     }
 }
+

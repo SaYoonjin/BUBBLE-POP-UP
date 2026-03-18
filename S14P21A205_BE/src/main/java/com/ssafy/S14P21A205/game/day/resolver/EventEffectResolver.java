@@ -5,6 +5,7 @@ import com.ssafy.S14P21A205.game.event.entity.DailyEvent;
 import com.ssafy.S14P21A205.game.event.entity.EventStartTime;
 import com.ssafy.S14P21A205.game.event.entity.RandomEvent;
 import com.ssafy.S14P21A205.game.event.repository.DailyEventRepository;
+import com.ssafy.S14P21A205.game.season.entity.Season;
 import com.ssafy.S14P21A205.game.time.service.SeasonTimelineService;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -24,16 +25,14 @@ public class EventEffectResolver {
     private final SeasonTimelineService seasonTimelineService = new SeasonTimelineService();
 
     public EventEffect resolve(
-            Long seasonId,
+            Season season,
             int currentDay,
-            int totalDays,
-            LocalDateTime currentDayStart,
             LocalDateTime effectiveNow,
             Long locationId,
             Long menuId
     ) {
         List<DailyEvent> dailyEvents = dailyEventRepository.findBySeasonIdAndDayBetweenOrderByDayAscIdAsc(
-                seasonId,
+                season.getId(),
                 1,
                 currentDay
         );
@@ -55,9 +54,7 @@ public class EventEffectResolver {
             }
 
             LocalDateTime appliedAt = seasonTimelineService.resolveAppliedAt(
-                    currentDayStart,
-                    currentDay,
-                    totalDays,
+                    season,
                     appliedDay,
                     dailyEvent.getApplyOffsetSeconds()
             );
@@ -66,9 +63,7 @@ public class EventEffectResolver {
             }
 
             LocalDateTime endedAt = seasonTimelineService.resolveEndedAt(
-                    currentDayStart,
-                    currentDay,
-                    totalDays,
+                    season,
                     appliedDay,
                     dailyEvent.getExpireOffsetSeconds(),
                     dailyEvent.getEvent().getEndTime()
@@ -151,3 +146,4 @@ public class EventEffectResolver {
     ) {
     }
 }
+

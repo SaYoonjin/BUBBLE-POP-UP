@@ -12,6 +12,8 @@ import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
 import com.ssafy.S14P21A205.game.season.repository.DailyReportRepository;
 import com.ssafy.S14P21A205.game.season.repository.SeasonRankingRedisRepository;
 import com.ssafy.S14P21A205.game.season.repository.SeasonRepository;
+import com.ssafy.S14P21A205.game.time.model.SeasonTimePoint;
+import com.ssafy.S14P21A205.game.time.service.SeasonTimelineService;
 import com.ssafy.S14P21A205.store.entity.Store;
 import com.ssafy.S14P21A205.store.repository.StoreRepository;
 import java.math.BigDecimal;
@@ -45,6 +47,7 @@ public class RealtimeSeasonRankingTickTask implements GameTickTask {
     private final SeasonRankingRedisRepository seasonRankingRedisRepository;
     private final ProfitPolicy profitPolicy;
 
+    private final SeasonTimelineService seasonTimelineService = new SeasonTimelineService();
     private Clock clock = Clock.systemDefaultZone();
 
     @Override
@@ -59,7 +62,7 @@ public class RealtimeSeasonRankingTickTask implements GameTickTask {
 
     public void refreshCurrentTopRankings() {
         try {
-            // 현재 진행 중 시즌 조회
+            // ?꾩옱 吏꾪뻾 以??쒖쫵 議고쉶
             Season season = seasonRepository.findFirstByStatusOrderByIdDesc(SeasonStatus.IN_PROGRESS).orElse(null);
             if (season == null) {
                 seasonRankingRedisRepository.deleteCurrentTopRankings();
@@ -67,7 +70,7 @@ public class RealtimeSeasonRankingTickTask implements GameTickTask {
                 return;
             }
 
-            // 현재 day 계산
+            // ?꾩옱 day 怨꾩궛
             int currentDay = resolveCurrentDay(season);
             List<Store> stores = storeRepository.findBySeason_IdOrderByIdAsc(season.getId());
             if (stores.isEmpty()) {
@@ -80,14 +83,14 @@ public class RealtimeSeasonRankingTickTask implements GameTickTask {
                 return;
             }
 
-            // 과거 day(현재 day 이전)의 누적 매출/비용을 DailyReport에서 집계
+            // 怨쇨굅 day(?꾩옱 day ?댁쟾)???꾩쟻 留ㅼ텧/鍮꾩슜??DailyReport?먯꽌 吏묎퀎
             Map<Long, AggregatedStats> pastStatsByStoreId = aggregatePastStats(
                     dailyReportRepository.findByStore_Season_IdAndDayLessThanOrderByStore_IdAscDayAsc(season.getId(), currentDay)
             );
-            // 오늘 day의 실시간 매출/비용을 Redis에서 조회
+            // ?ㅻ뒛 day???ㅼ떆媛?留ㅼ텧/鍮꾩슜??Redis?먯꽌 議고쉶
             Map<Long, LiveDayStats> todayStatsByStoreId = loadTodayStatsByStoreId(stores, currentDay);
 
-            // 가게별 총 매출/총 비용/ROI 계산
+            // 媛寃뚮퀎 珥?留ㅼ텧/珥?鍮꾩슜/ROI 怨꾩궛
             List<LiveRankingCandidate> candidates = new ArrayList<>();
             for (Store store : stores) {
                 AggregatedStats pastStats = pastStatsByStoreId.getOrDefault(store.getId(), AggregatedStats.empty());
@@ -102,8 +105,8 @@ public class RealtimeSeasonRankingTickTask implements GameTickTask {
                         profitPolicy.calculateRoi(totalRevenue, totalCost)
                 ));
             }
-            // 정렬
-            // 1) ROI 내림차순   2) userId 오름차순   3)storeId 오름차순
+            // ?뺣젹
+            // 1) ROI ?대┝李⑥닚   2) userId ?ㅻ쫫李⑥닚   3)storeId ?ㅻ쫫李⑥닚
             candidates.sort(Comparator
                     .comparing(LiveRankingCandidate::roi, Comparator.reverseOrder())
                     .thenComparing(candidate -> candidate.store().getUser().getId())
@@ -116,7 +119,7 @@ public class RealtimeSeasonRankingTickTask implements GameTickTask {
             for (int index = 0; index < limit; index++) {
                 LiveRankingCandidate candidate = candidates.get(index);
 
-                // 같은 ROI면 공동 순위 처리
+                // 媛숈? ROI硫?怨듬룞 ?쒖쐞 泥섎━
                 if (previousRoi == null || candidate.roi().compareTo(previousRoi) != 0) {
                     currentRank = index + 1;
                     previousRoi = candidate.roi();
@@ -170,7 +173,7 @@ public class RealtimeSeasonRankingTickTask implements GameTickTask {
         return currentDay;
     }
 
-    // 현재 day 이전까지의 DB 일일 리포트를 가게별로 누적합
+    // ?꾩옱 day ?댁쟾源뚯???DB ?쇱씪 由ы룷?몃? 媛寃뚮퀎濡??꾩쟻??
     private Map<Long, AggregatedStats> aggregatePastStats(List<DailyReport> dailyReports) {
         Map<Long, AggregatedStats> statsByStoreId = new HashMap<>();
         for (DailyReport dailyReport : dailyReports) {
@@ -187,7 +190,7 @@ public class RealtimeSeasonRankingTickTask implements GameTickTask {
         return statsByStoreId;
     }
 
-    // 모든 가게에 대해 오늘 day의 실시간 상태를 Redis에서 조회
+    // 紐⑤뱺 媛寃뚯뿉 ????ㅻ뒛 day???ㅼ떆媛??곹깭瑜?Redis?먯꽌 議고쉶
     private Map<Long, LiveDayStats> loadTodayStatsByStoreId(List<Store> stores, int currentDay) {
         Map<Long, LiveDayStats> todayStatsByStoreId = new HashMap<>();
         for (Store store : stores) {
@@ -291,5 +294,7 @@ public class RealtimeSeasonRankingTickTask implements GameTickTask {
         }
     }
 }
+
+
 
 

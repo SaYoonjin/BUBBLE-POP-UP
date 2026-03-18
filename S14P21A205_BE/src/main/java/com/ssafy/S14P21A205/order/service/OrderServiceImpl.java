@@ -6,6 +6,9 @@ import com.ssafy.S14P21A205.game.day.policy.StoreRankingPolicy;
 import com.ssafy.S14P21A205.game.day.state.repository.GameDayStoreStateRedisRepository;
 import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
 import com.ssafy.S14P21A205.game.season.repository.DailyReportRepository;
+import com.ssafy.S14P21A205.game.time.model.SeasonPhase;
+import com.ssafy.S14P21A205.game.time.model.SeasonTimePoint;
+import com.ssafy.S14P21A205.game.time.service.SeasonTimelineService;
 import com.ssafy.S14P21A205.order.dto.CurrentOrderResponse;
 import com.ssafy.S14P21A205.order.dto.RegularOrderRequest;
 import com.ssafy.S14P21A205.order.dto.RegularOrderResponse;
@@ -19,6 +22,8 @@ import com.ssafy.S14P21A205.store.repository.MenuRepository;
 import com.ssafy.S14P21A205.store.repository.StoreRepository;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Clock;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -45,12 +50,15 @@ public class OrderServiceImpl implements OrderService {
     private final ItemUserRepository itemUserRepository;
     private final StringRedisTemplate stringRedisTemplate;
     private final StoreRankingPolicy marketRankingPolicy;
+    private final Clock clock;
+
+    private final SeasonTimelineService seasonTimelineService = new SeasonTimelineService();
 
     @Override
     public CurrentOrderResponse getCurrentOrder(Integer userId) {
         Store store = getStoreByUserId(userId);
         Long storeId = store.getId();
-        int currentDay = resolveRegularOrderDay(store.getSeason().getCurrentDay());
+        int currentDay = resolveRegularOrderDay(store);
         Menu menu = store.getMenu();
         List<Store> seasonStores = storeRepository.findBySeason_IdOrderByIdAsc(store.getSeason().getId());
 
@@ -75,8 +83,10 @@ public class OrderServiceImpl implements OrderService {
     public RegularOrderResponse createRegularOrder(Integer userId, RegularOrderRequest request) {
         Store store = getStoreByUserId(userId);
         Long storeId = store.getId();
-        int regularOrderDay = resolveRegularOrderDay(store.getSeason().getCurrentDay());
+        SeasonTimePoint seasonTimePoint = resolveSeasonTimePoint(store);
+        int regularOrderDay = resolveRegularOrderDay(store, seasonTimePoint);
 
+        validateRegularOrderPhase(seasonTimePoint.phase());
         validateRegularOrderDay(regularOrderDay);
         validateQuantity(request.quantity());
         validateDayNotStarted(storeId, regularOrderDay);
@@ -203,8 +213,26 @@ public class OrderServiceImpl implements OrderService {
         }
     }
 
-    private int resolveRegularOrderDay(Integer currentDay) {
-        return currentDay == null || currentDay == 0 ? 1 : currentDay;
+    private void validateRegularOrderPhase(SeasonPhase phase) {
+        if (phase != SeasonPhase.DAY_PREPARING) {
+            throw new RuntimeException("Regular orders are only available during the preparing phase.");
+        }
+    }
+
+    private int resolveRegularOrderDay(Store store) {
+        return resolveRegularOrderDay(store, resolveSeasonTimePoint(store));
+    }
+
+    private int resolveRegularOrderDay(Store store, SeasonTimePoint seasonTimePoint) {
+        Integer currentDay = seasonTimePoint.currentDay();
+        if (currentDay == null || currentDay < 1 || currentDay > store.getSeason().getTotalDays()) {
+            throw new BaseException(ErrorCode.INVALID_INPUT_VALUE, "Current season day is out of range.");
+        }
+        return currentDay;
+    }
+
+    private SeasonTimePoint resolveSeasonTimePoint(Store store) {
+        return seasonTimelineService.resolve(store.getSeason(), LocalDateTime.now(clock));
     }
 
     private void validateDayNotStarted(Long storeId, int day) {

@@ -94,6 +94,9 @@ public final class GameDayTestFixtures {
         ReflectionTestUtils.setField(season, "status", SeasonStatus.IN_PROGRESS);
         ReflectionTestUtils.setField(season, "currentDay", CURRENT_DAY);
         ReflectionTestUtils.setField(season, "totalDays", TOTAL_DAYS);
+        LocalDateTime seasonStartAt = DAY4_STARTED_AT.minusSeconds(120L + (CURRENT_DAY - 1L) * 180L + 50L);
+        ReflectionTestUtils.setField(season, "startTime", seasonStartAt);
+        ReflectionTestUtils.setField(season, "endTime", seasonStartAt.plusSeconds(120L + TOTAL_DAYS * 180L + 120L));
         return season;
     }
 

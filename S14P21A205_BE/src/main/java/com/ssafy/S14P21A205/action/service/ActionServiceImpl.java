@@ -22,9 +22,9 @@ import com.ssafy.S14P21A205.game.day.resolver.EventEffectResolver;
 import com.ssafy.S14P21A205.game.day.resolver.TrafficDelayResolver;
 import com.ssafy.S14P21A205.game.day.state.GameDayLiveState;
 import com.ssafy.S14P21A205.game.day.state.repository.GameDayStoreStateRedisRepository;
-import com.ssafy.S14P21A205.game.season.entity.Season;
 import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
-import com.ssafy.S14P21A205.game.season.repository.SeasonRepository;
+import com.ssafy.S14P21A205.game.time.model.SeasonTimePoint;
+import com.ssafy.S14P21A205.game.time.service.SeasonTimelineService;
 import com.ssafy.S14P21A205.order.entity.Order;
 import com.ssafy.S14P21A205.order.repository.OrderRepository;
 import com.ssafy.S14P21A205.shop.entity.ItemCategory;
@@ -80,7 +80,6 @@ public class ActionServiceImpl implements ActionService {
     private final ActionRepository actionRepository;
     private final ActionLogRepository actionLogRepository;
     private final StoreRepository storeRepository;
-    private final SeasonRepository seasonRepository;
     private final OrderRepository orderRepository;
     private final ItemUserRepository itemUserRepository;
     private final EventEffectResolver eventEffectResolver;
@@ -88,10 +87,12 @@ public class ActionServiceImpl implements ActionService {
     private final CaptureRatePolicy captureRatePolicy;
     private final Clock clock;
 
+    private final SeasonTimelineService seasonTimelineService = new SeasonTimelineService();
+
     @Override
     public ActionStatusResponse getActionStatus(Integer userId) {
         Store store = findStore(userId);
-        int day = getCurrentDay();
+        int day = resolveCurrentDay(store);
         Map<String, Boolean> actions = gameDayStoreStateRedisRepository.getActions(store.getId(), day);
         return ActionStatusResponse.from(actions);
     }
@@ -106,7 +107,7 @@ public class ActionServiceImpl implements ActionService {
     @Transactional
     public ActionResponse executePromotion(Integer userId, PromotionRequest request) {
         Store store = findStore(userId);
-        int day = getCurrentDay();
+        int day = resolveCurrentDay(store);
         String field = request.promotionType().name().toLowerCase();
 
         validateNotUsed(store.getId(), day, field);
@@ -126,7 +127,7 @@ public class ActionServiceImpl implements ActionService {
         return new ActionResponse(
                 "PROMOTION_" + request.promotionType().name(),
                 action.getCost(),
-                "홍보가 실행되었습니다."
+                "Promotion executed."
         );
     }
 
@@ -134,7 +135,7 @@ public class ActionServiceImpl implements ActionService {
     @Transactional
     public DiscountResponse executeDiscount(Integer userId, DiscountRequest request) {
         Store store = findStore(userId);
-        int day = getCurrentDay();
+        int day = resolveCurrentDay(store);
 
         validateNotUsed(store.getId(), day, "discount");
 
@@ -147,7 +148,6 @@ public class ActionServiceImpl implements ActionService {
         }
 
         long updatedBalance = resolveUpdatedBalance(store.getId(), day, valueOf(action.getCost()));
-
         store.changePrice(newPrice);
 
         int averagePrice = storeRepository.findAveragePriceBySeasonIdAndMenuId(
@@ -160,18 +160,18 @@ public class ActionServiceImpl implements ActionService {
         PriceRange priceRange = determinePriceRange(newPrice, averagePrice);
 
         gameDayStoreStateRedisRepository.updateField(store.getId(), day, "sale_price", String.valueOf(newPrice));
-        applyCaptureRateMultiplier(store.getId(), day, priceRange.multiplier);
+        applyCaptureRateMultiplier(store.getId(), day, priceRange.multiplier());
 
-        actionLogRepository.save(new ActionLog(action, store, day, priceRange.multiplier));
+        actionLogRepository.save(new ActionLog(action, store, day, priceRange.multiplier()));
         gameDayStoreStateRedisRepository.markActionUsed(store.getId(), day, "discount");
         gameDayStoreStateRedisRepository.saveBalance(store.getId(), day, updatedBalance);
 
         return new DiscountResponse(
                 previousPrice,
                 newPrice,
-                priceRange.label,
-                priceRange.multiplier,
-                "할인 이벤트가 실행되었습니다. 판매가가 " + previousPrice + "원에서 " + newPrice + "원으로 변경됩니다."
+                priceRange.label(),
+                priceRange.multiplier(),
+                "Discount applied."
         );
     }
 
@@ -179,7 +179,7 @@ public class ActionServiceImpl implements ActionService {
     @Transactional
     public DonationResponse executeDonation(Integer userId, DonationRequest request) {
         Store store = findStore(userId);
-        int day = getCurrentDay();
+        int day = resolveCurrentDay(store);
 
         validateNotUsed(store.getId(), day, "donation");
 
@@ -207,7 +207,7 @@ public class ActionServiceImpl implements ActionService {
         return new DonationResponse(
                 request.quantity(),
                 captureRateBonus,
-                request.quantity() + "개를 기부했습니다. 유입률 +" + captureRateBonus + " 보너스"
+                "Donation executed."
         );
     }
 
@@ -215,7 +215,7 @@ public class ActionServiceImpl implements ActionService {
     @Transactional
     public EmergencyOrderResponse executeEmergencyOrder(Integer userId, EmergencyOrderRequest request) {
         Store store = findStore(userId);
-        int day = getCurrentDay();
+        int day = resolveCurrentDay(store);
 
         validateNotUsed(store.getId(), day, "emergency");
 
@@ -262,7 +262,7 @@ public class ActionServiceImpl implements ActionService {
                 request.quantity(),
                 totalCost,
                 arrivedTime,
-                "긴급 발주가 접수되었습니다."
+                "Emergency order accepted."
         );
     }
 
@@ -271,10 +271,13 @@ public class ActionServiceImpl implements ActionService {
                 .orElseThrow(() -> new BaseException(ErrorCode.STORE_NOT_FOUND));
     }
 
-    private int getCurrentDay() {
-        Season season = seasonRepository.findFirstByStatusOrderByIdDesc(SeasonStatus.IN_PROGRESS)
-                .orElseThrow(() -> new BaseException(ErrorCode.SEASON_NOT_FOUND));
-        return season.getCurrentDay();
+    private int resolveCurrentDay(Store store) {
+        SeasonTimePoint seasonTimePoint = seasonTimelineService.resolve(store.getSeason(), LocalDateTime.now(clock));
+        Integer currentDay = seasonTimePoint.currentDay();
+        if (currentDay == null || currentDay < 1 || currentDay > store.getSeason().getTotalDays()) {
+            throw new BaseException(ErrorCode.INVALID_INPUT_VALUE, "Current season day is out of range.");
+        }
+        return currentDay;
     }
 
     private Action findSingleAction(ActionCategory category) {
@@ -378,10 +381,8 @@ public class ActionServiceImpl implements ActionService {
         }
 
         return eventEffectResolver.resolve(
-                store.getSeason().getId(),
+                store.getSeason(),
                 day,
-                store.getSeason().getTotalDays(),
-                state.startedAt(),
                 now,
                 store.getLocation().getId(),
                 store.getMenu().getId()

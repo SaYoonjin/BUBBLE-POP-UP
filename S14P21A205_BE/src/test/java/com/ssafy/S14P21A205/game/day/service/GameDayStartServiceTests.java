@@ -355,9 +355,11 @@ class GameDayStartServiceTests {
     }
 
     @Test
-    void startDayUsesPreviousNewsReportRanksForRentAndIngredientCost() {
+    void startDayUsesPreviousNewsReportRanksForRentAndIngredientCostFromNameBasedPayload() {
         User user = user(1);
         Store store = store(user, 15L, 3L, 1L, 9L, 2, 7, 4_500, 100_000, 2_000);
+        ReflectionTestUtils.setField(store.getLocation(), "locationName", "hongdae");
+        ReflectionTestUtils.setField(store.getMenu(), "menuName", "hotdog");
 
         when(userService.getCurrentUser(any())).thenReturn(user);
         when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
@@ -383,14 +385,19 @@ class GameDayStartServiceTests {
                 store.getSeason(),
                 1,
                 """
-                [{"locationId":3,"rank":2}]
+                [{"name":"gangnam","storeCount":2},{"name":"hongdae","storeCount":2},{"name":"myeongdong","storeCount":1}]
                 """,
                 """
-                [{"menuId":1,"rank":2}]
+                [{"menuName":"taco","mentionCount":19},{"menuName":"hotdog","mentionCount":7},{"menuName":"tteokbokki","mentionCount":6},{"menuName":"bread","mentionCount":6},{"menuName":"hamburger","mentionCount":5},{"menuName":"icecream","mentionCount":2},{"menuName":"dakgangjeong","mentionCount":1},{"menuName":"bubbletea","mentionCount":1}]
                 """
         )));
         when(dailyEventRepository.findBySeasonIdAndDayOrderByIdAsc(9L, 2)).thenReturn(List.of());
         when(purchaseListGenerator.generate(any())).thenReturn(List.of(1, 1, 1));
+
+        NewsRankingResolver.PreviousDayRanking previousDayRanking =
+                new NewsRankingResolver(newsReportRepository, new ObjectMapper()).resolve(store, 2);
+        assertThat(previousDayRanking.areaEntryRank()).isEqualTo(2);
+        assertThat(previousDayRanking.trendKeywordRank()).isEqualTo(2);
 
         GameDayStartResponse response = gameDayStartService.startDay(mock(Authentication.class));
 
@@ -449,11 +456,15 @@ class GameDayStartServiceTests {
         ReflectionTestUtils.setField(menu, "originPrice", originPrice);
         ReflectionTestUtils.setField(menu, "menuName", "cookie");
 
-        Season season = instantiate(Season.class);
+                Season season = instantiate(Season.class);
         ReflectionTestUtils.setField(season, "id", seasonId);
         ReflectionTestUtils.setField(season, "status", SeasonStatus.IN_PROGRESS);
         ReflectionTestUtils.setField(season, "currentDay", currentDay);
         ReflectionTestUtils.setField(season, "totalDays", totalDays);
+        LocalDateTime currentPrepAt = LocalDateTime.ofInstant(fixedClock.instant(), fixedClock.getZone());
+        LocalDateTime seasonStartAt = currentPrepAt.minusSeconds(120L + (currentDay - 1L) * 180L);
+        ReflectionTestUtils.setField(season, "startTime", seasonStartAt);
+        ReflectionTestUtils.setField(season, "endTime", seasonStartAt.plusSeconds(120L + totalDays * 180L + 120L));
 
         Store store = instantiate(Store.class);
         ReflectionTestUtils.setField(store, "id", storeId);

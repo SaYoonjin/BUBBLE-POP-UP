@@ -20,6 +20,10 @@ import com.ssafy.S14P21A205.store.repository.StoreRepository;
 import com.ssafy.S14P21A205.user.entity.User;
 import com.ssafy.S14P21A205.user.service.UserService;
 import java.lang.reflect.Constructor;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -72,6 +76,11 @@ class SeasonJoinServiceTests {
                 menuRepository,
                 stringRedisTemplate
         );
+        ReflectionTestUtils.setField(
+                seasonJoinService,
+                "clock",
+                Clock.fixed(Instant.parse("2026-03-18T01:00:30Z"), ZoneId.of("Asia/Seoul"))
+        );
     }
 
     @Test
@@ -92,11 +101,13 @@ class SeasonJoinServiceTests {
 
         SeasonJoinResponse response = seasonJoinService.joinCurrentSeason(
                 org.mockito.Mockito.mock(Authentication.class),
-                new SeasonJoinRequest(3, "테스트매장")
+                new SeasonJoinRequest(3, "test store")
         );
 
         assertThat(response.storeId()).isEqualTo(21L);
         assertThat(response.balance()).isEqualTo(9_990_000);
+        assertThat(response.playableFromDay()).isEqualTo(1);
+        assertThat(response.waitingForPlayableDay()).isFalse();
         verify(valueOperations).set("balance:21", "9990000");
         verify(valueOperations).set("stock:21", "0");
         verify(valueOperations).set("captureRate:21", "0.10");
@@ -112,6 +123,8 @@ class SeasonJoinServiceTests {
         Season season = instantiate(Season.class);
         ReflectionTestUtils.setField(season, "id", id);
         ReflectionTestUtils.setField(season, "status", SeasonStatus.IN_PROGRESS);
+        ReflectionTestUtils.setField(season, "totalDays", 7);
+        ReflectionTestUtils.setField(season, "startTime", LocalDateTime.of(2026, 3, 18, 10, 0, 0));
         return season;
     }
 
@@ -138,6 +151,7 @@ class SeasonJoinServiceTests {
         ReflectionTestUtils.setField(store, "menu", menu);
         ReflectionTestUtils.setField(store, "storeName", "fixture-store");
         ReflectionTestUtils.setField(store, "price", price);
+        ReflectionTestUtils.setField(store, "playableFromDay", 1);
         return store;
     }
 

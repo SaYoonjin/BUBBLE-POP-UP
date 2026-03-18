@@ -15,6 +15,7 @@ import com.ssafy.S14P21A205.game.season.entity.Season;
 import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
 import com.ssafy.S14P21A205.game.season.repository.DailyReportRepository;
 import com.ssafy.S14P21A205.game.time.model.DayWindow;
+import com.ssafy.S14P21A205.game.time.model.SeasonTimePoint;
 import com.ssafy.S14P21A205.game.time.service.SeasonTimelineService;
 import com.ssafy.S14P21A205.store.entity.Store;
 import com.ssafy.S14P21A205.store.repository.StoreRepository;
@@ -55,7 +56,10 @@ public class GameDayReportService {
 
     @Transactional
     public void recordClosedDayReport(Store store) {
-        int day = resolveCurrentDay(store.getSeason());
+        Integer day = resolveReportDay(store.getSeason());
+        if (day == null) {
+            return;
+        }
         if (dailyReportRepository.existsByStoreIdAndDay(store.getId(), day)) {
             return;
         }
@@ -65,8 +69,7 @@ public class GameDayReportService {
             return;
         }
 
-        DayWindow timeline =
-                SEASON_TIMELINE_SERVICE.currentDay(state.startedAt(), day, store.getSeason().getTotalDays());
+        DayWindow timeline = SEASON_TIMELINE_SERVICE.day(store.getSeason(), day);
         if (LocalDateTime.now(clock).isBefore(timeline.businessEnd())) {
             return;
         }
@@ -78,7 +81,7 @@ public class GameDayReportService {
                 : dailyReportRepository.findByStoreIdAndDay(store.getId(), day - 1).orElse(null);
         BankruptcyPolicy.BankruptcyResult bankruptcyResult =
                 bankruptcyPolicy.resolve(previousDayReport, profitResult.netProfit());
-        // TODO: 파산했을 때, 아이템 is_purchased 값을 false로 바꾸는 로직 추가 필요
+        // TODO: ?뚯궛?덉쓣 ?? ?꾩씠??is_purchased 媛믪쓣 false濡?諛붽씀??濡쒖쭅 異붽? ?꾩슂
         // and reset purchased items for the bankrupt user here.
 
         dailyReportRepository.save(DailyReport.create(
@@ -159,12 +162,13 @@ public class GameDayReportService {
         }
     }
 
-    private int resolveCurrentDay(Season season) {
-        int currentDay = season.getCurrentDay() == null ? 1 : season.getCurrentDay();
-        if (currentDay < 1 || currentDay > season.getTotalDays()) {
-            throw new BaseException(ErrorCode.INVALID_DAY, "Current season day is out of range.");
-        }
-        return currentDay;
+        private Integer resolveReportDay(Season season) {
+        SeasonTimePoint seasonTimePoint = SEASON_TIMELINE_SERVICE.resolve(season, LocalDateTime.now(clock));
+        return switch (seasonTimePoint.phase()) {
+            case LOCATION_SELECTION -> null;
+            case DAY_PREPARING, DAY_BUSINESS, DAY_REPORT -> seasonTimePoint.currentDay();
+            case SEASON_SUMMARY, NEXT_SEASON_WAITING, CLOSED -> season.getTotalDays();
+        };
     }
 
     private GameDayReportResponse.TomorrowWeather resolveTomorrowWeather(int day, int totalDays) {
@@ -218,3 +222,6 @@ public class GameDayReportService {
         return value == null ? 0L : value;
     }
 }
+
+
+
