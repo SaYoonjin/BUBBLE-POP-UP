@@ -46,17 +46,17 @@ public class SeasonFinalRankingService {
             return;
         }
 
+        int totalDays = season.getTotalDays() == null || season.getTotalDays() <= 0
+                ? DEFAULT_TOTAL_DAYS
+                : season.getTotalDays();
         List<Store> stores = storeRepository.findBySeason_IdOrderByIdAsc(season.getId());
         if (stores.isEmpty()) {
             log.info("Skipping final season rankings save. seasonId={} reason=no_stores", season.getId());
             return;
         }
 
-        stores.forEach(gameDayReportService::recordClosedDayReport);
+        stores.forEach(store -> gameDayReportService.recordClosedDayReport(store, totalDays));
 
-        int totalDays = season.getTotalDays() == null || season.getTotalDays() <= 0
-                ? DEFAULT_TOTAL_DAYS
-                : season.getTotalDays();
         List<DailyReport> reports = dailyReportRepository.findByStore_Season_IdAndDayLessThanOrderByStore_IdAscDayAsc(
                 season.getId(),
                 totalDays + 1

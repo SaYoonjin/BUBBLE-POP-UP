@@ -15,6 +15,7 @@ import com.ssafy.S14P21A205.game.season.entity.Season;
 import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
 import com.ssafy.S14P21A205.game.season.repository.DailyReportRepository;
 import com.ssafy.S14P21A205.game.time.model.DayWindow;
+import com.ssafy.S14P21A205.game.time.model.SeasonPhase;
 import com.ssafy.S14P21A205.game.time.model.SeasonTimePoint;
 import com.ssafy.S14P21A205.game.time.service.SeasonTimelineService;
 import com.ssafy.S14P21A205.store.entity.Store;
@@ -51,17 +52,48 @@ public class GameDayReportService {
     private final ProfitPolicy profitPolicy;
     private final ReputationPolicy reputationPolicy;
     private final BankruptcyPolicy bankruptcyPolicy;
+    private final GameDayStateService gameDayStateService;
 
     private Clock clock = Clock.systemDefaultZone();
 
     @Transactional
     public void recordClosedDayReport(Store store) {
-        Integer day = resolveReportDay(store.getSeason());
+        LocalDateTime now = LocalDateTime.now(clock);
+        SeasonTimePoint seasonTimePoint = SEASON_TIMELINE_SERVICE.resolve(store.getSeason(), now);
+        Integer day = resolveReportDay(store.getSeason(), seasonTimePoint);
         if (day == null) {
+            return;
+        }
+        recordClosedDayReport(store, day, now, seasonTimePoint);
+    }
+
+    @Transactional
+    public void recordClosedDayReport(Store store, int day) {
+        if (store == null || day < 1) {
+            return;
+        }
+
+        LocalDateTime now = LocalDateTime.now(clock);
+        SeasonTimePoint seasonTimePoint = SEASON_TIMELINE_SERVICE.resolve(store.getSeason(), now);
+        recordClosedDayReport(store, day, now, seasonTimePoint);
+    }
+
+    private void recordClosedDayReport(
+            Store store,
+            int day,
+            LocalDateTime now,
+            SeasonTimePoint seasonTimePoint
+    ) {
+        Integer totalDays = store.getSeason().getTotalDays();
+        if (totalDays != null && day > totalDays) {
             return;
         }
         if (dailyReportRepository.existsByStoreIdAndDay(store.getId(), day)) {
             return;
+        }
+
+        if (shouldRefreshCurrentDayState(day, seasonTimePoint)) {
+            gameDayStateService.refreshGameState(store);
         }
 
         GameDayLiveState state = gameDayStoreStateRedisRepository.find(store.getId(), day).orElse(null);
@@ -70,7 +102,7 @@ public class GameDayReportService {
         }
 
         DayWindow timeline = SEASON_TIMELINE_SERVICE.day(store.getSeason(), day);
-        if (LocalDateTime.now(clock).isBefore(timeline.businessEnd())) {
+        if (now.isBefore(timeline.businessEnd())) {
             return;
         }
 
@@ -162,13 +194,21 @@ public class GameDayReportService {
         }
     }
 
-        private Integer resolveReportDay(Season season) {
-        SeasonTimePoint seasonTimePoint = SEASON_TIMELINE_SERVICE.resolve(season, LocalDateTime.now(clock));
+    private Integer resolveReportDay(Season season, SeasonTimePoint seasonTimePoint) {
+        Integer currentDay = seasonTimePoint.currentDay();
         return switch (seasonTimePoint.phase()) {
             case LOCATION_SELECTION -> null;
-            case DAY_PREPARING, DAY_BUSINESS, DAY_REPORT -> seasonTimePoint.currentDay();
+            case DAY_PREPARING, DAY_BUSINESS -> currentDay == null || currentDay <= 1 ? null : currentDay - 1;
+            case DAY_REPORT -> currentDay;
             case SEASON_SUMMARY, NEXT_SEASON_WAITING, CLOSED -> season.getTotalDays();
         };
+    }
+
+    private boolean shouldRefreshCurrentDayState(Integer reportDay, SeasonTimePoint seasonTimePoint) {
+        return reportDay != null
+                && seasonTimePoint.phase() == SeasonPhase.DAY_REPORT
+                && seasonTimePoint.currentDay() != null
+                && reportDay.equals(seasonTimePoint.currentDay());
     }
 
     private GameDayReportResponse.TomorrowWeather resolveTomorrowWeather(int day, int totalDays) {

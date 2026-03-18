@@ -1,5 +1,6 @@
 package com.ssafy.S14P21A205.game.season.service;
 
+import com.ssafy.S14P21A205.game.day.scheduler.SeasonDayClosingScheduler;
 import com.ssafy.S14P21A205.game.season.entity.Season;
 import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
 import com.ssafy.S14P21A205.game.season.repository.SeasonRepository;
@@ -19,7 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class SeasonLifecycleService {
 
     private final SeasonRepository seasonRepository;
-    private final SeasonFinalRankingService seasonFinalRankingService;
+    private final SeasonDayClosingScheduler seasonDayClosingScheduler;
 
     private final SeasonTimelineService seasonTimelineService = new SeasonTimelineService();
 
@@ -47,6 +48,7 @@ public class SeasonLifecycleService {
     private void synchronizeInProgressSeason(Season season, LocalDateTime now) {
         LocalDateTime seasonEndAt = resolveSeasonEndAt(season);
         season.updateEndTime(seasonEndAt);
+        seasonDayClosingScheduler.synchronize(season);
 
         SeasonTimePoint timePoint = seasonTimelineService.resolve(season, now);
         log.info(
@@ -68,7 +70,7 @@ public class SeasonLifecycleService {
 
         if (!now.isBefore(seasonEndAt)) {
             season.finish();
-            seasonFinalRankingService.saveFinalRankings(season);
+            seasonDayClosingScheduler.clear(season.getId());
             scheduleNextSeasonIfNeeded(season, seasonEndAt);
         }
     }
