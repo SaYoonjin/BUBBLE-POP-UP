@@ -146,14 +146,22 @@ public class OrderServiceImpl implements OrderService {
         );
     }
 
+    private Integer resolveMinimumSellingPrice(Menu menu, int menuTrendRank) {
+        return marketRankingPolicy.apply(
+                menu.getOriginPrice(),
+                marketRankingPolicy.resolveTrendMultiplier(menuTrendRank)
+        );
+    }
+
     private PricingPolicy resolvePricingPolicy(Menu menu, BigDecimal discountRate, int menuTrendRank) {
         int costPrice = resolveCostPrice(menu, discountRate, menuTrendRank);
-        int recommendedPrice = BigDecimal.valueOf(costPrice)
+        int minimumSellingPrice = resolveMinimumSellingPrice(menu, menuTrendRank);
+        int recommendedPrice = BigDecimal.valueOf(minimumSellingPrice)
                 .multiply(RECOMMENDED_PRICE_MULTIPLIER)
                 .setScale(0, RoundingMode.HALF_UP)
                 .intValue();
         int maxSellingPrice = Math.multiplyExact(recommendedPrice, 2);
-        return new PricingPolicy(costPrice, recommendedPrice, maxSellingPrice);
+        return new PricingPolicy(costPrice, minimumSellingPrice, recommendedPrice, maxSellingPrice);
     }
 
     private Integer resolveSellingPrice(
@@ -176,13 +184,13 @@ public class OrderServiceImpl implements OrderService {
             throw new BaseException(
                     ErrorCode.ORDER_INVALID_SELLING_PRICE,
                     "Selling price must be between %d and %d."
-                            .formatted(pricingPolicy.costPrice(), pricingPolicy.maxSellingPrice())
+                            .formatted(pricingPolicy.minimumSellingPrice(), pricingPolicy.maxSellingPrice())
             );
         }
     }
 
     private boolean isSellingPriceWithinRange(int sellingPrice, PricingPolicy pricingPolicy) {
-        return sellingPrice >= pricingPolicy.costPrice()
+        return sellingPrice >= pricingPolicy.minimumSellingPrice()
                 && sellingPrice <= pricingPolicy.maxSellingPrice();
     }
 
@@ -298,6 +306,7 @@ public class OrderServiceImpl implements OrderService {
 
     private record PricingPolicy(
             int costPrice,
+            int minimumSellingPrice,
             int recommendedPrice,
             int maxSellingPrice
     ) {
