@@ -29,16 +29,14 @@ class EventEffectResolverTests {
     @Test
     void resolveAppliesScopedEventWhenLocationAndMenuMatch() {
         EventEffectResolver resolver = new EventEffectResolver(dailyEventRepository);
-        Season season = instantiate(Season.class);
+        Season season = season();
         DailyEvent dailyEvent = dailyEvent(season, 3L, 7L);
         when(dailyEventRepository.findBySeasonIdAndDayBetweenOrderByDayAscIdAsc(1L, 1, 1))
                 .thenReturn(List.of(dailyEvent));
 
         EventEffectResolver.EventEffect effect = resolver.resolve(
-                1L,
+                season,
                 1,
-                7,
-                LocalDateTime.of(2026, 3, 17, 9, 0),
                 LocalDateTime.of(2026, 3, 17, 9, 1, 30),
                 3L,
                 7L
@@ -55,16 +53,14 @@ class EventEffectResolverTests {
     @Test
     void resolveIgnoresScopedEventWhenLocationDoesNotMatch() {
         EventEffectResolver resolver = new EventEffectResolver(dailyEventRepository);
-        Season season = instantiate(Season.class);
+        Season season = season();
         DailyEvent dailyEvent = dailyEvent(season, 3L, null);
         when(dailyEventRepository.findBySeasonIdAndDayBetweenOrderByDayAscIdAsc(1L, 1, 1))
                 .thenReturn(List.of(dailyEvent));
 
         EventEffectResolver.EventEffect effect = resolver.resolve(
-                1L,
+                season,
                 1,
-                7,
-                LocalDateTime.of(2026, 3, 17, 9, 0),
                 LocalDateTime.of(2026, 3, 17, 9, 1, 30),
                 9L,
                 7L
@@ -75,6 +71,14 @@ class EventEffectResolverTests {
         assertThat(effect.populationEventMultiplier()).isEqualByComparingTo("1.00");
         assertThat(effect.ingredientCostMultiplier()).isEqualByComparingTo("1.00");
         assertThat(effect.appliedEvents()).isEmpty();
+    }
+
+    private Season season() {
+        Season season = instantiate(Season.class);
+        ReflectionTestUtils.setField(season, "id", 1L);
+        ReflectionTestUtils.setField(season, "totalDays", 7);
+        ReflectionTestUtils.setField(season, "startTime", LocalDateTime.of(2026, 3, 17, 8, 57, 10));
+        return season;
     }
 
     private DailyEvent dailyEvent(Season season, Long targetLocationId, Long targetMenuId) {

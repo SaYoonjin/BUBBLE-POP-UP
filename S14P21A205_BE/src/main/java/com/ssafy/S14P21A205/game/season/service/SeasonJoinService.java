@@ -8,6 +8,7 @@ import com.ssafy.S14P21A205.game.season.entity.Season;
 import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
 import com.ssafy.S14P21A205.game.season.repository.SeasonRankingRecordRepository;
 import com.ssafy.S14P21A205.game.season.repository.SeasonRepository;
+import com.ssafy.S14P21A205.game.time.service.SeasonTimelineService;
 import com.ssafy.S14P21A205.shop.entity.Menu;
 import com.ssafy.S14P21A205.store.entity.Location;
 import com.ssafy.S14P21A205.store.entity.Store;
@@ -18,6 +19,8 @@ import com.ssafy.S14P21A205.user.entity.User;
 import com.ssafy.S14P21A205.user.service.UserService;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Clock;
+import java.time.LocalDateTime;
 import java.util.regex.Pattern;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -47,6 +50,9 @@ public class SeasonJoinService {
     private final LocationRepository locationRepository;
     private final MenuRepository menuRepository;
     private final StringRedisTemplate stringRedisTemplate;
+    private final SeasonTimelineService seasonTimelineService = new SeasonTimelineService();
+
+    private Clock clock = Clock.systemDefaultZone();
 
     @Transactional
     public SeasonJoinResponse joinCurrentSeason(Authentication authentication, SeasonJoinRequest request) {
@@ -56,9 +62,13 @@ public class SeasonJoinService {
         Season currentSeason = seasonRepository.findFirstByStatusOrderByIdDesc(SeasonStatus.IN_PROGRESS)
                 .orElseThrow(() -> new BaseException(ErrorCode.SEASON_NOT_FOUND));
 
-        // 사용자가 현재 시즌에 이미 활성 매장을 가지고 있는지 확인
         if (hasActiveStoreInCurrentSeason(user.getId(), currentSeason.getId())) {
             throw new BaseException(ErrorCode.ALREADY_JOINED_CURRENT_SEASON);
+        }
+
+        Integer playableFromDay = resolvePlayableFromDay(currentSeason);
+        if (playableFromDay == null) {
+            throw new BaseException(ErrorCode.INVALID_INPUT_VALUE, "Joining the current season is no longer available.");
         }
 
         Location location = locationRepository.findById(request.locationId().longValue())
@@ -67,7 +77,6 @@ public class SeasonJoinService {
         Store previousStore = storeRepository.findFirstByUser_IdOrderBySeason_IdDescIdDesc(user.getId())
                 .orElse(null);
 
-        // 초기 메뉴/가격/가게명 결정
         Menu initialMenu = resolveInitialMenu(previousStore);
         Integer initialPrice = resolveInitialPrice(previousStore, initialMenu);
         String normalizedStoreName = request.storeName().trim();
@@ -78,10 +87,10 @@ public class SeasonJoinService {
                 initialMenu,
                 currentSeason,
                 normalizedStoreName,
-                initialPrice
+                initialPrice,
+                playableFromDay
         ));
 
-        // 시작 비용(인테리어 비용) 계산
         int interior = calculateInterior(location.getRent());
         int remainingBalance = INITIAL_CAPITAL - interior;
 
@@ -93,8 +102,14 @@ public class SeasonJoinService {
         return new SeasonJoinResponse(
                 savedStore.getId(),
                 savedStore.getStoreName(),
-                remainingBalance
+                remainingBalance,
+                playableFromDay,
+                playableFromDay > 1
         );
+    }
+
+    private Integer resolvePlayableFromDay(Season season) {
+        return seasonTimelineService.resolveJoinPlayableFromDay(season, LocalDateTime.now(clock));
     }
 
     private boolean hasActiveStoreInCurrentSeason(Integer userId, Long seasonId) {
@@ -161,3 +176,4 @@ public class SeasonJoinService {
         return CAPTURE_RATE_KEY_PREFIX + storeId;
     }
 }
+

@@ -4,10 +4,7 @@ import com.ssafy.S14P21A205.game.environment.entity.Traffic;
 import com.ssafy.S14P21A205.game.environment.entity.TrafficStatus;
 import com.ssafy.S14P21A205.game.environment.repository.TrafficDayRedisRepository;
 import com.ssafy.S14P21A205.game.environment.repository.TrafficRepository;
-import com.ssafy.S14P21A205.game.time.model.DayWindow;
-import com.ssafy.S14P21A205.game.time.model.GameTimePoint;
 import com.ssafy.S14P21A205.game.time.policy.GameTimePolicy;
-import com.ssafy.S14P21A205.game.time.service.GameClockService;
 import com.ssafy.S14P21A205.game.time.service.SeasonTimelineService;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -28,7 +25,6 @@ public class TrafficDelayResolver {
     private final TrafficRepository trafficRepository;
 
     private final SeasonTimelineService seasonTimelineService = new SeasonTimelineService();
-    private final GameClockService gameClockService = new GameClockService();
 
     public ResolvedTraffic resolve(
             Long locationId,
@@ -46,7 +42,7 @@ public class TrafficDelayResolver {
             return fallback(null);
         }
 
-        int gameHour = resolveGameHour(currentDayStart, day, totalDays, effectiveNow);
+        int gameHour = resolveGameHour(currentDayStart, effectiveNow);
         LocalDateTime targetDateTime = targetDate.get().atTime(gameHour, 0);
 
         return trafficDayRedisRepository.findExact(locationId, targetDateTime)
@@ -78,24 +74,27 @@ public class TrafficDelayResolver {
         return Optional.of(orderedDates.get(day - 1));
     }
 
-    private int resolveGameHour(
-            LocalDateTime currentDayStart,
-            int day,
-            int totalDays,
-            LocalDateTime effectiveNow
-    ) {
-        DayWindow dayWindow = seasonTimelineService.currentDay(currentDayStart, day, totalDays);
-        GameTimePoint gameTimePoint = gameClockService.resolve(effectiveNow, dayWindow);
+    private int resolveGameHour(LocalDateTime currentDayStart, LocalDateTime effectiveNow) {
+        LocalDateTime businessStart = currentDayStart.plus(seasonTimelineService.prepDuration());
+        LocalDateTime businessEnd = businessStart.plus(seasonTimelineService.businessDuration());
         long totalBusinessSeconds = seasonTimelineService.businessDuration().toSeconds();
         if (totalBusinessSeconds <= 0L) {
             return GameTimePolicy.BUSINESS_OPEN_HOUR;
         }
 
+        LocalDateTime boundedNow = effectiveNow;
+        if (boundedNow.isBefore(businessStart)) {
+            boundedNow = businessStart;
+        }
+        if (boundedNow.isAfter(businessEnd)) {
+            boundedNow = businessEnd;
+        }
+
+        long elapsedBusinessSeconds = java.time.Duration.between(businessStart, boundedNow).toSeconds();
         int slotCount = GameTimePolicy.BUSINESS_CLOSE_HOUR - GameTimePolicy.BUSINESS_OPEN_HOUR;
-        long boundedElapsed = Math.max(0L, Math.min(gameTimePoint.elapsedBusinessSeconds(), totalBusinessSeconds));
         int slotIndex = (int) Math.min(
                 slotCount - 1L,
-                (boundedElapsed * slotCount) / totalBusinessSeconds
+                (elapsedBusinessSeconds * slotCount) / totalBusinessSeconds
         );
         return GameTimePolicy.BUSINESS_OPEN_HOUR + slotIndex;
     }

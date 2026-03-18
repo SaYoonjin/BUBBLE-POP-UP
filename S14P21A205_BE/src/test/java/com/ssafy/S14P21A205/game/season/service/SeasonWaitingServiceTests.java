@@ -1,6 +1,7 @@
 package com.ssafy.S14P21A205.game.season.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -25,7 +26,12 @@ class SeasonWaitingServiceTests {
 
     @Test
     void getWaitingStatusReturnsInProgressWhenSeasonIsActive() {
-        Season inProgressSeason = season(3L, SeasonStatus.IN_PROGRESS, 3, 7, LocalDateTime.of(2026, 3, 16, 10, 0));
+        ReflectionTestUtils.setField(
+                seasonWaitingService,
+                "clock",
+                Clock.fixed(Instant.parse("2026-03-16T01:05:00Z"), ZoneId.of("Asia/Seoul"))
+        );
+        Season inProgressSeason = season(3L, SeasonStatus.IN_PROGRESS, 3, 7, LocalDateTime.of(2026, 3, 16, 9, 58, 10));
         when(seasonRepository.findFirstByStatusOrderByIdDesc(SeasonStatus.IN_PROGRESS))
                 .thenReturn(Optional.of(inProgressSeason));
 
@@ -33,8 +39,13 @@ class SeasonWaitingServiceTests {
 
         assertEquals(GameWaitingStatus.IN_PROGRESS, response.status());
         assertNull(response.nextSeasonNumber());
-        assertEquals(3, response.currentDay());
+        assertEquals(2, response.currentDay());
         assertNull(response.nextSeasonStartTime());
+        assertEquals("DAY_BUSINESS", response.seasonPhase());
+        assertEquals("16:00", response.gameTime());
+        assertEquals(6, response.tick());
+        assertEquals(true, response.joinEnabled());
+        assertEquals(3, response.joinPlayableFromDay());
     }
 
     @Test
@@ -57,6 +68,8 @@ class SeasonWaitingServiceTests {
         assertEquals(4, response.nextSeasonNumber());
         assertNull(response.currentDay());
         assertEquals(120, response.nextSeasonStartTime());
+        assertEquals("NEXT_SEASON_WAITING", response.seasonPhase());
+        assertEquals(7200, response.phaseRemainingSeconds());
     }
 
     @Test

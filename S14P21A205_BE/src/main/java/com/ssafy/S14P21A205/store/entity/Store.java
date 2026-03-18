@@ -51,6 +51,9 @@ public class Store {
     @Column(nullable = false)
     private Integer price;
 
+    @Column(name = "playable_from_day")
+    private Integer playableFromDay;
+
     @UpdateTimestamp
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
@@ -61,7 +64,8 @@ public class Store {
             Menu menu,
             Season season,
             String storeName,
-            Integer price
+            Integer price,
+            Integer playableFromDay
     ) {
         this.user = user;
         this.location = location;
@@ -69,6 +73,7 @@ public class Store {
         this.season = season;
         this.storeName = storeName;
         this.price = price;
+        this.playableFromDay = playableFromDay;
     }
 
     public static Store create(
@@ -77,9 +82,10 @@ public class Store {
             Menu menu,
             Season season,
             String storeName,
-            Integer price
+            Integer price,
+            Integer playableFromDay
     ) {
-        return new Store(user, location, menu, season, storeName, price);
+        return new Store(user, location, menu, season, storeName, price, playableFromDay);
     }
 
     public void changeLocation(Location location) {
@@ -94,3 +100,4 @@ public class Store {
         this.price = price;
     }
 }
+

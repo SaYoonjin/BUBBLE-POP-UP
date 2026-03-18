@@ -12,12 +12,16 @@ import com.ssafy.S14P21A205.store.dto.MenuListResponse;
 import com.ssafy.S14P21A205.store.dto.StoreResponse;
 import com.ssafy.S14P21A205.store.dto.UpdateStoreLocationRequest;
 import com.ssafy.S14P21A205.store.dto.UpdateStoreLocationResponse;
+import com.ssafy.S14P21A205.game.time.model.SeasonTimePoint;
+import com.ssafy.S14P21A205.game.time.service.SeasonTimelineService;
 import com.ssafy.S14P21A205.store.entity.Location;
 import com.ssafy.S14P21A205.store.entity.Store;
 import com.ssafy.S14P21A205.store.repository.LocationRepository;
 import com.ssafy.S14P21A205.store.repository.MenuRepository;
 import com.ssafy.S14P21A205.store.repository.StoreRepository;
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.LocalDateTime;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -33,6 +37,9 @@ public class StoreServiceImpl implements StoreService {
     private final MenuRepository menuRepository;
     private final ItemUserRepository itemUserRepository;
     private final GameDayStoreStateRedisRepository gameDayStoreStateRedisRepository;
+    private final Clock clock;
+
+    private final SeasonTimelineService seasonTimelineService = new SeasonTimelineService();
 
     @Override
     public StoreResponse getStore(Integer userId) {
@@ -42,7 +49,7 @@ public class StoreServiceImpl implements StoreService {
                 store.getLocation().getLocationName(),
                 store.getStoreName(),
                 store.getMenu().getMenuName(),
-                store.getSeason().getCurrentDay()
+                resolveCurrentDay(store)
         );
     }
 
@@ -51,7 +58,7 @@ public class StoreServiceImpl implements StoreService {
     public UpdateStoreLocationResponse updateStoreLocation(Integer userId, UpdateStoreLocationRequest request) {
         Store store = getStoreByUserId(userId);
         Long storeId = store.getId();
-        int currentDay = resolveCurrentDay(store.getSeason().getCurrentDay());
+        int currentDay = resolveCurrentDay(store);
 
         Location location = locationRepository.findById(request.locationId())
                 .orElseThrow(() -> new RuntimeException("Location was not found."));
@@ -129,8 +136,14 @@ public class StoreServiceImpl implements StoreService {
                 .orElse(BigDecimal.ONE);
     }
 
-    private int resolveCurrentDay(Integer currentDay) {
-        return currentDay == null || currentDay == 0 ? 1 : currentDay;
+        private int resolveCurrentDay(Store store) {
+        SeasonTimePoint seasonTimePoint = seasonTimelineService.resolve(store.getSeason(), LocalDateTime.now(clock));
+        Integer currentDay = seasonTimePoint.currentDay();
+        if (currentDay != null && currentDay >= 1 && currentDay <= store.getSeason().getTotalDays()) {
+            return currentDay;
+        }
+        Integer fallbackDay = store.getSeason().getCurrentDay();
+        return fallbackDay == null || fallbackDay == 0 ? 1 : fallbackDay;
     }
 
     private Store getStoreByUserId(Integer userId) {
@@ -138,3 +151,6 @@ public class StoreServiceImpl implements StoreService {
                 .orElseThrow(() -> new BaseException(ErrorCode.STORE_NOT_FOUND));
     }
 }
+
+
+

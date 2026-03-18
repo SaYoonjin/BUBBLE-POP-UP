@@ -32,7 +32,6 @@ public class GameDayStoreStateRedisRepository {
     private static final String FIELD_START_RESPONSE = "start_response";
     private static final String FIELD_POPULATION_PER_STORE = "population_per_store";
     private static final String FIELD_CAPTURE_RATE = "capture_rate";
-    private static final String LEGACY_FIELD_CAPTURE_RATE = "inflow_rate";
     private static final String FIELD_SALE_PRICE = "sale_price";
     private static final String FIELD_TICK_CUSTOMER_COUNT = "tick_customer_count";
     private static final String FIELD_TICK_PURCHASE_COUNT = "tick_purchase_count";
@@ -281,11 +280,7 @@ public class GameDayStoreStateRedisRepository {
     }
 
     private BigDecimal parseCaptureRate(Map<Object, Object> entries) {
-        BigDecimal captureRate = parseBigDecimal(entries.get(FIELD_CAPTURE_RATE));
-        if (captureRate != null) {
-            return captureRate;
-        }
-        return parseBigDecimal(entries.get(LEGACY_FIELD_CAPTURE_RATE));
+        return parseBigDecimal(entries.get(FIELD_CAPTURE_RATE));
     }
 
     private List<Integer> parsePurchaseList(Object value) throws Exception {

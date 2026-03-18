@@ -5,6 +5,9 @@ import com.ssafy.S14P21A205.game.season.dto.GameWaitingStatus;
 import com.ssafy.S14P21A205.game.season.entity.Season;
 import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
 import com.ssafy.S14P21A205.game.season.repository.SeasonRepository;
+import com.ssafy.S14P21A205.game.time.model.SeasonPhase;
+import com.ssafy.S14P21A205.game.time.model.SeasonTimePoint;
+import com.ssafy.S14P21A205.game.time.service.SeasonTimelineService;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -18,29 +21,48 @@ import org.springframework.transaction.annotation.Transactional;
 public class SeasonWaitingService {
 
     private final SeasonRepository seasonRepository;
+    private final SeasonTimelineService seasonTimelineService = new SeasonTimelineService();
 
     private Clock clock = Clock.systemDefaultZone();
 
     public GameWaitingResponse getWaitingStatus() {
+        LocalDateTime now = LocalDateTime.now(clock);
+
         Season inProgressSeason = seasonRepository.findFirstByStatusOrderByIdDesc(SeasonStatus.IN_PROGRESS)
                 .orElse(null);
         if (inProgressSeason != null) {
-            return new GameWaitingResponse(
-                    GameWaitingStatus.IN_PROGRESS,
-                    null,
-                    resolveCurrentDay(inProgressSeason),
-                    null
-            );
+            SeasonTimePoint timePoint = seasonTimelineService.resolve(inProgressSeason, now);
+            if (timePoint.phase() != SeasonPhase.CLOSED) {
+                return new GameWaitingResponse(
+                        GameWaitingStatus.IN_PROGRESS,
+                        null,
+                        timePoint.currentDay(),
+                        null,
+                        timePoint.phase().name(),
+                        safeInt(timePoint.remainingPhaseSeconds()),
+                        timePoint.gameTime(),
+                        timePoint.tick(),
+                        timePoint.joinEnabled(),
+                        timePoint.joinPlayableFromDay()
+                );
+            }
         }
 
         Season scheduledSeason = seasonRepository.findFirstByStatusOrderByStartTimeAscIdAsc(SeasonStatus.SCHEDULED)
                 .orElse(null);
         if (scheduledSeason != null) {
+            long remainingSeconds = resolveRemainingSeconds(scheduledSeason.getStartTime(), now);
             return new GameWaitingResponse(
                     GameWaitingStatus.WAITING,
                     resolveSeasonNumber(scheduledSeason.getId()),
                     null,
-                    resolveRemainingMinutes(scheduledSeason.getStartTime())
+                    Math.toIntExact(Math.max(0L, remainingSeconds / 60L)),
+                    SeasonPhase.NEXT_SEASON_WAITING.name(),
+                    safeInt(remainingSeconds),
+                    null,
+                    null,
+                    false,
+                    null
             );
         }
 
@@ -53,30 +75,29 @@ public class SeasonWaitingService {
                 GameWaitingStatus.WAITING,
                 nextSeasonNumber,
                 null,
+                null,
+                SeasonPhase.NEXT_SEASON_WAITING.name(),
+                null,
+                null,
+                null,
+                false,
                 null
         );
     }
 
-    private Integer resolveCurrentDay(Season season) {
-        Integer currentDay = season.getCurrentDay();
-        if (currentDay == null || currentDay < 1) {
-            return 1;
-        }
-        if (season.getTotalDays() != null && currentDay > season.getTotalDays()) {
-            return season.getTotalDays();
-        }
-        return currentDay;
-    }
-
-    private Integer resolveRemainingMinutes(LocalDateTime startTime) {
+    private long resolveRemainingSeconds(LocalDateTime startTime, LocalDateTime now) {
         if (startTime == null) {
-            return null;
+            return 0L;
         }
-        long remainingMinutes = Duration.between(LocalDateTime.now(clock), startTime).toMinutes();
-        return Math.toIntExact(Math.max(remainingMinutes, 0L));
+        return Math.max(Duration.between(now, startTime).toSeconds(), 0L);
     }
 
     private Integer resolveSeasonNumber(Long seasonId) {
         return seasonId == null ? null : Math.toIntExact(seasonId);
     }
+
+    private Integer safeInt(long value) {
+        return Math.toIntExact(Math.max(0L, value));
+    }
 }
+

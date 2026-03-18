@@ -70,9 +70,6 @@ class ActionServiceImplTests {
     private StoreRepository storeRepository;
 
     @Mock
-    private com.ssafy.S14P21A205.game.season.repository.SeasonRepository seasonRepository;
-
-    @Mock
     private OrderRepository orderRepository;
 
     @Mock
@@ -95,7 +92,6 @@ class ActionServiceImplTests {
                 actionRepository,
                 actionLogRepository,
                 storeRepository,
-                seasonRepository,
                 orderRepository,
                 itemUserRepository,
                 eventEffectResolver,
@@ -108,14 +104,11 @@ class ActionServiceImplTests {
     @Test
     void executeDiscountAppliesTwoHundredPercentBandMultiplier() {
         Store store = store(15L, 1, 3L, 7L, 2, 7, 2_000, 5_000);
-        Season season = store.getSeason();
         Action discountAction = action(ActionCategory.DISCOUNT, 500);
         GameDayLiveState state = state(500_000L);
 
         when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
                 .thenReturn(Optional.of(store));
-        when(seasonRepository.findFirstByStatusOrderByIdDesc(SeasonStatus.IN_PROGRESS))
-                .thenReturn(Optional.of(season));
         when(gameDayStoreStateRedisRepository.isActionUsed(15L, 2, "discount")).thenReturn(false);
         when(actionRepository.findByCategory(ActionCategory.DISCOUNT)).thenReturn(List.of(discountAction));
         when(gameDayStoreStateRedisRepository.find(15L, 2)).thenReturn(Optional.of(state));
@@ -136,14 +129,11 @@ class ActionServiceImplTests {
     @Test
     void executeDiscountTreatsElevenToTwentyPercentPremiumAsOneTwentyBand() {
         Store store = store(15L, 1, 3L, 7L, 2, 7, 2_000, 4_700);
-        Season season = store.getSeason();
         Action discountAction = action(ActionCategory.DISCOUNT, 500);
         GameDayLiveState state = state(500_000L);
 
         when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
                 .thenReturn(Optional.of(store));
-        when(seasonRepository.findFirstByStatusOrderByIdDesc(SeasonStatus.IN_PROGRESS))
-                .thenReturn(Optional.of(season));
         when(gameDayStoreStateRedisRepository.isActionUsed(15L, 2, "discount")).thenReturn(false);
         when(actionRepository.findByCategory(ActionCategory.DISCOUNT)).thenReturn(List.of(discountAction));
         when(gameDayStoreStateRedisRepository.find(15L, 2)).thenReturn(Optional.of(state));
@@ -160,14 +150,11 @@ class ActionServiceImplTests {
     @Test
     void executeDiscountKeepsAverageBandWithinTenPercent() {
         Store store = store(15L, 1, 3L, 7L, 2, 7, 2_000, 4_500);
-        Season season = store.getSeason();
         Action discountAction = action(ActionCategory.DISCOUNT, 500);
         GameDayLiveState state = state(500_000L);
 
         when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
                 .thenReturn(Optional.of(store));
-        when(seasonRepository.findFirstByStatusOrderByIdDesc(SeasonStatus.IN_PROGRESS))
-                .thenReturn(Optional.of(season));
         when(gameDayStoreStateRedisRepository.isActionUsed(15L, 2, "discount")).thenReturn(false);
         when(actionRepository.findByCategory(ActionCategory.DISCOUNT)).thenReturn(List.of(discountAction));
         when(gameDayStoreStateRedisRepository.find(15L, 2)).thenReturn(Optional.of(state));
@@ -184,14 +171,11 @@ class ActionServiceImplTests {
     @Test
     void executeDiscountTreatsEightyToNinetyPercentDiscountAsEightyBand() {
         Store store = store(15L, 1, 3L, 7L, 2, 7, 2_000, 4_000);
-        Season season = store.getSeason();
         Action discountAction = action(ActionCategory.DISCOUNT, 500);
         GameDayLiveState state = state(500_000L);
 
         when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
                 .thenReturn(Optional.of(store));
-        when(seasonRepository.findFirstByStatusOrderByIdDesc(SeasonStatus.IN_PROGRESS))
-                .thenReturn(Optional.of(season));
         when(gameDayStoreStateRedisRepository.isActionUsed(15L, 2, "discount")).thenReturn(false);
         when(actionRepository.findByCategory(ActionCategory.DISCOUNT)).thenReturn(List.of(discountAction));
         when(gameDayStoreStateRedisRepository.find(15L, 2)).thenReturn(Optional.of(state));
@@ -208,14 +192,11 @@ class ActionServiceImplTests {
     @Test
     void executeDiscountAppliesSixtyPercentBandMultiplier() {
         Store store = store(15L, 1, 3L, 7L, 2, 7, 900, 2_500);
-        Season season = store.getSeason();
         Action discountAction = action(ActionCategory.DISCOUNT, 500);
         GameDayLiveState state = state(500_000L);
 
         when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
                 .thenReturn(Optional.of(store));
-        when(seasonRepository.findFirstByStatusOrderByIdDesc(SeasonStatus.IN_PROGRESS))
-                .thenReturn(Optional.of(season));
         when(gameDayStoreStateRedisRepository.isActionUsed(15L, 2, "discount")).thenReturn(false);
         when(actionRepository.findByCategory(ActionCategory.DISCOUNT)).thenReturn(List.of(discountAction));
         when(gameDayStoreStateRedisRepository.find(15L, 2)).thenReturn(Optional.of(state));
@@ -235,12 +216,9 @@ class ActionServiceImplTests {
     @Test
     void executeDiscountThrowsWhenNewPriceFallsBelowOriginPrice() {
         Store store = store(15L, 1, 3L, 7L, 2, 7, 2_000, 2_500);
-        Season season = store.getSeason();
         Action discountAction = action(ActionCategory.DISCOUNT, 500);
         when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
                 .thenReturn(Optional.of(store));
-        when(seasonRepository.findFirstByStatusOrderByIdDesc(SeasonStatus.IN_PROGRESS))
-                .thenReturn(Optional.of(season));
         when(gameDayStoreStateRedisRepository.isActionUsed(15L, 2, "discount")).thenReturn(false);
         when(actionRepository.findByCategory(ActionCategory.DISCOUNT)).thenReturn(List.of(discountAction));
 
@@ -253,14 +231,11 @@ class ActionServiceImplTests {
     @Test
     void executeDonationAppliesFixedOnePointOneMultiplierAndReducesStock() {
         Store store = store(15L, 1, 3L, 7L, 2, 7, 2_000, 4_000);
-        Season season = store.getSeason();
         Action donationAction = action(ActionCategory.DONATION, 0);
         GameDayLiveState state = state(500_000L);
 
         when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
                 .thenReturn(Optional.of(store));
-        when(seasonRepository.findFirstByStatusOrderByIdDesc(SeasonStatus.IN_PROGRESS))
-                .thenReturn(Optional.of(season));
         when(gameDayStoreStateRedisRepository.isActionUsed(15L, 2, "donation")).thenReturn(false);
         when(actionRepository.findByCategory(ActionCategory.DONATION)).thenReturn(List.of(donationAction));
         when(gameDayStoreStateRedisRepository.find(15L, 2)).thenReturn(Optional.of(state));
@@ -285,18 +260,14 @@ class ActionServiceImplTests {
 
         when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
                 .thenReturn(Optional.of(store));
-        when(seasonRepository.findFirstByStatusOrderByIdDesc(SeasonStatus.IN_PROGRESS))
-                .thenReturn(Optional.of(season));
         when(gameDayStoreStateRedisRepository.isActionUsed(15L, 2, "emergency")).thenReturn(false);
         when(actionRepository.findByCategory(ActionCategory.EMERGENCY_ORDER)).thenReturn(List.of(emergencyAction));
         when(gameDayStoreStateRedisRepository.find(15L, 2)).thenReturn(Optional.of(state));
         when(itemUserRepository.findPurchasedDiscountRateByUserIdAndCategory(1, ItemCategory.INGREDIENT))
                 .thenReturn(Optional.of(new BigDecimal("0.80")));
         when(eventEffectResolver.resolve(
-                eq(9L),
+                eq(season),
                 eq(2),
-                eq(7),
-                eq(state.startedAt()),
                 eq(now),
                 eq(3L),
                 eq(7L)
@@ -331,13 +302,10 @@ class ActionServiceImplTests {
     @Test
     void executeEmergencyOrderThrowsWhenLiveStateIsMissing() {
         Store store = store(15L, 1, 3L, 7L, 2, 7, 2_000);
-        Season season = store.getSeason();
         Action emergencyAction = action(ActionCategory.EMERGENCY_ORDER, 500);
 
         when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
                 .thenReturn(Optional.of(store));
-        when(seasonRepository.findFirstByStatusOrderByIdDesc(SeasonStatus.IN_PROGRESS))
-                .thenReturn(Optional.of(season));
         when(gameDayStoreStateRedisRepository.isActionUsed(15L, 2, "emergency")).thenReturn(false);
         when(actionRepository.findByCategory(ActionCategory.EMERGENCY_ORDER)).thenReturn(List.of(emergencyAction));
         when(gameDayStoreStateRedisRepository.find(15L, 2)).thenReturn(Optional.empty());
@@ -356,7 +324,6 @@ class ActionServiceImplTests {
                 actionRepository,
                 actionLogRepository,
                 storeRepository,
-                seasonRepository,
                 orderRepository,
                 itemUserRepository,
                 eventEffectResolver,
@@ -381,8 +348,6 @@ class ActionServiceImplTests {
                 GameDayTestFixtures.USER_ID,
                 SeasonStatus.IN_PROGRESS
         )).thenReturn(Optional.of(store));
-        when(seasonRepository.findFirstByStatusOrderByIdDesc(SeasonStatus.IN_PROGRESS))
-                .thenReturn(Optional.of(season));
         when(gameDayStoreStateRedisRepository.isActionUsed(
                 GameDayTestFixtures.STORE_ID,
                 GameDayTestFixtures.CURRENT_DAY,
@@ -396,10 +361,8 @@ class ActionServiceImplTests {
                 ItemCategory.INGREDIENT
         )).thenReturn(Optional.empty());
         when(eventEffectResolver.resolve(
-                eq(GameDayTestFixtures.SEASON_ID),
+                eq(season),
                 eq(GameDayTestFixtures.CURRENT_DAY),
-                eq(GameDayTestFixtures.TOTAL_DAYS),
-                eq(GameDayTestFixtures.DAY4_STARTED_AT),
                 eq(GameDayTestFixtures.DAY4_STARTED_AT),
                 eq(GameDayTestFixtures.LOCATION_ID),
                 eq(GameDayTestFixtures.MENU_ID)
@@ -528,6 +491,10 @@ class ActionServiceImplTests {
         ReflectionTestUtils.setField(season, "status", SeasonStatus.IN_PROGRESS);
         ReflectionTestUtils.setField(season, "currentDay", currentDay);
         ReflectionTestUtils.setField(season, "totalDays", totalDays);
+        LocalDateTime businessStartAt = LocalDateTime.ofInstant(fixedClock.instant(), fixedClock.getZone()).withSecond(0).withNano(0);
+        LocalDateTime seasonStartAt = businessStartAt.minusSeconds(120L + (currentDay - 1L) * 180L + 50L);
+        ReflectionTestUtils.setField(season, "startTime", seasonStartAt);
+        ReflectionTestUtils.setField(season, "endTime", seasonStartAt.plusSeconds(120L + totalDays * 180L + 120L));
 
         Store store = instantiate(Store.class);
         ReflectionTestUtils.setField(store, "id", storeId);

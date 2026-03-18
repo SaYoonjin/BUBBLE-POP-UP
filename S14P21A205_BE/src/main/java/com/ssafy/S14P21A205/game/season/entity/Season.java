@@ -49,4 +49,42 @@ public class Season {
     @UpdateTimestamp
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
+
+    private Season(SeasonStatus status, Integer currentDay, Integer totalDays, LocalDateTime startTime, LocalDateTime endTime) {
+        this.status = status;
+        this.currentDay = currentDay;
+        this.totalDays = totalDays;
+        this.startTime = startTime;
+        this.endTime = endTime;
+    }
+
+    public static Season createScheduled(int totalDays, LocalDateTime startTime, LocalDateTime endTime) {
+        return new Season(SeasonStatus.SCHEDULED, 1, totalDays, startTime, endTime);
+    }
+
+    public void start() {
+        this.status = SeasonStatus.IN_PROGRESS;
+        if (currentDay == null || currentDay < 1) {
+            this.currentDay = 1;
+        }
+    }
+
+    public void finish() {
+        this.status = SeasonStatus.FINISHED;
+        if (totalDays != null) {
+            this.currentDay = totalDays;
+        }
+    }
+
+    public void syncCurrentDay(Integer currentDay) {
+        if (currentDay == null) {
+            return;
+        }
+        this.currentDay = currentDay;
+    }
+
+    public void updateEndTime(LocalDateTime endTime) {
+        this.endTime = endTime;
+    }
 }
+
