@@ -2,47 +2,47 @@ export type ActionType = "discount" | "emergency" | "promotion" | "share" | "mov
 
 interface ActionBarProps {
   onAction: (action: ActionType) => void;
+  usedActions: Set<ActionType>;
 }
 
-const actions: { type: ActionType; icon: string; label: string; featured?: boolean }[] = [
-  { type: "discount", icon: "🏷️", label: "할인" },
-  { type: "emergency", icon: "🚚", label: "긴급발주" },
-  { type: "promotion", icon: "📢", label: "홍보하기", featured: true },
-  { type: "share", icon: "🤲", label: "나눔" },
-  { type: "move", icon: "🚛", label: "팝업이전" },
+const actions: { type: ActionType; icon: string; label: string }[] = [
+  { type: "discount", icon: "sell", label: "할인" },
+  { type: "emergency", icon: "local_shipping", label: "긴급발주" },
+  { type: "promotion", icon: "campaign", label: "홍보하기" },
+  { type: "share", icon: "volunteer_activism", label: "나눔" },
+  { type: "move", icon: "move_location", label: "팝업이전" },
 ];
 
-export default function ActionBar({ onAction }: ActionBarProps) {
+export default function ActionBar({ onAction, usedActions }: ActionBarProps) {
   return (
-    <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-20 w-auto max-w-[90%]">
-      <div className="glass-panel px-8 py-4 rounded-2xl shadow-xl border border-white/60 flex items-center gap-6">
-        {actions.map((action) =>
-          action.featured ? (
+    <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 w-auto max-w-[90%]">
+      <div className="glass-panel px-6 py-3 rounded-2xl shadow-xl border border-white/60 flex items-center gap-4">
+        {actions.map((action) => {
+          const isUsed = usedActions.has(action.type);
+          return (
             <button
               key={action.type}
-              onClick={() => onAction(action.type)}
-              className="group flex flex-col items-center gap-1 min-w-[70px] transition-transform active:scale-95"
+              onClick={() => !isUsed && onAction(action.type)}
+              disabled={isUsed}
+              className={`group flex flex-col items-center gap-1 min-w-[60px] transition-all active:scale-95 ${
+                isUsed ? "opacity-40 cursor-not-allowed" : ""
+              }`}
             >
-              <div className="w-16 h-16 bg-primary text-white rounded-xl shadow-md border border-primary-dark flex items-center justify-center hover:bg-primary-dark transition-colors text-3xl -mt-6 ring-4 ring-white/50">
-                {action.icon}
+              <div className={`w-12 h-12 rounded-xl shadow-sm border flex items-center justify-center transition-colors ${
+                isUsed
+                  ? "bg-slate-100 border-slate-200 text-slate-300"
+                  : "bg-white border-slate-100 text-slate-600 group-hover:bg-primary group-hover:text-white group-hover:border-primary"
+              }`}>
+                <span className="material-symbols-outlined text-[22px]">{action.icon}</span>
               </div>
-              <span className="text-xs font-bold text-primary-dark">{action.label}</span>
-            </button>
-          ) : (
-            <button
-              key={action.type}
-              onClick={() => onAction(action.type)}
-              className="group flex flex-col items-center gap-1 min-w-[70px] transition-transform active:scale-95"
-            >
-              <div className="w-14 h-14 bg-white rounded-xl shadow-sm border border-slate-100 flex items-center justify-center group-hover:bg-primary group-hover:text-white transition-colors text-2xl">
-                {action.icon}
-              </div>
-              <span className="text-xs font-bold text-slate-600 group-hover:text-primary transition-colors">
-                {action.label}
+              <span className={`text-[11px] font-bold transition-colors ${
+                isUsed ? "text-slate-300" : "text-slate-600 group-hover:text-primary"
+              }`}>
+                {isUsed ? "사용완료" : action.label}
               </span>
             </button>
-          )
-        )}
+          );
+        })}
       </div>
     </div>
   );

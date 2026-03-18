@@ -4,6 +4,7 @@ import FloatingBubbles from "../components/common/FloatingBubbles";
 import ItemSelector from "../components/common/ItemSelector";
 import SeasonCTA from "../components/common/SeasonCTA";
 import BankruptWarning from "../components/common/BankruptWarning";
+import AnimatedNumber from "../components/common/AnimatedNumber";
 import { DASHBOARD_SELECTED_ITEMS_STORAGE_KEY } from "../constants";
 
 const dashBubbles = [
@@ -14,12 +15,28 @@ const dashBubbles = [
 
 const TOTAL_POINTS = 100;
 
-const shopItems = [
-  { id: 1, name: "원재료값 할인권", group: "ingredient", discount: "×0.8", price: 30 },
-  { id: 2, name: "임대료 할인권", group: "rent", discount: "×0.8", price: 30 },
-  { id: 3, name: "원재료값 할인권", group: "ingredient", discount: "×0.95", price: 10 },
-  { id: 4, name: "임대료 할인권", group: "rent", discount: "×0.95", price: 10 },
+const itemGroups = [
+  {
+    group: "ingredient",
+    label: "원재료 할인권",
+    icon: "🥬",
+    items: [
+      { id: 1, name: "원재료 할인권", group: "ingredient", discount: "20% 할인", desc: "원재료 구매 비용 20% 감소", price: 30 },
+      { id: 3, name: "원재료 할인권", group: "ingredient", discount: "5% 할인", desc: "원재료 구매 비용 5% 감소", price: 10 },
+    ],
+  },
+  {
+    group: "rent",
+    label: "임대료 할인권",
+    icon: "🏠",
+    items: [
+      { id: 2, name: "임대료 할인권", group: "rent", discount: "20% 할인", desc: "일일 임대료 20% 감소", price: 30 },
+      { id: 4, name: "임대료 할인권", group: "rent", discount: "5% 할인", desc: "일일 임대료 5% 감소", price: 10 },
+    ],
+  },
 ];
+
+const allItems = itemGroups.flatMap((g) => g.items);
 
 function getInitialSelectedItemIds() {
   try {
@@ -34,8 +51,6 @@ function getInitialSelectedItemIds() {
 
 export default function DashboardPage() {
   const [selectedItemIds, setSelectedItemIds] = useState<number[]>(getInitialSelectedItemIds);
-
-  // Deadline: today 23:59:59 (example)
   const [deadline] = useState(() => {
     const d = new Date();
     d.setHours(23, 59, 59, 0);
@@ -47,11 +62,10 @@ export default function DashboardPage() {
       if (prev.includes(id)) {
         return prev.filter((i) => i !== id);
       }
-      // Remove same group item, add this one
-      const item = shopItems.find((i) => i.id === id);
+      const item = allItems.find((i) => i.id === id);
       if (!item) return prev;
       const filtered = prev.filter((prevId) => {
-        const prevItem = shopItems.find((i) => i.id === prevId);
+        const prevItem = allItems.find((i) => i.id === prevId);
         return prevItem?.group !== item.group;
       });
       if (filtered.length >= 2) return prev;
@@ -63,7 +77,7 @@ export default function DashboardPage() {
     localStorage.setItem(DASHBOARD_SELECTED_ITEMS_STORAGE_KEY, JSON.stringify(selectedItemIds));
   }, [selectedItemIds]);
 
-  const usedPoints = shopItems
+  const usedPoints = allItems
     .filter((i) => selectedItemIds.includes(i.id))
     .reduce((sum, i) => sum + i.price, 0);
 
@@ -76,28 +90,31 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full items-start">
           {/* Left */}
           <div className="flex flex-col gap-6 lg:w-[95%]">
+            {/* Points card */}
             <div className="bg-white rounded-[20px] shadow-soft p-6 w-full flex flex-col gap-2">
               <span className="text-sm font-medium text-gray-500">보유 포인트</span>
               <div className="flex items-baseline gap-2">
-                <span className="text-[40px] font-bold text-primary font-mono leading-none tracking-tight">
-                  {TOTAL_POINTS - usedPoints}P
-                </span>
+                <AnimatedNumber
+                  value={TOTAL_POINTS - usedPoints}
+                  suffix="P"
+                  className="text-[40px] font-bold text-primary font-countdown leading-none tracking-tight"
+                />
                 {usedPoints > 0 && (
                   <span className="text-sm text-slate-400 font-medium">/ {TOTAL_POINTS}P</span>
                 )}
               </div>
             </div>
+
             <ItemSelector
-              items={shopItems}
+              groups={itemGroups}
               selectedIds={selectedItemIds}
               onToggle={handleToggle}
-              totalPoints={TOTAL_POINTS}
             />
           </div>
 
           {/* Right */}
           <div className="flex flex-col gap-6">
-            <SeasonCTA seasonNumber={3} day={3} deadlineTime={deadline} linkTo="/game/3/prep" />
+            <SeasonCTA seasonNumber={3} day={3} totalDays={7} deadlineTime={deadline} linkTo="/game/3/prep" status="joinable" />
             <BankruptWarning />
           </div>
         </div>

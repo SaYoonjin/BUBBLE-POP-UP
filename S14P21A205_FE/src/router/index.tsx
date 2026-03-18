@@ -1,6 +1,6 @@
 import { createBrowserRouter } from "react-router-dom";
 //import PrivateRoute from "./PrivateRoute";
-import LobbyPage from "../pages/LobbyPage";
+import HomePage from "../pages/HomePage";
 import LoginPage from "../pages/LoginPage";
 import MyPage from "../pages/MyPage";
 import LocationSelectPage from "../pages/LocationSelectPage";
@@ -11,11 +11,10 @@ import ReportPage from "../pages/ReportPage";
 import RankingPage from "../pages/RankingPage";
 import ComponentTestPage from "../pages/ComponentTestPage";
 import NewsPage from "../pages/NewsPage";
-import DashboardPage from "../pages/DashboardPage";
 import CozyPrepPage from "../pages/CozyPrepPage";
 
 const router = createBrowserRouter([
-  { path: "/", element: <LobbyPage /> },
+  { path: "/", element: <HomePage /> },
   { path: "/login", element: <LoginPage /> },
   { path: "/test", element: <ComponentTestPage /> },
   { path: "/news", element: <NewsPage /> },
@@ -23,7 +22,6 @@ const router = createBrowserRouter([
   {
     //element: <PrivateRoute />,
     children: [
-      { path: "/dashboard", element: <DashboardPage /> },
       { path: "/mypage", element: <MyPage /> },
       { path: "/game/setup/location", element: <LocationSelectPage /> },
       { path: "/game/setup/naming", element: <BrandNamingPage /> },
