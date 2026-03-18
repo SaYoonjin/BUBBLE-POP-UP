@@ -3,6 +3,33 @@ import { Link } from "react-router-dom";
 
 const INTERVAL = 6000;
 
+type LocationGrade = "S" | "A" | "B";
+
+interface LocationSpot {
+  name: string;
+  x: string;
+  y: string;
+  grade: LocationGrade;
+  d: number;
+  active?: boolean;
+}
+
+const avatarColors = [
+  "bg-primary/30",
+  "bg-primary/50",
+  "bg-primary/40",
+  "bg-slate-300",
+  "bg-primary/60",
+  "bg-slate-400",
+  "bg-primary/45",
+  "bg-slate-350",
+];
+
+interface AnimatedAvatar {
+  id: number;
+  color: string;
+}
+
 /* ─── Slide 1: 스토어 카드 ─── */
 const storeCards = [
   { name: "성수 버블티 하우스", emoji: "🧋", rev: "₩234만", cust: "187명", rank: "3위" },
@@ -58,13 +85,13 @@ function StoreSlide() {
 /* ─── Slide 2: 지역 ─── */
 function LocationSlide() {
   const [hov, setHov] = useState<string|null>(null);
-  const spots = [
+  const spots: LocationSpot[] = [
     { name:"홍대", x:"15%", y:"30%", grade:"A", d:0 },{ name:"여의도", x:"13%", y:"55%", grade:"B", d:.1 },
     { name:"명동", x:"35%", y:"26%", grade:"S", d:.15 },{ name:"이태원", x:"38%", y:"50%", grade:"B", d:.2 },
     { name:"성수", x:"58%", y:"24%", grade:"S", d:.25, active:true },{ name:"건대", x:"72%", y:"40%", grade:"B", d:.3 },
     { name:"강남", x:"50%", y:"68%", grade:"S", d:.35 },{ name:"잠실", x:"78%", y:"60%", grade:"A", d:.4 },
   ];
-  const gc:Record<string,string> = { S:"bg-rose-400", A:"bg-amber-400", B:"bg-slate-400" };
+  const gc: Record<LocationGrade, string> = { S:"bg-rose-400", A:"bg-amber-400", B:"bg-slate-400" };
   const lines = [["15%","30%","35%","26%"],["35%","26%","58%","24%"],["58%","24%","72%","40%"],["72%","40%","78%","60%"],["50%","68%","78%","60%"],["38%","50%","50%","68%"],["38%","50%","58%","24%"],["13%","55%","38%","50%"]];
   return (
     <div className="h-full relative px-8 py-8">
@@ -78,7 +105,7 @@ function LocationSlide() {
         {lines.map((l,i) => <line key={i} x1={l[0]} y1={l[1]} x2={l[2]} y2={l[3]} stroke="#334155" strokeDasharray="4 3" strokeWidth="1.5" />)}
       </svg>
       {spots.map((s) => {
-        const isH = hov===s.name, isA = !!(s as any).active;
+        const isH = hov===s.name, isA = !!s.active;
         return (
           <div key={s.name} className="absolute flex flex-col items-center cursor-pointer"
             style={{ left:s.x, top:s.y, transform:"translate(-50%,-50%)", animation:`nodeAppear .5s ease-out ${s.d}s both` }}
@@ -249,16 +276,18 @@ export function HeroCTA() {
 
 /* ─── Animated Avatars ─── */
 export function AnimatedParticipants({ count }: { count: number }) {
-  const allColors = ["bg-primary/30","bg-primary/50","bg-primary/40","bg-slate-300","bg-primary/60","bg-slate-400","bg-primary/45","bg-slate-350"];
-  const [items, setItems] = useState(() => allColors.slice(0, 4));
-  const colorIdx = useRef(4);
+  const [items, setItems] = useState<AnimatedAvatar[]>(() =>
+    avatarColors.slice(0, 4).map((color, index) => ({ id: index, color })),
+  );
+  const nextItemId = useRef(4);
 
   useEffect(() => {
     const t = setInterval(() => {
       setItems((prev) => {
-        const next = allColors[colorIdx.current % allColors.length];
-        colorIdx.current++;
-        return [...prev.slice(1), next];
+        const nextColor = avatarColors[nextItemId.current % avatarColors.length];
+        const nextItem = { id: nextItemId.current, color: nextColor };
+        nextItemId.current++;
+        return [...prev.slice(1), nextItem];
       });
     }, 2200);
     return () => clearInterval(t);
@@ -275,9 +304,9 @@ export function AnimatedParticipants({ count }: { count: number }) {
             100% { transform: translateX(-24px); opacity: 0; }
           }
         `}</style>
-        {items.map((color, i) => (
-          <div key={`${colorIdx.current}-${i}`}
-            className={`w-7 h-7 rounded-full ${color} border-2 border-white shrink-0`}
+        {items.map((item, i) => (
+          <div key={item.id}
+            className={`w-7 h-7 rounded-full ${item.color} border-2 border-white shrink-0`}
             style={{ zIndex: 4-i, animation: i === items.length - 1 ? "avatarSlide 2.2s ease-in-out" : undefined }}
           />
         ))}
