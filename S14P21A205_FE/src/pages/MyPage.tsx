@@ -10,6 +10,7 @@ type RankVariant = "gold" | "gray" | "rose";
 type SeasonStatus = "default" | "bankrupt" | "comeback";
 
 interface SeasonHistoryItem {
+  id: string;
   season: number;
   rank: string;
   rankValue: number | null;
@@ -23,6 +24,19 @@ interface SeasonHistoryItem {
 
 const seasonHistory: SeasonHistoryItem[] = [
   {
+    id: "season-5-bankrupt",
+    season: 5,
+    rank: "파산",
+    rankValue: null,
+    rankVariant: "rose",
+    status: "bankrupt",
+    location: "강남",
+    storeName: "디저트 팝업 스토어",
+    revenue: "₩0",
+    rewardPoints: "0P",
+  },
+  {
+    id: "season-5-comeback",
     season: 5,
     rank: "2위",
     rankValue: 2,
@@ -34,6 +48,7 @@ const seasonHistory: SeasonHistoryItem[] = [
     rewardPoints: "420P",
   },
   {
+    id: "season-4-bankrupt",
     season: 4,
     rank: "파산",
     rankValue: null,
@@ -45,6 +60,7 @@ const seasonHistory: SeasonHistoryItem[] = [
     rewardPoints: "0P",
   },
   {
+    id: "season-3-default",
     season: 3,
     rank: "1위",
     rankValue: 1,
@@ -56,6 +72,7 @@ const seasonHistory: SeasonHistoryItem[] = [
     rewardPoints: "500P",
   },
   {
+    id: "season-2-default",
     season: 2,
     rank: "4위",
     rankValue: 4,
@@ -67,6 +84,7 @@ const seasonHistory: SeasonHistoryItem[] = [
     rewardPoints: "180P",
   },
   {
+    id: "season-1-default",
     season: 1,
     rank: "8위",
     rankValue: 8,
@@ -81,14 +99,45 @@ const seasonHistory: SeasonHistoryItem[] = [
 
 const MAX_VISIBLE_SEASONS = 10;
 
+const seasonStatusPriority: Record<SeasonStatus, number> = {
+  comeback: 0,
+  default: 1,
+  bankrupt: 2,
+};
+
 export default function MyPage() {
   const [nickname, setNickname] = useState("버블킹");
   const [isNicknameModalOpen, setIsNicknameModalOpen] = useState(false);
   const [draftNickname, setDraftNickname] = useState("버블킹");
   const [nicknameError, setNicknameError] = useState("");
 
-  const visibleSeasons = seasonHistory.slice(0, MAX_VISIBLE_SEASONS);
-  const rankedSeasons = visibleSeasons.filter(
+  const seasonHistoryBySeason = seasonHistory.reduce<Map<number, SeasonHistoryItem[]>>(
+    (groups, record) => {
+      const existingSeasonRecords = groups.get(record.season);
+
+      if (existingSeasonRecords) {
+        existingSeasonRecords.push(record);
+      } else {
+        groups.set(record.season, [record]);
+      }
+
+      return groups;
+    },
+    new Map(),
+  );
+
+  const visibleSeasonGroups = Array.from(seasonHistoryBySeason.entries())
+    .sort(([seasonA], [seasonB]) => seasonB - seasonA)
+    .slice(0, MAX_VISIBLE_SEASONS)
+    .map(([season, records]) => [
+      season,
+      [...records].sort(
+        (recordA, recordB) =>
+          seasonStatusPriority[recordA.status] - seasonStatusPriority[recordB.status],
+      ),
+    ] as const);
+  const visibleSeasonHistory = visibleSeasonGroups.flatMap(([, records]) => records);
+  const rankedSeasons = seasonHistory.filter(
     (season): season is SeasonHistoryItem & { rankValue: number } => season.rankValue !== null,
   );
   const bestRankLabel =
@@ -96,7 +145,7 @@ export default function MyPage() {
       ? `${Math.min(...rankedSeasons.map((season) => season.rankValue))}위`
       : "-";
   const summaryBadges = [
-    `참여 시즌 ${visibleSeasons.length}회`,
+    `참여 시즌 ${seasonHistoryBySeason.size}회`,
     `최고 순위 ${bestRankLabel}`,
   ];
 
@@ -158,15 +207,15 @@ export default function MyPage() {
               </div>
 
               <Badge variant="gray" size="md">
-                {visibleSeasons.length > 0 ? `최근 ${visibleSeasons.length}개 시즌` : "기록 없음"}
+                {visibleSeasonGroups.length > 0 ? `최근 ${visibleSeasonGroups.length}개 시즌` : "기록 없음"}
               </Badge>
             </div>
 
-            {visibleSeasons.length > 0 ? (
+            {visibleSeasonGroups.length > 0 ? (
               <div className="space-y-4">
-                {visibleSeasons.map((season) => (
+                {visibleSeasonHistory.map((season) => (
                   <SeasonHistoryCard
-                    key={season.season}
+                    key={season.id}
                     season={season.season}
                     location={season.location}
                     storeName={season.storeName}

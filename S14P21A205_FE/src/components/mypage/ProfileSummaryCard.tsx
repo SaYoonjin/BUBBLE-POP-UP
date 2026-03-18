@@ -19,33 +19,30 @@ export default function ProfileSummaryCard({
       <div className="absolute -left-6 bottom-20 size-24 rounded-full bg-accent-rose/10 blur-3xl" />
 
       <div className="relative flex flex-col gap-6">
-        <div className="inline-flex w-fit items-center gap-2 rounded-full border border-white/80 bg-white/85 px-3 py-1.5 text-sm font-semibold text-primary-dark shadow-soft backdrop-blur">
-          <span className="material-symbols-outlined text-base text-primary">shield_person</span>
-          <span>계정</span>
-        </div>
-
-        <div className="space-y-3">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <h1 className="truncate text-3xl font-bold tracking-tight text-slate-900">
-                {nickname}
-              </h1>
-              <p className="mt-2 break-all font-mono text-sm text-slate-500">{email}</p>
-            </div>
-
-            <button
-              type="button"
-              onClick={onEditNickname}
-              className="rounded-full border border-slate-200 bg-white/90 p-2 text-slate-400 shadow-soft transition-colors hover:border-primary/40 hover:text-primary"
-              title="닉네임 수정"
-            >
-              <span className="material-symbols-outlined text-lg">edit</span>
-            </button>
+        <div className="flex items-start gap-4">
+          <div className="flex size-16 shrink-0 items-center justify-center rounded-3xl bg-primary/15 text-primary shadow-soft">
+            <span className="material-symbols-outlined text-[30px]">person</span>
           </div>
 
-          <p className="text-sm leading-6 text-slate-500">
-            닉네임은 언제든지 수정할 수 있고, 시즌 기록은 최근 10개 시즌 기준으로 정리돼요.
-          </p>
+          <div className="min-w-0 flex-1 space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-primary-dark/75">
+              My Page
+            </p>
+
+            <div className="flex items-center gap-2">
+              <h1 className="truncate text-2xl font-bold text-slate-900">{nickname}</h1>
+              <button
+                type="button"
+                onClick={onEditNickname}
+                className="rounded-full p-1 text-slate-400 transition-colors hover:bg-white/80 hover:text-primary"
+                title="닉네임 수정"
+              >
+                <span className="material-symbols-outlined text-lg">edit</span>
+              </button>
+            </div>
+
+            <p className="break-all font-mono text-sm text-slate-500">{email}</p>
+          </div>
         </div>
 
         <div className="rounded-3xl border border-white/70 bg-white/80 p-4 backdrop-blur">
