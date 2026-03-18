@@ -2,10 +2,12 @@ package com.ssafy.S14P21A205.game.season.service;
 
 import com.ssafy.S14P21A205.exception.BaseException;
 import com.ssafy.S14P21A205.exception.ErrorCode;
+import com.ssafy.S14P21A205.game.day.generator.PurchaseListGenerator;
 import com.ssafy.S14P21A205.game.season.dto.SeasonJoinRequest;
 import com.ssafy.S14P21A205.game.season.dto.SeasonJoinResponse;
 import com.ssafy.S14P21A205.game.season.entity.Season;
 import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
+import com.ssafy.S14P21A205.game.season.repository.DailyReportRepository;
 import com.ssafy.S14P21A205.game.season.repository.SeasonRankingRecordRepository;
 import com.ssafy.S14P21A205.game.season.repository.SeasonRepository;
 import com.ssafy.S14P21A205.game.time.service.SeasonTimelineService;
@@ -46,12 +48,14 @@ public class SeasonJoinService {
     private final UserService userService;
     private final SeasonRepository seasonRepository;
     private final SeasonRankingRecordRepository seasonRankingRecordRepository;
+    private final DailyReportRepository dailyReportRepository;
     private final StoreRepository storeRepository;
     private final LocationRepository locationRepository;
     private final MenuRepository menuRepository;
     private final StringRedisTemplate stringRedisTemplate;
-    private final SeasonTimelineService seasonTimelineService = new SeasonTimelineService();
+    private final PurchaseListGenerator purchaseListGenerator;
 
+    private final SeasonTimelineService seasonTimelineService = new SeasonTimelineService();
     private Clock clock = Clock.systemDefaultZone();
 
     @Transactional
@@ -76,7 +80,6 @@ public class SeasonJoinService {
 
         Store previousStore = storeRepository.findFirstByUser_IdOrderBySeason_IdDescIdDesc(user.getId())
                 .orElse(null);
-
         Menu initialMenu = resolveInitialMenu(previousStore);
         Integer initialPrice = resolveInitialPrice(previousStore, initialMenu);
         String normalizedStoreName = request.storeName().trim();
@@ -90,6 +93,7 @@ public class SeasonJoinService {
                 initialPrice,
                 playableFromDay
         ));
+        savedStore.initializePurchaseQueue(purchaseListGenerator.issueSeed());
 
         int interior = calculateInterior(location.getRent());
         int remainingBalance = INITIAL_CAPITAL - interior;
@@ -115,6 +119,9 @@ public class SeasonJoinService {
     private boolean hasActiveStoreInCurrentSeason(Integer userId, Long seasonId) {
         return storeRepository.findFirstByUser_IdAndSeason_IdOrderByIdDesc(userId, seasonId)
                 .filter(store -> !seasonRankingRecordRepository.existsByStore_Id(store.getId()))
+                .filter(store -> dailyReportRepository.findFirstByStore_IdOrderByDayDesc(store.getId())
+                        .map(report -> !Boolean.TRUE.equals(report.getIsBankrupt()))
+                        .orElse(true))
                 .isPresent();
     }
 
@@ -176,4 +183,3 @@ public class SeasonJoinService {
         return CAPTURE_RATE_KEY_PREFIX + storeId;
     }
 }
-

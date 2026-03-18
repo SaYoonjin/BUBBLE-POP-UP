@@ -25,6 +25,7 @@ public class GameDayStoreStateTickTask implements GameTickTask {
     private final SeasonRepository seasonRepository;
     private final StoreRepository storeRepository;
     private final GameDayStateService gameDayStateService;
+
     @Override
     public String taskName() {
         return "gameDayStoreState";

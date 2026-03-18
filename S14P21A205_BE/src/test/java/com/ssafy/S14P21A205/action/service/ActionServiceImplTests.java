@@ -276,15 +276,17 @@ class ActionServiceImplTests {
                 0,
                 BigDecimal.ONE,
                 new BigDecimal("1.05"),
+                List.of(),
                 List.of()
         ));
         when(trafficDelayResolver.resolve(
+                eq(9L),
                 eq(3L),
                 eq(2),
                 eq(7),
                 eq(state.startedAt()),
                 eq(now)
-        )).thenReturn(resolvedTraffic(LocalDateTime.of(2023, 12, 9, 10, 0), TrafficStatus.NORMAL, 20));
+        )).thenReturn(resolvedTraffic(2, 10, TrafficStatus.NORMAL, 20));
         when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         EmergencyOrderResponse response = actionService.executeEmergencyOrder(1, new EmergencyOrderRequest(10));
@@ -371,15 +373,17 @@ class ActionServiceImplTests {
                 0,
                 BigDecimal.ONE,
                 new BigDecimal("1.05"),
+                List.of(),
                 List.of()
         ));
         when(trafficDelayResolver.resolve(
+                eq(GameDayTestFixtures.SEASON_ID),
                 eq(GameDayTestFixtures.LOCATION_ID),
                 eq(GameDayTestFixtures.CURRENT_DAY),
                 eq(GameDayTestFixtures.TOTAL_DAYS),
                 eq(GameDayTestFixtures.DAY4_STARTED_AT),
                 eq(GameDayTestFixtures.DAY4_STARTED_AT)
-        )).thenReturn(resolvedTraffic(LocalDateTime.of(2023, 12, 11, 10, 0), TrafficStatus.NORMAL, 20));
+        )).thenReturn(resolvedTraffic(GameDayTestFixtures.CURRENT_DAY, 10, TrafficStatus.NORMAL, 20));
         when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         EmergencyOrderResponse response = actionService.executeEmergencyOrder(
@@ -402,11 +406,12 @@ class ActionServiceImplTests {
     }
 
     private TrafficDelayResolver.ResolvedTraffic resolvedTraffic(
-            LocalDateTime resolvedDateTime,
+            Integer resolvedDay,
+            Integer resolvedHour,
             TrafficStatus trafficStatus,
             int delaySeconds
     ) {
-        return new TrafficDelayResolver.ResolvedTraffic(resolvedDateTime, trafficStatus, delaySeconds);
+        return new TrafficDelayResolver.ResolvedTraffic(resolvedDay, resolvedHour, trafficStatus, delaySeconds);
     }
 
     private GameDayLiveState state(long balance) {

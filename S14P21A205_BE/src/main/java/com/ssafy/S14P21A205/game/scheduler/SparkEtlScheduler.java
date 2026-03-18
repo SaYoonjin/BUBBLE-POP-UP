@@ -1,6 +1,7 @@
 package com.ssafy.S14P21A205.game.scheduler;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
@@ -20,15 +21,17 @@ public class SparkEtlScheduler {
     private static final LocalDate START_BOUND = LocalDate.of(2023, 1, 1);
     private static final LocalDate END_BOUND = LocalDate.of(2024, 12, 25);
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("yyyyMMdd");
+    private static final DateTimeFormatter BATCH_KEY_FMT = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
     private static final Random RANDOM = new Random();
     private static final String CONTAINER_NAME = "spark-master";
 
     @Scheduled(fixedRate = 1800000)
     public void runEtl() {
         String randomDate = pickRandomDate();
-        log.info("Spark ETL started. date={}", randomDate);
-        submitSparkJob("etl_population_score.py", randomDate);
-        submitSparkJob("etl_traffic_score.py", randomDate);
+        String batchKey = "spark-" + randomDate + "-" + LocalDateTime.now().format(BATCH_KEY_FMT);
+        log.info("Spark ETL started. date={}, batchKey={}", randomDate, batchKey);
+        submitSparkJob("etl_population_score.py", randomDate, batchKey);
+        submitSparkJob("etl_traffic_score.py", randomDate, batchKey);
     }
 
     private String pickRandomDate() {
@@ -37,13 +40,14 @@ public class SparkEtlScheduler {
         return START_BOUND.plusDays(randomDayOffset).format(DATE_FMT);
     }
 
-    private void submitSparkJob(String scriptName, String startDate) {
+    private void submitSparkJob(String scriptName, String startDate, String batchKey) {
         List<String> command = List.of(
                 "docker", "exec", CONTAINER_NAME,
                 "/spark/bin/spark-submit",
                 "--master", "spark://spark-master:7077",
                 "/opt/spark-jobs/" + scriptName,
-                startDate
+                startDate,
+                batchKey
         );
 
         try {

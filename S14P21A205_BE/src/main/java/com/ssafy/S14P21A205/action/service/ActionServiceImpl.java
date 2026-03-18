@@ -241,6 +241,7 @@ public class ActionServiceImpl implements ActionService {
                 valueOf(action.getCost()) + totalCost
         );
         int deliverySeconds = trafficDelayResolver.resolve(
+                store.getSeason().getId(),
                 store.getLocation().getId(),
                 day,
                 store.getSeason().getTotalDays(),

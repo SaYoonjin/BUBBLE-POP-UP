@@ -3,13 +3,15 @@ package com.ssafy.S14P21A205.game.day.service;
 import com.ssafy.S14P21A205.exception.BaseException;
 import com.ssafy.S14P21A205.exception.ErrorCode;
 import com.ssafy.S14P21A205.game.day.dto.GameDayReportResponse;
+import com.ssafy.S14P21A205.game.day.generator.PurchaseListGenerator;
 import com.ssafy.S14P21A205.game.day.policy.BankruptcyPolicy;
 import com.ssafy.S14P21A205.game.day.policy.ProfitPolicy;
 import com.ssafy.S14P21A205.game.day.policy.ReputationPolicy;
 import com.ssafy.S14P21A205.game.day.state.GameDayLiveState;
 import com.ssafy.S14P21A205.game.day.state.repository.GameDayStoreStateRedisRepository;
-import com.ssafy.S14P21A205.game.environment.entity.Weather;
-import com.ssafy.S14P21A205.game.environment.repository.WeatherRepository;
+import com.ssafy.S14P21A205.game.environment.entity.WeatherLocation;
+import com.ssafy.S14P21A205.game.environment.repository.WeatherDayRedisRepository;
+import com.ssafy.S14P21A205.game.environment.repository.WeatherLocationRepository;
 import com.ssafy.S14P21A205.game.season.entity.DailyReport;
 import com.ssafy.S14P21A205.game.season.entity.Season;
 import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
@@ -25,7 +27,6 @@ import com.ssafy.S14P21A205.user.service.UserService;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.LocalDateTime;
-import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
@@ -48,11 +49,13 @@ public class GameDayReportService {
     private final StoreRepository storeRepository;
     private final DailyReportRepository dailyReportRepository;
     private final GameDayStoreStateRedisRepository gameDayStoreStateRedisRepository;
-    private final WeatherRepository weatherRepository;
+    private final WeatherDayRedisRepository weatherDayRedisRepository;
+    private final WeatherLocationRepository weatherLocationRepository;
     private final ProfitPolicy profitPolicy;
     private final ReputationPolicy reputationPolicy;
     private final BankruptcyPolicy bankruptcyPolicy;
     private final GameDayStateService gameDayStateService;
+    private final PurchaseListGenerator purchaseListGenerator;
 
     private Clock clock = Clock.systemDefaultZone();
 
@@ -113,8 +116,6 @@ public class GameDayReportService {
                 : dailyReportRepository.findByStoreIdAndDay(store.getId(), day - 1).orElse(null);
         BankruptcyPolicy.BankruptcyResult bankruptcyResult =
                 bankruptcyPolicy.resolve(previousDayReport, profitResult.netProfit());
-        // TODO: ?뚯궛?덉쓣 ?? ?꾩씠??is_purchased 媛믪쓣 false濡?諛붽씀??濡쒖쭅 異붽? ?꾩슂
-        // and reset purchased items for the bankrupt user here.
 
         dailyReportRepository.save(DailyReport.create(
                 store,
@@ -132,6 +133,9 @@ public class GameDayReportService {
                 safeToInt(valueOf(state.balance())),
                 reputationPolicy.normalizeCaptureRate(reputationPolicy.resolveCaptureRate(state))
         ));
+        store.changePurchaseCursor(
+                purchaseListGenerator.advanceCursor(store.getPurchaseCursor(), defaultInt(state.purchaseCursor()))
+        );
     }
 
     public GameDayReportResponse getDayReport(Authentication authentication, int day) {
@@ -164,7 +168,12 @@ public class GameDayReportService {
                 STOCK_DISPOSED_COUNT,
                 reputationPolicy.toReputationScore(captureRate),
                 reputationPolicy.toReputationChange(captureRate.subtract(previousCaptureRate)),
-                resolveTomorrowWeather(report.getDay(), store.getSeason().getTotalDays()),
+                resolveTomorrowWeather(
+                        store.getSeason().getId(),
+                        store.getLocation().getId(),
+                        report.getDay(),
+                        store.getSeason().getTotalDays()
+                ),
                 resolveIsNextDayOrderDay(report.getDay(), store.getSeason().getTotalDays()),
                 defaultInt(report.getConsecutiveDeficitDays()),
                 Boolean.TRUE.equals(report.getIsBankrupt())
@@ -211,18 +220,40 @@ public class GameDayReportService {
                 && reportDay.equals(seasonTimePoint.currentDay());
     }
 
-    private GameDayReportResponse.TomorrowWeather resolveTomorrowWeather(int day, int totalDays) {
+    private GameDayReportResponse.TomorrowWeather resolveTomorrowWeather(
+            Long seasonId,
+            Long locationId,
+            int day,
+            int totalDays
+    ) {
         if (day >= totalDays) {
             return null;
         }
 
-        List<Weather> weathers = weatherRepository.findAllByOrderByIdAsc();
-        if (weathers.isEmpty()) {
-            return null;
+        return weatherDayRedisRepository.findLocation(seasonId, locationId, day + 1)
+                .or(() -> loadAndCacheTomorrow(seasonId, locationId, day + 1))
+                .map(entry -> new GameDayReportResponse.TomorrowWeather(entry.weatherType().name()))
+                .orElse(null);
+    }
+
+    private Optional<WeatherDayRedisRepository.WeatherDayEntry> loadAndCacheTomorrow(Long seasonId, Long locationId, int day) {
+        java.util.List<WeatherLocation> dayEntries = weatherLocationRepository.findByDayOrderByLocation_IdAsc(day);
+        if (dayEntries.isEmpty()) {
+            return Optional.empty();
         }
 
-        Weather tomorrowWeather = weathers.get(Math.floorMod(day, weathers.size()));
-        return new GameDayReportResponse.TomorrowWeather(tomorrowWeather.getWeatherType().name());
+        java.util.List<WeatherDayRedisRepository.WeatherDayEntry> cachedEntries = dayEntries.stream()
+                .map(entry -> new WeatherDayRedisRepository.WeatherDayEntry(
+                        entry.getLocation().getId(),
+                        entry.getDay(),
+                        entry.getWeather().getWeatherType(),
+                        entry.getWeather().getPopulationPercent()
+                ))
+                .toList();
+        weatherDayRedisRepository.saveDay(seasonId, day, cachedEntries);
+        return cachedEntries.stream()
+                .filter(entry -> locationId.equals(entry.locationId()))
+                .findFirst();
     }
 
     private Boolean resolveIsNextDayOrderDay(int day, int totalDays) {
@@ -262,6 +293,3 @@ public class GameDayReportService {
         return value == null ? 0L : value;
     }
 }
-
-
-

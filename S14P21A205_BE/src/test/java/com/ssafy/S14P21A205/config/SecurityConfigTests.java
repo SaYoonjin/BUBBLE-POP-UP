@@ -12,10 +12,13 @@ import com.ssafy.S14P21A205.auth.service.AuthService;
 import com.ssafy.S14P21A205.auth.service.JwtTokenService;
 import com.ssafy.S14P21A205.game.day.dto.GameDayStartResponse;
 import com.ssafy.S14P21A205.game.day.policy.CaptureRatePolicy;
+import com.ssafy.S14P21A205.game.day.service.SeasonDayClosingService;
+import com.ssafy.S14P21A205.game.day.scheduler.SeasonDayClosingScheduler;
 import com.ssafy.S14P21A205.game.day.resolver.EventScheduleResolver;
 import com.ssafy.S14P21A205.game.day.resolver.EventEffectResolver;
 import com.ssafy.S14P21A205.game.day.resolver.EnvironmentScheduleResolver;
 import com.ssafy.S14P21A205.game.day.resolver.NewsRankingResolver;
+import com.ssafy.S14P21A205.game.day.resolver.TrafficDelayResolver;
 import com.ssafy.S14P21A205.game.day.policy.PopulationPolicy;
 import com.ssafy.S14P21A205.game.day.policy.RentPolicy;
 import com.ssafy.S14P21A205.game.day.state.repository.GameDayStoreStateRedisRepository;
@@ -29,9 +32,12 @@ import com.ssafy.S14P21A205.game.season.dto.GameWaitingResponse;
 import com.ssafy.S14P21A205.game.season.dto.GameWaitingStatus;
 import com.ssafy.S14P21A205.game.season.dto.SeasonJoinResponse;
 import com.ssafy.S14P21A205.game.season.repository.DailyReportRepository;
+import com.ssafy.S14P21A205.game.season.repository.SeasonRankingRecordRepository;
 import com.ssafy.S14P21A205.game.season.repository.SeasonRankingRedisRepository;
 import com.ssafy.S14P21A205.game.season.repository.SeasonRepository;
+import com.ssafy.S14P21A205.game.season.service.SeasonFinalRankingService;
 import com.ssafy.S14P21A205.game.season.service.SeasonJoinService;
+import com.ssafy.S14P21A205.game.season.service.SeasonLifecycleService;
 import com.ssafy.S14P21A205.game.season.service.SeasonRankingService;
 import com.ssafy.S14P21A205.game.season.service.SeasonSummaryService;
 import com.ssafy.S14P21A205.game.season.service.SeasonWaitingService;
@@ -100,6 +106,9 @@ class SecurityConfigTests {
     private NewsRankingResolver newsRankingResolver;
 
     @MockitoBean
+    private TrafficDelayResolver trafficDelayResolver;
+
+    @MockitoBean
     private GameDayStateService gameDayStateService;
 
     @MockitoBean
@@ -124,6 +133,9 @@ class SecurityConfigTests {
     private DailyReportRepository dailyReportRepository;
 
     @MockitoBean
+    private SeasonRankingRecordRepository seasonRankingRecordRepository;
+
+    @MockitoBean
     private GameDayStoreStateRedisRepository gameDayStoreStateRedisRepository;
 
     @MockitoBean
@@ -140,6 +152,18 @@ class SecurityConfigTests {
 
     @MockitoBean
     private SeasonWaitingService seasonWaitingService;
+
+    @MockitoBean
+    private SeasonLifecycleService seasonLifecycleService;
+
+    @MockitoBean
+    private SeasonDayClosingScheduler seasonDayClosingScheduler;
+
+    @MockitoBean
+    private SeasonDayClosingService seasonDayClosingService;
+
+    @MockitoBean
+    private SeasonFinalRankingService seasonFinalRankingService;
 
     @MockitoBean
     private ItemUserRepository itemUserRepository;
