@@ -79,7 +79,7 @@ management:
 # region ===== Auth Redirect Policy =====
 app:
   auth:
-    default-redirect-url: ${APP_AUTH_DEFAULT_REDIRECT_URL:/swagger-ui/index.html}
+    default-redirect-url: ${APP_AUTH_DEFAULT_REDIRECT_URL:/}
     allowed-redirect-origins: ${APP_AUTH_ALLOWED_REDIRECT_ORIGINS:http://localhost:8080,http://127.0.0.1:8080}
   jwt:
     secret: ${JWT_SECRET:}

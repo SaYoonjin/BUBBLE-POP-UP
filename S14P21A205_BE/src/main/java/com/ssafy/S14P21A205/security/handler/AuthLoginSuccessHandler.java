@@ -35,7 +35,7 @@ public class AuthLoginSuccessHandler implements AuthenticationSuccessHandler {
             AuthRedirectService authRedirectService,
             JwtTokenService jwtTokenService,
             UserService userService,
-            @Value("${app.auth.default-redirect-url:/swagger-ui/index.html}") String defaultRedirectUrl
+            @Value("${app.auth.default-redirect-url:/}") String defaultRedirectUrl
     ) {
         this.authRedirectService = authRedirectService;
         this.jwtTokenService = jwtTokenService;
@@ -61,7 +61,7 @@ public class AuthLoginSuccessHandler implements AuthenticationSuccessHandler {
         String redirect = authRedirectService.consumeLoginRedirect(request);
         String target = authRedirectService.isSafeRedirect(redirect) ? redirect.trim() : defaultRedirectUrl;
         if (!authRedirectService.isSafeRedirect(target)) {
-            target = "/swagger-ui/index.html";
+            target = "/";
         }
         var session = request.getSession(false);
         if (session != null) {
