@@ -69,4 +69,10 @@ public class NewsReport {
         return new NewsReport(season, day, areaRevenueRanking, areaTrafficRanking,
                 menuEntryRanking, trendKeywordRanking, areaEntryRanking);
     }
+
+    public void updateRankings(String areaRevenueRanking, String menuEntryRanking, String areaEntryRanking) {
+        this.areaRevenueRanking = areaRevenueRanking;
+        this.menuEntryRanking = menuEntryRanking;
+        this.areaEntryRanking = areaEntryRanking;
+    }
 }
