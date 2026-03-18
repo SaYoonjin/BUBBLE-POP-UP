@@ -2,7 +2,6 @@ package com.ssafy.S14P21A205.game.season.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -11,8 +10,8 @@ import com.ssafy.S14P21A205.game.day.scheduler.SeasonDayClosingScheduler;
 import com.ssafy.S14P21A205.game.season.entity.Season;
 import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
 import com.ssafy.S14P21A205.game.season.repository.SeasonRepository;
+import com.ssafy.S14P21A205.game.time.service.SeasonTimelineService;
 import java.time.Clock;
-import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Optional;
@@ -34,6 +33,7 @@ class SeasonLifecycleServiceTests {
     private SeasonDayClosingScheduler seasonDayClosingScheduler;
 
     private SeasonLifecycleService seasonLifecycleService;
+    private final SeasonTimelineService seasonTimelineService = new SeasonTimelineService();
 
     @BeforeEach
     void setUp() {
@@ -41,10 +41,11 @@ class SeasonLifecycleServiceTests {
     }
 
     @Test
-    void synchronizeStartsScheduledSeasonWithoutSchedulingNextSeason() {
+    void synchronizeStartsScheduledSeasonWhenStartTimeHasArrived() {
         LocalDateTime seasonStartAt = LocalDateTime.of(2026, 3, 18, 10, 0, 0);
-        LocalDateTime now = seasonStartAt.plusSeconds(120);
+        LocalDateTime now = seasonStartAt.plusSeconds(1);
         Season scheduledSeason = Season.createScheduled(7, seasonStartAt, seasonStartAt.plusMinutes(30));
+        ReflectionTestUtils.setField(scheduledSeason, "id", 11L);
 
         ReflectionTestUtils.setField(
                 seasonLifecycleService,
@@ -60,46 +61,66 @@ class SeasonLifecycleServiceTests {
 
         assertThat(scheduledSeason.getStatus()).isEqualTo(SeasonStatus.IN_PROGRESS);
         assertThat(scheduledSeason.getCurrentDay()).isEqualTo(1);
-        assertThat(scheduledSeason.getEndTime()).isEqualTo(seasonStartAt.plusSeconds(1800));
-        verify(seasonRepository, never()).save(any(Season.class));
+        assertThat(scheduledSeason.getEndTime()).isEqualTo(seasonTimelineService.resolveNextSeasonStartAt(scheduledSeason));
         verify(seasonDayClosingScheduler).synchronize(scheduledSeason);
+        verify(seasonRepository, never()).save(any(Season.class));
     }
 
     @Test
-    void synchronizeFinishesInProgressSeasonCreatesNextSeasonAndClearsDayClosingSchedule() {
+    void synchronizeUpdatesCurrentDayForInProgressSeason() {
         LocalDateTime seasonStartAt = LocalDateTime.of(2026, 3, 18, 10, 0, 0);
-        LocalDateTime now = seasonStartAt.plusSeconds(1800);
         Season inProgressSeason = Season.createScheduled(7, seasonStartAt, seasonStartAt.plusMinutes(30));
+        ReflectionTestUtils.setField(inProgressSeason, "id", 21L);
         inProgressSeason.start();
 
+        LocalDateTime now = seasonTimelineService.day(inProgressSeason, 2).businessStart().plusSeconds(1);
         ReflectionTestUtils.setField(
                 seasonLifecycleService,
                 "clock",
-                Clock.fixed(Instant.from(now.atZone(ZoneId.of("Asia/Seoul"))), ZoneId.of("Asia/Seoul"))
+                Clock.fixed(now.atZone(ZoneId.of("Asia/Seoul")).toInstant(), ZoneId.of("Asia/Seoul"))
         );
 
-        when(seasonRepository.findFirstByStatusOrderByIdDesc(SeasonStatus.IN_PROGRESS))
-                .thenReturn(Optional.of(inProgressSeason));
-        when(seasonRepository.existsByStatusAndStartTime(
-                eq(SeasonStatus.SCHEDULED),
-                eq(seasonStartAt.plusSeconds(1800))
-        )).thenReturn(false);
-        when(seasonRepository.save(any(Season.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(seasonRepository.findFirstByStatusOrderByIdDesc(SeasonStatus.IN_PROGRESS)).thenReturn(Optional.of(inProgressSeason));
+
+        seasonLifecycleService.synchronize();
+
+        assertThat(inProgressSeason.getStatus()).isEqualTo(SeasonStatus.IN_PROGRESS);
+        assertThat(inProgressSeason.getCurrentDay()).isEqualTo(2);
+        verify(seasonDayClosingScheduler).synchronize(inProgressSeason);
+        verify(seasonDayClosingScheduler, never()).clear(21L);
+    }
+
+    @Test
+    void synchronizeFinishesSeasonAndSchedulesNextSeasonWhenSeasonHasEnded() {
+        LocalDateTime seasonStartAt = LocalDateTime.of(2026, 3, 18, 10, 0, 0);
+        Season inProgressSeason = Season.createScheduled(7, seasonStartAt, seasonStartAt.plusMinutes(30));
+        ReflectionTestUtils.setField(inProgressSeason, "id", 31L);
+        inProgressSeason.start();
+
+        LocalDateTime seasonEndAt = seasonTimelineService.resolveNextSeasonStartAt(inProgressSeason);
+        LocalDateTime now = seasonEndAt.plusSeconds(1);
+        ReflectionTestUtils.setField(
+                seasonLifecycleService,
+                "clock",
+                Clock.fixed(now.atZone(ZoneId.of("Asia/Seoul")).toInstant(), ZoneId.of("Asia/Seoul"))
+        );
+
+        when(seasonRepository.findFirstByStatusOrderByIdDesc(SeasonStatus.IN_PROGRESS)).thenReturn(Optional.of(inProgressSeason));
+        when(seasonRepository.existsByStatusAndStartTime(SeasonStatus.SCHEDULED, seasonEndAt)).thenReturn(false);
 
         seasonLifecycleService.synchronize();
 
         assertThat(inProgressSeason.getStatus()).isEqualTo(SeasonStatus.FINISHED);
         assertThat(inProgressSeason.getCurrentDay()).isEqualTo(7);
-        assertThat(inProgressSeason.getEndTime()).isEqualTo(seasonStartAt.plusSeconds(1800));
         verify(seasonDayClosingScheduler).synchronize(inProgressSeason);
-        verify(seasonDayClosingScheduler).clear(inProgressSeason.getId());
+        verify(seasonDayClosingScheduler).clear(31L);
 
-        ArgumentCaptor<Season> seasonCaptor = ArgumentCaptor.forClass(Season.class);
-        verify(seasonRepository).save(seasonCaptor.capture());
-        Season nextSeason = seasonCaptor.getValue();
+        ArgumentCaptor<Season> nextSeasonCaptor = ArgumentCaptor.forClass(Season.class);
+        verify(seasonRepository).save(nextSeasonCaptor.capture());
+        Season nextSeason = nextSeasonCaptor.getValue();
         assertThat(nextSeason.getStatus()).isEqualTo(SeasonStatus.SCHEDULED);
-        assertThat(nextSeason.getStartTime()).isEqualTo(seasonStartAt.plusSeconds(1800));
-        assertThat(nextSeason.getEndTime()).isEqualTo(seasonStartAt.plusSeconds(3600));
         assertThat(nextSeason.getTotalDays()).isEqualTo(7);
+        assertThat(nextSeason.getStartTime()).isEqualTo(seasonEndAt);
+        assertThat(nextSeason.getEndTime()).isEqualTo(seasonEndAt.plus(seasonTimelineService.seasonCycleDuration(7)));
     }
 }

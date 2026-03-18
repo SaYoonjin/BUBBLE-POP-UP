@@ -20,6 +20,7 @@ import com.ssafy.S14P21A205.game.day.policy.PopulationPolicy;
 import com.ssafy.S14P21A205.game.day.policy.RentPolicy;
 import com.ssafy.S14P21A205.game.day.state.repository.GameDayStoreStateRedisRepository;
 import com.ssafy.S14P21A205.game.environment.repository.SeasonWeatherRedisRepository;
+import com.ssafy.S14P21A205.game.environment.repository.TrafficRepository;
 import com.ssafy.S14P21A205.game.environment.repository.WeatherRepository;
 import com.ssafy.S14P21A205.game.news.repository.NewsReportRepository;
 import com.ssafy.S14P21A205.game.day.service.GameDayReportService;
@@ -32,6 +33,7 @@ import com.ssafy.S14P21A205.game.season.repository.DailyReportRepository;
 import com.ssafy.S14P21A205.game.season.repository.SeasonRankingRedisRepository;
 import com.ssafy.S14P21A205.game.season.repository.SeasonRepository;
 import com.ssafy.S14P21A205.game.season.service.SeasonJoinService;
+import com.ssafy.S14P21A205.game.season.service.SeasonFinalRankingService;
 import com.ssafy.S14P21A205.game.season.service.SeasonRankingService;
 import com.ssafy.S14P21A205.game.season.service.SeasonSummaryService;
 import com.ssafy.S14P21A205.game.season.service.SeasonWaitingService;
@@ -133,6 +135,9 @@ class SecurityConfigTests {
     private SeasonRankingService seasonRankingService;
 
     @MockitoBean
+    private SeasonFinalRankingService seasonFinalRankingService;
+
+    @MockitoBean
     private SeasonSummaryService seasonSummaryService;
 
     @MockitoBean
@@ -149,6 +154,9 @@ class SecurityConfigTests {
 
     @MockitoBean
     private WeatherRepository weatherRepository;
+
+    @MockitoBean
+    private TrafficRepository trafficRepository;
 
     @MockitoBean
     private SeasonWeatherRedisRepository seasonWeatherRedisRepository;

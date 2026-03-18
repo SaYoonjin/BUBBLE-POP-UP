@@ -10,10 +10,13 @@ import com.ssafy.S14P21A205.game.season.repository.DailyReportRepository;
 import com.ssafy.S14P21A205.game.season.repository.SeasonRankingRecordRepository;
 import com.ssafy.S14P21A205.store.entity.Store;
 import com.ssafy.S14P21A205.store.repository.StoreRepository;
+import com.ssafy.S14P21A205.user.entity.User;
+import com.ssafy.S14P21A205.user.repository.UserRepository;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
@@ -28,6 +31,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class SeasonFinalRankingService {
 
     private static final int DEFAULT_TOTAL_DAYS = 7;
+    private static final int UNRANKED_FINAL_RANK = 0;
     private static final BigDecimal ZERO_REPUTATION_SCORE = new BigDecimal("0.0");
 
     private final StoreRepository storeRepository;
@@ -36,6 +40,7 @@ public class SeasonFinalRankingService {
     private final GameDayReportService gameDayReportService;
     private final ProfitPolicy profitPolicy;
     private final ReputationPolicy reputationPolicy;
+    private final UserRepository userRepository;
 
     public void saveFinalRankings(Season season) {
         if (season == null || season.getId() == null) {
@@ -76,11 +81,16 @@ public class SeasonFinalRankingService {
         }
 
         seasonRankingRecordRepository.saveAll(records);
+        grantRewardPoints(records);
         log.info(
                 "Final season rankings saved. seasonId={} savedCount={} lastSavedRank={} topSummary={}",
                 season.getId(),
                 records.size(),
-                records.get(records.size() - 1).getFinalRank(),
+                records.stream()
+                        .map(SeasonRankingRecord::getFinalRank)
+                        .filter(rank -> rank != null && rank > 0)
+                        .max(Integer::compareTo)
+                        .orElse(UNRANKED_FINAL_RANK),
                 summarize(records, 3)
         );
     }
@@ -130,10 +140,17 @@ public class SeasonFinalRankingService {
 
     private List<SeasonRankingRecord> buildRecords(List<FinalRankingCandidate> candidates) {
         List<SeasonRankingRecord> records = new ArrayList<>();
+        List<FinalRankingCandidate> rankedCandidates = candidates.stream()
+                .filter(candidate -> !candidate.stats().bankruptcy())
+                .toList();
+        List<FinalRankingCandidate> bankruptCandidates = candidates.stream()
+                .filter(candidate -> candidate.stats().bankruptcy())
+                .toList();
+
         BigDecimal previousRoi = null;
         int currentRank = 0;
-        for (int index = 0; index < candidates.size(); index++) {
-            FinalRankingCandidate candidate = candidates.get(index);
+        for (int index = 0; index < rankedCandidates.size(); index++) {
+            FinalRankingCandidate candidate = rankedCandidates.get(index);
             if (previousRoi == null || candidate.roi().compareTo(previousRoi) != 0) {
                 currentRank = index + 1;
                 previousRoi = candidate.roi();
@@ -150,11 +167,47 @@ public class SeasonFinalRankingService {
                     safeToInt(stats.totalVisitors()),
                     candidate.roi().floatValue(),
                     stats.daysPlayed(),
-                    resolveRewardPoints(currentRank, stats.bankruptcy()),
-                    stats.bankruptcy()
+                    resolveRewardPoints(currentRank),
+                    false
             ));
         }
+
+        for (FinalRankingCandidate candidate : bankruptCandidates) {
+            AggregatedStats stats = candidate.stats();
+            records.add(SeasonRankingRecord.create(
+                    candidate.store(),
+                    UNRANKED_FINAL_RANK,
+                    stats.reputationScore(),
+                    safeToInt(stats.totalRevenue()),
+                    safeToInt(stats.totalCost()),
+                    safeToInt(stats.totalNetProfit()),
+                    safeToInt(stats.totalVisitors()),
+                    candidate.roi().floatValue(),
+                    stats.daysPlayed(),
+                    0,
+                    true
+            ));
+        }
+
         return records;
+    }
+
+    private void grantRewardPoints(List<SeasonRankingRecord> records) {
+        Map<Integer, Integer> rewardPointsByUserId = new LinkedHashMap<>();
+        for (SeasonRankingRecord record : records) {
+            Integer rewardPoints = record.getRewardPoints();
+            if (rewardPoints == null || rewardPoints <= 0) {
+                continue;
+            }
+            Integer userId = record.getStore().getUser().getId();
+            rewardPointsByUserId.merge(userId, rewardPoints, Integer::sum);
+        }
+
+        for (Map.Entry<Integer, Integer> entry : rewardPointsByUserId.entrySet()) {
+            User user = userRepository.findByIdForUpdate(entry.getKey())
+                    .orElseThrow(() -> new IllegalStateException("User not found for reward grant."));
+            user.addPoints(entry.getValue());
+        }
     }
 
     private String summarize(List<SeasonRankingRecord> records, int limit) {
@@ -183,8 +236,8 @@ public class SeasonFinalRankingService {
         return summary.toString();
     }
 
-    private int resolveRewardPoints(int rank, boolean bankruptcy) {
-        if (bankruptcy || rank < 1) {
+    private int resolveRewardPoints(int rank) {
+        if (rank < 1) {
             return 0;
         }
         return switch (rank) {
