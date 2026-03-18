@@ -5,7 +5,9 @@ import EventSidebar, { type GameAlert } from "../components/play/EventSidebar";
 import RankingSidebar, { type RankEntry } from "../components/play/RankingSidebar";
 import ActionBar, { type ActionType } from "../components/play/ActionBar";
 import DiscountModal from "../components/play/modals/DiscountModal";
-import EmergencyOrderModal from "../components/play/modals/EmergencyOrderModal";
+import EmergencyOrderModal, {
+  type DeliveryTrafficLevel,
+} from "../components/play/modals/EmergencyOrderModal";
 import PromotionModal from "../components/play/modals/PromotionModal";
 import ShareModal from "../components/play/modals/ShareModal";
 import MoveModal from "../components/play/modals/MoveModal";
@@ -15,6 +17,7 @@ const MOCK = {
   storeName: "버블스토리",
   menuName: "버블티",
   congestion: "crowded" as const,
+  deliveryTraffic: "crowded" as DeliveryTrafficLevel,
   guests: 24,
   stock: 85,
   balance: 4_500_000,
@@ -116,12 +119,16 @@ const promotionLabels: Record<string, string> = {
   referral: "지인 소개",
 };
 
+const persistentActionTypes = new Set<ActionType>(["discount", "promotion", "share"]);
+
 export default function PlayPage() {
   const { day } = useParams<{ day: string }>();
   const [activeModal, setActiveModal] = useState<ActionType | null>(null);
   const [usedActions, setUsedActions] = useState<Set<ActionType>>(new Set());
+  const [activeEffects, setActiveEffects] = useState<Set<ActionType>>(new Set());
   const [alerts, setAlerts] = useState<GameAlert[]>(mockAlerts);
   const [balance, setBalance] = useState(MOCK.balance);
+  const [stock, setStock] = useState(MOCK.stock);
 
   const dayNumber = useMemo(() => Number(day) || 1, [day]);
 
@@ -148,6 +155,7 @@ export default function PlayPage() {
     action: ActionType,
     options?: {
       cost?: number;
+      stockDelta?: number;
       alert?: {
         title: string;
         description: string;
@@ -156,8 +164,19 @@ export default function PlayPage() {
   ) => {
     setUsedActions((prev) => new Set(prev).add(action));
 
-    if (typeof options?.cost === "number" && options.cost > 0) {
-      setBalance((prev) => prev - options.cost);
+    if (persistentActionTypes.has(action)) {
+      setActiveEffects((prev) => new Set(prev).add(action));
+    }
+
+    const cost = options?.cost;
+    const stockDelta = options?.stockDelta;
+
+    if (typeof cost === "number" && cost > 0) {
+      setBalance((prev) => prev - cost);
+    }
+
+    if (typeof stockDelta === "number" && stockDelta !== 0) {
+      setStock((prev) => Math.max(0, prev + stockDelta));
     }
 
     if (options?.alert) {
@@ -178,7 +197,7 @@ export default function PlayPage() {
         gameTime={MOCK.gameTime}
         congestion={MOCK.congestion}
         guests={MOCK.guests}
-        stock={MOCK.stock}
+        stock={stock}
         balance={balance}
       />
 
@@ -188,7 +207,7 @@ export default function PlayPage() {
 
         <RankingSidebar rankings={mockRankings} />
         <EventSidebar alerts={alerts} />
-        <ActionBar onAction={handleAction} usedActions={usedActions} />
+        <ActionBar onAction={handleAction} usedActions={usedActions} activeEffects={activeEffects} />
       </main>
 
       {activeModal === "discount" && (
@@ -211,6 +230,7 @@ export default function PlayPage() {
           currentBalance={balance}
           menuItems={MOCK.menuItems}
           currentMenuName={MOCK.menuName}
+          deliveryTraffic={MOCK.deliveryTraffic}
           onClose={closeModal}
           onSubmit={({ menuIndex, quantity, totalCost }) => {
             const selectedMenu = MOCK.menuItems[menuIndex];
@@ -247,10 +267,11 @@ export default function PlayPage() {
 
       {activeModal === "share" && (
         <ShareModal
-          currentStock={MOCK.stock}
+          currentStock={stock}
           onClose={closeModal}
           onSubmit={(quantity) => {
             completeAction("share", {
+              stockDelta: -quantity,
               alert: {
                 title: "나눔 이벤트 진행",
                 description: `재고 ${quantity}개 나눔을 시작했습니다.`,
@@ -263,12 +284,10 @@ export default function PlayPage() {
       {activeModal === "move" && (
         <MoveModal
           currentBalance={balance}
-          regions={MOCK.moveRegions}
+          currentRegionName={MOCK.location}
           onClose={closeModal}
-          onSubmit={({ regionId, cost }) => {
-            const destination = MOCK.moveRegions.find(
-              (region) => region.id === regionId,
-            );
+          onSubmit={({ regionName, cost }) => {
+            const destination = { name: regionName };
 
             completeAction("move", {
               cost,
