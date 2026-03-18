@@ -226,7 +226,17 @@ public final class GameDayTestFixtures {
     public static DailyEvent globalSupportEvent(Season season) {
         return dailyEvent(
                 season,
-                randomEvent(31L, "TEST_GLOBAL_SUPPORT", "1.05", "0.00", "1.00", 200_000, EventStartTime.IMMEDIATE, EventEndTime.SAME_DAY),
+                randomEvent(
+                        31L,
+                        EventCategory.GOVERNMENT_SUBSIDY,
+                        "정부지원금",
+                        "1.05",
+                        "0.00",
+                        "1.00",
+                        200_000,
+                        EventStartTime.IMMEDIATE,
+                        EventEndTime.SAME_DAY
+                ),
                 CURRENT_DAY,
                 0,
                 null,
@@ -238,7 +248,17 @@ public final class GameDayTestFixtures {
     public static DailyEvent menuCostUpEvent(Season season) {
         return dailyEvent(
                 season,
-                randomEvent(32L, "TEST_MENU_COST_UP", "1.00", "0.00", "1.05", 0, EventStartTime.IMMEDIATE, EventEndTime.SEASON_END),
+                randomEvent(
+                        32L,
+                        EventCategory.TACO_PRICE_UP,
+                        "타코 원재료 가격 상승",
+                        "1.00",
+                        "0.00",
+                        "1.05",
+                        0,
+                        EventStartTime.IMMEDIATE,
+                        EventEndTime.SEASON_END
+                ),
                 CURRENT_DAY,
                 0,
                 null,
@@ -250,10 +270,20 @@ public final class GameDayTestFixtures {
     public static DailyEvent locationFestivalEvent(Season season) {
         return dailyEvent(
                 season,
-                randomEvent(33L, "TEST_LOCATION_FESTIVAL", "1.20", "0.00", "1.00", 0, EventStartTime.IMMEDIATE, EventEndTime.SAME_DAY),
+                randomEvent(
+                        33L,
+                        EventCategory.FESTIVAL,
+                        "서울세계불꽃축제",
+                        "1.20",
+                        "0.00",
+                        "1.00",
+                        0,
+                        EventStartTime.IMMEDIATE,
+                        EventEndTime.SAME_DAY
+                ),
                 CURRENT_DAY,
-                60,
-                null,
+                0,
+                120,
                 LOCATION_ID,
                 null
         );
@@ -290,7 +320,8 @@ public final class GameDayTestFixtures {
 
     private static RandomEvent randomEvent(
             Long eventId,
-            String eventType,
+            EventCategory eventCategory,
+            String eventName,
             String populationRate,
             String stockFlat,
             String costRate,
@@ -300,8 +331,8 @@ public final class GameDayTestFixtures {
     ) {
         RandomEvent randomEvent = instantiate(RandomEvent.class);
         ReflectionTestUtils.setField(randomEvent, "id", eventId);
-        ReflectionTestUtils.setField(randomEvent, "eventCategory", EventCategory.GOOD);
-        ReflectionTestUtils.setField(randomEvent, "eventType", eventType);
+        ReflectionTestUtils.setField(randomEvent, "eventCategory", eventCategory);
+        ReflectionTestUtils.setField(randomEvent, "eventName", eventName);
         ReflectionTestUtils.setField(randomEvent, "startTime", startTime);
         ReflectionTestUtils.setField(randomEvent, "endTime", endTime);
         ReflectionTestUtils.setField(randomEvent, "populationRate", new BigDecimal(populationRate));

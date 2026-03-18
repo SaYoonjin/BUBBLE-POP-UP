@@ -12,10 +12,11 @@ public interface SeasonRepository extends JpaRepository<Season, Long> {
 
     Optional<Season> findFirstByStatusOrderByStartTimeAscIdAsc(SeasonStatus status);
 
+    Optional<Season> findFirstBySourceBatchKeyIsNotNullOrderByIdDesc();
+
     Optional<Season> findFirstByOrderByIdDesc();
 
     Optional<Season> findByIdAndStatus(Long id, SeasonStatus status);
 
     boolean existsByStatusAndStartTime(SeasonStatus status, LocalDateTime startTime);
 }
-

@@ -35,4 +35,20 @@ public class Population {
 
     @Column(name = "floating_population", nullable = false)
     private Integer floatingPopulation;
+
+    @Column(name = "source_batch_key", length = 64)
+    private String sourceBatchKey;
+
+    public static Population create(Location location, LocalDateTime date, Integer floatingPopulation) {
+        return create(location, date, floatingPopulation, null);
+    }
+
+    public static Population create(Location location, LocalDateTime date, Integer floatingPopulation, String sourceBatchKey) {
+        Population population = new Population();
+        population.location = location;
+        population.date = date;
+        population.floatingPopulation = floatingPopulation;
+        population.sourceBatchKey = sourceBatchKey;
+        return population;
+    }
 }

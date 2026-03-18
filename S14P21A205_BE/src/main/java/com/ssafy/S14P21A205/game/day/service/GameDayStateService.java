@@ -30,8 +30,10 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.Authentication;
@@ -398,7 +400,7 @@ public class GameDayStateService {
             int availableStock = Math.max(
                     0,
                     stock
-                            + deltaStockChange(baselineEffect, tickEffect)
+                            + applyStockEventDelta(stock, baselineEffect, tickEffect)
                             + deltaArrivedStock(baselineEmergency, tickEmergency)
             );
             int soldUnits = safeToInt(Math.min(demandUnits, availableStock));
@@ -420,7 +422,7 @@ public class GameDayStateService {
         int stockNow = Math.max(
                 0,
                 stock
-                        + deltaStockChange(baselineEffect, currentEffect)
+                        + applyStockEventDelta(stock, baselineEffect, currentEffect)
                         + deltaArrivedStock(baselineEmergency, currentEmergency)
         );
         int currentPopulationPerStore = resolvePopulationPerStore(
@@ -487,8 +489,30 @@ public class GameDayStateService {
                 .intValue();
     }
 
-    private int deltaStockChange(EventEffectResolver.EventEffect previous, EventEffectResolver.EventEffect current) {
-        return current.stockChange() - previous.stockChange();
+    private int applyStockEventDelta(
+            int currentStock,
+            EventEffectResolver.EventEffect previous,
+            EventEffectResolver.EventEffect current
+    ) {
+        int adjustedStock = currentStock + (current.stockChange() - previous.stockChange());
+        Set<Long> previouslyAppliedEventIds = new HashSet<>();
+        for (EventEffectResolver.StockRateEvent stockRateEvent : previous.appliedStockRateEvents()) {
+            if (stockRateEvent.dailyEventId() != null) {
+                previouslyAppliedEventIds.add(stockRateEvent.dailyEventId());
+            }
+        }
+
+        for (EventEffectResolver.StockRateEvent stockRateEvent : current.appliedStockRateEvents()) {
+            Long dailyEventId = stockRateEvent.dailyEventId();
+            if (dailyEventId != null && previouslyAppliedEventIds.contains(dailyEventId)) {
+                continue;
+            }
+            adjustedStock = BigDecimal.valueOf(adjustedStock)
+                    .multiply(stockRateEvent.stockRate())
+                    .setScale(0, RoundingMode.HALF_UP)
+                    .intValue();
+        }
+        return adjustedStock - currentStock;
     }
 
     private int deltaArrivedStock(EmergencyOrderState previous, EmergencyOrderState current) {
