@@ -49,20 +49,30 @@ const gradeStyle: Record<string, { token: string; halo: string; area: string; st
 };
 
 const congestionStyle: Record<string, { chip: string; text: string; label: string }> = {
-  "Very High": {
+  "매우 혼잡": {
     chip: "border-rose-100 bg-rose-50 text-rose-500",
     text: "text-rose-500",
-    label: "매우 붐빔",
+    label: "매우 혼잡",
   },
-  High: {
+  혼잡: {
     chip: "border-amber-100 bg-amber-50 text-amber-600",
     text: "text-amber-600",
-    label: "붐빔",
+    label: "혼잡",
   },
-  Medium: {
+  보통: {
     chip: "border-primary/20 bg-primary/10 text-primary-dark",
     text: "text-primary-dark",
     label: "보통",
+  },
+  여유: {
+    chip: "border-sky-100 bg-sky-50 text-sky-600",
+    text: "text-sky-600",
+    label: "여유",
+  },
+  "매우 여유": {
+    chip: "border-slate-200 bg-slate-100 text-slate-500",
+    text: "text-slate-500",
+    label: "매우 여유",
   },
 };
 
@@ -226,7 +236,7 @@ export default function DistrictMap({
           const isHovered = district.id === hoveredId;
           const grade = district.grade.charAt(0);
           const gradeMeta = gradeStyle[grade] ?? gradeStyle.B;
-          const congestionMeta = congestionStyle[district.congestion] ?? congestionStyle.Medium;
+          const congestionMeta = congestionStyle[district.congestion] ?? congestionStyle["보통"];
 
           return (
             <div

@@ -18,9 +18,11 @@ interface DistrictDetailPanelProps {
 }
 
 const congestionTone: Record<string, { label: string; text: string }> = {
-  "Very High": { label: "매우 붐빔", text: "text-rose-500" },
-  High: { label: "붐빔", text: "text-amber-600" },
-  Medium: { label: "보통", text: "text-primary-dark" },
+  "매우 혼잡": { label: "매우 혼잡", text: "text-rose-500" },
+  혼잡: { label: "혼잡", text: "text-amber-600" },
+  보통: { label: "보통", text: "text-primary-dark" },
+  여유: { label: "여유", text: "text-sky-600" },
+  "매우 여유": { label: "매우 여유", text: "text-slate-500" },
 };
 
 const gradeTone: Record<string, string> = {
@@ -37,7 +39,7 @@ export default function DistrictDetailPanel({
 }: DistrictDetailPanelProps) {
   const [brandName, setBrandName] = useState("");
   const [visible, setVisible] = useState(false);
-  const congestionMeta = congestionTone[district.congestion] ?? congestionTone.Medium;
+  const congestionMeta = congestionTone[district.congestion] ?? congestionTone["보통"];
   const grade = district.grade.charAt(0);
 
   useEffect(() => {

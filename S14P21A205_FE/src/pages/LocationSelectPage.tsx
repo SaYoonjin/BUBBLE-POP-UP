@@ -10,7 +10,7 @@ type District = {
   x: string;
   y: string;
   rent: string;
-  congestion: "Very High" | "High" | "Medium";
+  congestion: "매우 혼잡" | "혼잡" | "보통" | "여유" | "매우 여유";
   grade: "S등급" | "A등급" | "B등급";
   tags: string[];
   description: string;
@@ -23,7 +23,7 @@ const districts: District[] = [
     x: "22%",
     y: "29%",
     rent: "₩400,000",
-    congestion: "High",
+    congestion: "혼잡",
     grade: "A등급",
     tags: ["Youth", "Music", "Art"],
     description: "젊음과 문화의 거리. 인디 음악과 스트릿 아트가 공존하는 MZ세대의 핫플레이스.",
@@ -34,7 +34,7 @@ const districts: District[] = [
     x: "18%",
     y: "54%",
     rent: "₩350,000",
-    congestion: "Medium",
+    congestion: "매우 여유",
     grade: "B등급",
     tags: ["Finance", "Office"],
     description: "금융의 중심지. 직장인 대상 런치 팝업이 유리합니다.",
@@ -45,7 +45,7 @@ const districts: District[] = [
     x: "46%",
     y: "29%",
     rent: "₩500,000",
-    congestion: "Very High",
+    congestion: "매우 혼잡",
     grade: "S등급",
     tags: ["Tourist", "Shopping"],
     description: "관광객의 성지. 외국인 방문객이 가장 많은 쇼핑 거리입니다.",
@@ -56,7 +56,7 @@ const districts: District[] = [
     x: "48%",
     y: "49%",
     rent: "₩300,000",
-    congestion: "Medium",
+    congestion: "보통",
     grade: "B등급",
     tags: ["Global", "Food"],
     description: "다국적 문화가 공존하는 거리. 이색적인 팝업에 적합한 지역입니다.",
@@ -67,7 +67,7 @@ const districts: District[] = [
     x: "68%",
     y: "33%",
     rent: "₩300,000",
-    congestion: "High",
+    congestion: "혼잡",
     grade: "S등급",
     tags: ["Hip Vibe", "Cafe Tour", "Fashion"],
     description: "MZ세대의 놀이터이자 팝업스토어 성지. 트렌디한 카페와 편집숍이 즐비합니다.",
@@ -78,7 +78,7 @@ const districts: District[] = [
     x: "79%",
     y: "43%",
     rent: "₩250,000",
-    congestion: "Medium",
+    congestion: "여유",
     grade: "B등급",
     tags: ["University", "Nightlife"],
     description: "대학가 특유의 활기. 합리적인 임대료 대비 유동인구가 많은 지역입니다.",
@@ -89,7 +89,7 @@ const districts: District[] = [
     x: "56%",
     y: "69%",
     rent: "₩600,000",
-    congestion: "Very High",
+    congestion: "매우 혼잡",
     grade: "S등급",
     tags: ["Premium", "Business"],
     description: "대한민국 최고의 상권. 높은 임대료만큼 높은 수익 잠재력이 기대됩니다.",
@@ -100,7 +100,7 @@ const districts: District[] = [
     x: "81%",
     y: "63%",
     rent: "₩350,000",
-    congestion: "High",
+    congestion: "보통",
     grade: "A등급",
     tags: ["Family", "Entertainment"],
     description: "롯데월드와 석촌호수를 중심으로 가족 단위 방문객이 많은 지역입니다.",
