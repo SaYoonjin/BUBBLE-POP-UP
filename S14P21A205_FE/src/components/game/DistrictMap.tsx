@@ -100,6 +100,14 @@ function getTooltipClasses(x: string, y: string) {
   return "left-1/2 bottom-[calc(100%+18px)] -translate-x-1/2";
 }
 
+function getTooltipPlacement(district: District) {
+  if (district.id === 3) {
+    return "left-[calc(100%+16px)] top-1/2 -translate-y-1/2";
+  }
+
+  return getTooltipClasses(district.x, district.y);
+}
+
 export default function DistrictMap({
   districts,
   connections,
@@ -223,7 +231,7 @@ export default function DistrictMap({
           return (
             <div
               key={district.id}
-              className="absolute z-10"
+              className={`absolute ${isActive || isHovered ? "z-30" : "z-10"}`}
               style={{ top: district.y, left: district.x, transform: "translate(-50%, -50%)" }}
               onMouseEnter={() => setHoveredId(district.id)}
               onMouseLeave={() => setHoveredId(null)}
@@ -236,41 +244,45 @@ export default function DistrictMap({
                 <button
                   type="button"
                   onClick={() => onSelect(district.id)}
-                  className={`relative flex h-6 w-6 items-center justify-center rounded-full border-4 transition-all duration-300 ${
-                    isActive
-                      ? `border-primary bg-primary-dark text-white ${gradeMeta.halo}`
-                      : "border-white bg-primary-dark text-white shadow-soft hover:border-primary/60"
-                  }`}
+                  className="group relative flex flex-col items-center"
                 >
-                  <span className="absolute inset-0 rounded-full border border-white/40" />
-                  <span className="material-symbols-outlined text-[12px]">place</span>
+                  <span
+                    className={`relative flex h-6 w-6 items-center justify-center rounded-full border-4 transition-all duration-300 ${
+                      isActive
+                        ? `border-primary bg-primary-dark text-white ${gradeMeta.halo}`
+                        : "border-white bg-primary-dark text-white shadow-soft hover:border-primary/60"
+                    }`}
+                  >
+                    <span className="absolute inset-0 rounded-full border border-white/40" />
+                    <span className="material-symbols-outlined text-[12px]">place</span>
+                  </span>
+
+                  <span
+                    className={`mt-2 flex items-center gap-1.5 rounded-full border border-white/80 bg-white/95 px-3 py-1.5 shadow-soft transition-all duration-300 ${
+                      isActive ? "shadow-premium" : ""
+                    }`}
+                  >
+                    <span
+                      className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-black ${gradeMeta.token}`}
+                    >
+                      {district.grade}
+                    </span>
+                    <span className="text-[12px] font-bold text-slate-800">{district.name}</span>
+                  </span>
+
+                  <span
+                    className={`mt-2 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold shadow-soft transition-all duration-300 ${
+                      congestionMeta.chip
+                    } ${isActive || isHovered ? "translate-y-0 opacity-100" : "translate-y-1 opacity-0"}`}
+                  >
+                    <span className="material-symbols-outlined text-[12px]">local_fire_department</span>
+                    {congestionMeta.label}
+                  </span>
                 </button>
 
                 <div
-                  className={`mt-2 flex items-center gap-1.5 rounded-full border border-white/80 bg-white/95 px-3 py-1.5 shadow-soft transition-all duration-300 ${
-                    isActive ? "shadow-premium" : ""
-                  }`}
-                >
-                  <span
-                    className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-black ${gradeMeta.token}`}
-                  >
-                    {district.grade}
-                  </span>
-                  <span className="text-[12px] font-bold text-slate-800">{district.name}</span>
-                </div>
-
-                <div
-                  className={`mt-2 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold shadow-soft transition-all duration-300 ${
-                    congestionMeta.chip
-                  } ${isActive || isHovered ? "translate-y-0 opacity-100" : "translate-y-1 opacity-0"}`}
-                >
-                  <span className="material-symbols-outlined text-[12px]">local_fire_department</span>
-                  {congestionMeta.label}
-                </div>
-
-                <div
-                  className={`pointer-events-none absolute min-w-[182px] rounded-[22px] border border-white/80 bg-white/96 px-4 py-3 shadow-premium backdrop-blur transition-all duration-300 ${
-                    getTooltipClasses(district.x, district.y)
+                  className={`pointer-events-none absolute z-40 min-w-[182px] rounded-[22px] border border-white/80 bg-white/96 px-4 py-3 shadow-premium backdrop-blur transition-all duration-300 ${
+                    getTooltipPlacement(district)
                   } ${isActive || isHovered ? "translate-y-0 scale-100 opacity-100" : "translate-y-2 scale-95 opacity-0"}`}
                 >
                   <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-slate-400">일일 임대료</p>

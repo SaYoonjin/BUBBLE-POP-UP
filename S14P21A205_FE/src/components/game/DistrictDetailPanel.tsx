@@ -103,14 +103,6 @@ export default function DistrictDetailPanel({
               >
                 {district.grade}
               </span>
-              <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-bold">
-                <span className={congestionMeta.text}>{congestionMeta.label}</span>
-              </span>
-              {interiorCost && (
-                <span className="rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-[11px] font-bold text-primary-dark">
-                  인테리어 비용 {interiorCost}
-                </span>
-              )}
             </div>
 
             <div className="pr-12">
@@ -118,9 +110,6 @@ export default function DistrictDetailPanel({
                 Selected District
               </p>
               <h2 className="mt-2 text-3xl font-black tracking-tight text-slate-900">{district.name}</h2>
-              <p className="mt-2 text-sm leading-relaxed text-slate-500">
-                지역을 확정하면 브랜드명을 입력한 뒤 바로 영업 준비 단계로 넘어갑니다.
-              </p>
             </div>
           </div>
 
