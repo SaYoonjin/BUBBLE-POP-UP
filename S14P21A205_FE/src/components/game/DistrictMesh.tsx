@@ -1,4 +1,4 @@
-import { useMemo, useState, useRef } from "react";
+import { useMemo, useRef } from "react";
 import { Shape, ExtrudeGeometry, Vector3 } from "three";
 import { Html } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
@@ -28,29 +28,29 @@ const gradeHoverColors: Record<string, string> = {
 
 const selectedColor = "#A8BFA9";
 
+function makeGeo(polygon: [number, number][], depth: number, bevel: boolean) {
+  const shape = new Shape();
+  shape.moveTo(polygon[0][0], -polygon[0][1]);
+  for (let i = 1; i < polygon.length; i++) {
+    shape.lineTo(polygon[i][0], -polygon[i][1]);
+  }
+  shape.closePath();
+  return new ExtrudeGeometry(shape, {
+    depth,
+    bevelEnabled: bevel,
+    bevelThickness: bevel ? 0.04 : 0,
+    bevelSize: bevel ? 0.04 : 0,
+    bevelSegments: bevel ? 2 : 0,
+  });
+}
+
 export default function DistrictMesh({
   district, isSelected, isHovered, onPointerOver, onPointerOut, onClick,
 }: DistrictMeshProps) {
   const meshRef = useRef<Mesh>(null);
-  const [targetY] = useState({ current: 0 });
+  const targetY = useRef(0);
 
-  const geometry = useMemo(() => {
-    const shape = new Shape();
-    const pts = district.polygon;
-    shape.moveTo(pts[0][0], -pts[0][1]);
-    for (let i = 1; i < pts.length; i++) {
-      shape.lineTo(pts[i][0], -pts[i][1]);
-    }
-    shape.closePath();
-
-    return new ExtrudeGeometry(shape, {
-      depth: 0.4,
-      bevelEnabled: true,
-      bevelThickness: 0.05,
-      bevelSize: 0.05,
-      bevelSegments: 3,
-    });
-  }, [district.polygon]);
+  const geometry = useMemo(() => makeGeo(district.polygon, 0.35, true), [district.polygon]);
 
   const baseColor = isSelected ? selectedColor : gradeColors[district.grade] || "#94a3b8";
   const hoverColor = isSelected ? "#8DA98E" : gradeHoverColors[district.grade] || "#64748b";
@@ -60,7 +60,7 @@ export default function DistrictMesh({
 
   useFrame(() => {
     if (meshRef.current) {
-      meshRef.current.position.y += (targetY.current - meshRef.current.position.y) * 0.1;
+      meshRef.current.position.y += (targetY.current - meshRef.current.position.y) * 0.12;
     }
   });
 
@@ -78,33 +78,23 @@ export default function DistrictMesh({
       >
         <meshStandardMaterial
           color={color}
-          metalness={0.1}
-          roughness={0.6}
+          metalness={0.05}
+          roughness={0.7}
           transparent
-          opacity={isSelected ? 1 : isHovered ? 0.95 : 0.85}
+          opacity={isSelected ? 1 : isHovered ? 0.95 : 0.88}
         />
-      </mesh>
-
-      {/* Edge outline */}
-      <mesh geometry={geometry} rotation={[-Math.PI / 2, 0, 0]} position={[0, meshRef.current?.position.y || 0, 0]}>
-        <meshBasicMaterial color="#ffffff" wireframe transparent opacity={0.15} />
       </mesh>
 
       {/* Label */}
       <Html
-        position={new Vector3(district.center[0], (isSelected ? 0.8 : isHovered ? 0.55 : 0.3), district.center[1])}
+        position={new Vector3(district.center[0], (isSelected ? 0.9 : isHovered ? 0.6 : 0.4), district.center[1])}
         center
-        distanceFactor={10}
         zIndexRange={[1, 0]}
         style={{ pointerEvents: "none" }}
       >
         <div className={`flex flex-col items-center transition-all duration-200 ${isSelected || isHovered ? "scale-110" : ""}`}>
           <div className={`px-2.5 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap shadow-md ${
-            isSelected
-              ? "bg-primary text-white"
-              : isHovered
-                ? "bg-white text-slate-800"
-                : "bg-white/90 text-slate-600"
+            isSelected ? "bg-primary text-white" : isHovered ? "bg-white text-slate-800" : "bg-white/90 text-slate-600"
           }`}>
             {district.name}
           </div>
@@ -114,6 +104,32 @@ export default function DistrictMesh({
             </div>
           )}
         </div>
+      </Html>
+    </group>
+  );
+}
+
+// ─── Background (flat, non-interactive) ───
+export function BackgroundMesh({ polygon, name, center }: { polygon: [number, number][]; name: string; center: [number, number] }) {
+  const geometry = useMemo(() => makeGeo(polygon, 0.04, false), [polygon]);
+
+  return (
+    <group>
+      <mesh geometry={geometry} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+        <meshStandardMaterial color="#e8e4dd" metalness={0} roughness={0.9} transparent opacity={0.7} />
+      </mesh>
+      {/* Border */}
+      <mesh geometry={geometry} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.001, 0]}>
+        <meshBasicMaterial color="#c8c2b8" wireframe transparent opacity={0.3} />
+      </mesh>
+      {/* Label */}
+      <Html
+        position={new Vector3(center[0], 0.08, center[1])}
+        center
+        zIndexRange={[1, 0]}
+        style={{ pointerEvents: "none" }}
+      >
+        <span className="text-[8px] text-slate-400/60 font-medium whitespace-nowrap select-none">{name}</span>
       </Html>
     </group>
   );
