@@ -79,8 +79,8 @@ management:
 # region ===== Auth Redirect Policy =====
 app:
   auth:
-    default-redirect-url: ${APP_AUTH_DEFAULT_REDIRECT_URL:/}
-    allowed-redirect-origins: ${APP_AUTH_ALLOWED_REDIRECT_ORIGINS:http://localhost:8080,http://127.0.0.1:8080}
+    default-redirect-url: ${APP_AUTH_DEFAULT_REDIRECT_URL:/auth/callback}
+    allowed-redirect-origins: ${APP_AUTH_ALLOWED_REDIRECT_ORIGINS:http://localhost:5173,http://127.0.0.1:5173,https://j14a205.p.ssafy.io}
   jwt:
     secret: ${JWT_SECRET:}
     access-token-ttl: ${JWT_ACCESS_TOKEN_TTL:PT30M}
