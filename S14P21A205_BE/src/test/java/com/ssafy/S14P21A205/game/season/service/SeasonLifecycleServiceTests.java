@@ -7,6 +7,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.ssafy.S14P21A205.game.day.scheduler.SeasonDayClosingScheduler;
 import com.ssafy.S14P21A205.game.season.entity.Season;
 import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
 import com.ssafy.S14P21A205.game.season.repository.SeasonRepository;
@@ -30,13 +31,13 @@ class SeasonLifecycleServiceTests {
     private SeasonRepository seasonRepository;
 
     @Mock
-    private SeasonFinalRankingService seasonFinalRankingService;
+    private SeasonDayClosingScheduler seasonDayClosingScheduler;
 
     private SeasonLifecycleService seasonLifecycleService;
 
     @BeforeEach
     void setUp() {
-        seasonLifecycleService = new SeasonLifecycleService(seasonRepository, seasonFinalRankingService);
+        seasonLifecycleService = new SeasonLifecycleService(seasonRepository, seasonDayClosingScheduler);
     }
 
     @Test
@@ -61,11 +62,11 @@ class SeasonLifecycleServiceTests {
         assertThat(scheduledSeason.getCurrentDay()).isEqualTo(1);
         assertThat(scheduledSeason.getEndTime()).isEqualTo(seasonStartAt.plusSeconds(1800));
         verify(seasonRepository, never()).save(any(Season.class));
-        verify(seasonFinalRankingService, never()).saveFinalRankings(any(Season.class));
+        verify(seasonDayClosingScheduler).synchronize(scheduledSeason);
     }
 
     @Test
-    void synchronizeFinishesInProgressSeasonCreatesNextSeasonAndSavesFinalRankings() {
+    void synchronizeFinishesInProgressSeasonCreatesNextSeasonAndClearsDayClosingSchedule() {
         LocalDateTime seasonStartAt = LocalDateTime.of(2026, 3, 18, 10, 0, 0);
         LocalDateTime now = seasonStartAt.plusSeconds(1800);
         Season inProgressSeason = Season.createScheduled(7, seasonStartAt, seasonStartAt.plusMinutes(30));
@@ -90,7 +91,8 @@ class SeasonLifecycleServiceTests {
         assertThat(inProgressSeason.getStatus()).isEqualTo(SeasonStatus.FINISHED);
         assertThat(inProgressSeason.getCurrentDay()).isEqualTo(7);
         assertThat(inProgressSeason.getEndTime()).isEqualTo(seasonStartAt.plusSeconds(1800));
-        verify(seasonFinalRankingService).saveFinalRankings(inProgressSeason);
+        verify(seasonDayClosingScheduler).synchronize(inProgressSeason);
+        verify(seasonDayClosingScheduler).clear(inProgressSeason.getId());
 
         ArgumentCaptor<Season> seasonCaptor = ArgumentCaptor.forClass(Season.class);
         verify(seasonRepository).save(seasonCaptor.capture());

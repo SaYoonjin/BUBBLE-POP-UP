@@ -63,6 +63,9 @@ class GameDayReportServiceTests {
     @Mock
     private WeatherRepository weatherRepository;
 
+    @Mock
+    private GameDayStateService gameDayStateService;
+
     private GameDayReportService gameDayReportService;
 
     @BeforeEach
@@ -78,7 +81,8 @@ class GameDayReportServiceTests {
                 weatherRepository,
                 profitPolicy,
                 reputationPolicy,
-                bankruptcyPolicy
+                bankruptcyPolicy,
+                gameDayStateService
         );
         ReflectionTestUtils.setField(
                 gameDayReportService,
@@ -102,10 +106,11 @@ class GameDayReportServiceTests {
         );
 
         when(dailyReportRepository.existsByStoreIdAndDay(15L, 2)).thenReturn(false);
+        when(gameDayStateService.refreshGameState(store)).thenReturn(Optional.empty());
         when(gameDayStoreStateRedisRepository.find(15L, 2)).thenReturn(Optional.of(state));
         when(dailyReportRepository.findByStoreIdAndDay(15L, 1)).thenReturn(Optional.empty());
 
-        gameDayReportService.recordClosedDayReport(store);
+        gameDayReportService.recordClosedDayReport(store, 2);
 
         ArgumentCaptor<DailyReport> captor = ArgumentCaptor.forClass(DailyReport.class);
         verify(dailyReportRepository).save(captor.capture());
@@ -124,6 +129,7 @@ class GameDayReportServiceTests {
         assertThat(saved.getIsBankrupt()).isFalse();
         assertThat(saved.getBalance()).isEqualTo(15_000);
         assertThat(saved.getCaptureRate()).isEqualByComparingTo("0.10");
+        verify(gameDayStateService).refreshGameState(store);
     }
 
     @Test

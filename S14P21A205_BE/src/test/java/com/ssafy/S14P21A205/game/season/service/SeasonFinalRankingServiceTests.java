@@ -3,6 +3,7 @@ package com.ssafy.S14P21A205.game.season.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -71,7 +72,7 @@ class SeasonFinalRankingServiceTests {
 
         seasonFinalRankingService.saveFinalRankings(season);
 
-        verify(gameDayReportService, times(12)).recordClosedDayReport(any(Store.class));
+        verify(gameDayReportService, times(12)).recordClosedDayReport(any(Store.class), eq(7));
         ArgumentCaptor<List> recordsCaptor = ArgumentCaptor.forClass(List.class);
         verify(seasonRankingRecordRepository).saveAll(recordsCaptor.capture());
 
@@ -102,7 +103,7 @@ class SeasonFinalRankingServiceTests {
 
         verify(storeRepository, never()).findBySeason_IdOrderByIdAsc(anyLong());
         verify(dailyReportRepository, never()).findByStore_Season_IdAndDayLessThanOrderByStore_IdAscDayAsc(anyLong(), anyInt());
-        verify(gameDayReportService, never()).recordClosedDayReport(any(Store.class));
+        verify(gameDayReportService, never()).recordClosedDayReport(any(Store.class), anyInt());
         verify(seasonRankingRecordRepository, never()).saveAll(any());
     }
 
