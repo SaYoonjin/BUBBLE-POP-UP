@@ -120,7 +120,8 @@ class GameDayStateServiceTests {
         DailyEvent dailyEvent = dailyEvent(
                 store.getSeason(),
                 1,
-                "CELEBRITY",
+                EventCategory.CELEBRITY_APPEARANCE,
+                "연예인 등장",
                 "1.50",
                 200,
                 2,
@@ -134,7 +135,8 @@ class GameDayStateServiceTests {
         DailyEvent ignoredScopedEvent = dailyEvent(
                 store.getSeason(),
                 1,
-                "OTHER_MENU_ONLY",
+                EventCategory.TACO_PRICE_UP,
+                "타코 원재료 가격 상승",
                 "2.00",
                 999,
                 7,
@@ -174,7 +176,8 @@ class GameDayStateServiceTests {
         assertThat(response.inventory().totalStock()).isEqualTo(7);
         assertThat(response.population()).isEqualTo("330");
         assertThat(response.appliedEvents()).hasSize(1);
-        assertThat(response.appliedEvents().get(0).eventType()).isEqualTo("CELEBRITY");
+        assertThat(response.appliedEvents().get(0).eventType()).isEqualTo("CELEBRITY_APPEARANCE");
+        assertThat(response.appliedEvents().get(0).eventName()).isEqualTo("연예인 등장");
 
         ArgumentCaptor<GameDayLiveState> stateCaptor = ArgumentCaptor.forClass(GameDayLiveState.class);
         verify(gameDayStoreStateRedisRepository).saveStateAndTickLog(org.mockito.ArgumentMatchers.eq(15L), org.mockito.ArgumentMatchers.eq(1), stateCaptor.capture());
@@ -251,12 +254,12 @@ class GameDayStateServiceTests {
         GameStateResponse response = gameDayStateService.getGameState(mock(Authentication.class));
 
         assertThat(dummyStore.getPrice()).isEqualTo(2_000);
-        assertThat(response.population()).isEqualTo("63");
-        assertThat(response.cash()).isEqualTo(9_752_000L);
-        assertThat(response.customerCount()).isEqualTo(30);
-        assertThat(response.inventory().totalStock()).isEqualTo(92);
+        assertThat(response.population()).isEqualTo("76");
+        assertThat(response.cash()).isEqualTo(9_800_000L);
+        assertThat(response.customerCount()).isEqualTo(40);
+        assertThat(response.inventory().totalStock()).isEqualTo(80);
         assertThat(response.appliedEvents()).extracting(GameStateResponse.AppliedEvent::eventType)
-                .containsExactly("TEST_GLOBAL_SUPPORT", "TEST_MENU_COST_UP");
+                .containsExactly("GOVERNMENT_SUBSIDY", "TACO_PRICE_UP", "FESTIVAL");
 
         ArgumentCaptor<GameDayLiveState> stateCaptor = ArgumentCaptor.forClass(GameDayLiveState.class);
         verify(gameDayStoreStateRedisRepository).saveStateAndTickLog(
@@ -264,9 +267,9 @@ class GameDayStateServiceTests {
                 org.mockito.ArgumentMatchers.eq(GameDayTestFixtures.CURRENT_DAY),
                 stateCaptor.capture()
         );
-        assertThat(stateCaptor.getValue().purchaseCursor()).isEqualTo(30);
-        assertThat(stateCaptor.getValue().tickPurchaseCount()).isEqualTo(8);
-        assertThat(stateCaptor.getValue().cumulativeSales()).isEqualTo(152_000L);
+        assertThat(stateCaptor.getValue().purchaseCursor()).isEqualTo(40);
+        assertThat(stateCaptor.getValue().tickPurchaseCount()).isEqualTo(10);
+        assertThat(stateCaptor.getValue().cumulativeSales()).isEqualTo(200_000L);
         assertThat(stateCaptor.getValue().cumulativeTotalCost()).isEqualTo(300_000L);
     }
 
@@ -317,7 +320,7 @@ class GameDayStateServiceTests {
 
         assertThat(response.population()).isEqualTo("76");
         assertThat(response.appliedEvents()).extracting(GameStateResponse.AppliedEvent::eventType)
-                .containsExactly("TEST_GLOBAL_SUPPORT", "TEST_MENU_COST_UP", "TEST_LOCATION_FESTIVAL");
+                .containsExactly("GOVERNMENT_SUBSIDY", "TACO_PRICE_UP", "FESTIVAL");
     }
 
     @Test
@@ -530,7 +533,8 @@ class GameDayStateServiceTests {
     private DailyEvent dailyEvent(
             Season season,
             int day,
-            String eventType,
+            EventCategory eventCategory,
+            String eventName,
             String populationRate,
             int capitalFlat,
             int stockFlat,
@@ -543,8 +547,8 @@ class GameDayStateServiceTests {
     ) {
         RandomEvent randomEvent = instantiate(RandomEvent.class);
         ReflectionTestUtils.setField(randomEvent, "id", 2L);
-        ReflectionTestUtils.setField(randomEvent, "eventCategory", EventCategory.GOOD);
-        ReflectionTestUtils.setField(randomEvent, "eventType", eventType);
+        ReflectionTestUtils.setField(randomEvent, "eventCategory", eventCategory);
+        ReflectionTestUtils.setField(randomEvent, "eventName", eventName);
         ReflectionTestUtils.setField(randomEvent, "startTime", startTime);
         ReflectionTestUtils.setField(randomEvent, "endTime", endTime);
         ReflectionTestUtils.setField(randomEvent, "populationRate", new BigDecimal(populationRate));

@@ -33,6 +33,9 @@ public class Season {
     @Column(name = "current_day")
     private Integer currentDay;
 
+    @Column(name = "source_batch_key", length = 64)
+    private String sourceBatchKey;
+
     @Column(name = "total_days", nullable = false)
     private Integer totalDays;
 
@@ -63,10 +66,17 @@ public class Season {
     }
 
     public void start() {
+        start(null);
+    }
+
+    public void start(String sourceBatchKey) {
         this.status = SeasonStatus.IN_PROGRESS;
-        if (currentDay == null || currentDay < 1) {
-            this.currentDay = 1;
-        }
+        this.currentDay = 1;
+        this.sourceBatchKey = sourceBatchKey;
+    }
+
+    public void advanceToDay(int nextDay) {
+        this.currentDay = nextDay;
     }
 
     public void finish() {
@@ -87,4 +97,3 @@ public class Season {
         this.endTime = endTime;
     }
 }
-

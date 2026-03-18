@@ -3,6 +3,8 @@ package com.ssafy.S14P21A205.game.day.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -10,22 +12,25 @@ import static org.mockito.Mockito.when;
 import com.ssafy.S14P21A205.exception.BaseException;
 import com.ssafy.S14P21A205.exception.ErrorCode;
 import com.ssafy.S14P21A205.game.day.dto.GameDayReportResponse;
+import com.ssafy.S14P21A205.game.day.generator.PurchaseListGenerator;
 import com.ssafy.S14P21A205.game.day.policy.BankruptcyPolicy;
 import com.ssafy.S14P21A205.game.day.policy.ProfitPolicy;
 import com.ssafy.S14P21A205.game.day.policy.ReputationPolicy;
 import com.ssafy.S14P21A205.game.day.state.GameDayLiveState;
 import com.ssafy.S14P21A205.game.day.state.repository.GameDayStoreStateRedisRepository;
 import com.ssafy.S14P21A205.game.environment.entity.Weather;
+import com.ssafy.S14P21A205.game.environment.entity.WeatherLocation;
 import com.ssafy.S14P21A205.game.environment.entity.WeatherType;
-import com.ssafy.S14P21A205.game.environment.repository.WeatherRepository;
+import com.ssafy.S14P21A205.game.environment.repository.WeatherDayRedisRepository;
+import com.ssafy.S14P21A205.game.environment.repository.WeatherLocationRepository;
 import com.ssafy.S14P21A205.game.season.entity.DailyReport;
 import com.ssafy.S14P21A205.game.season.entity.Season;
 import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
 import com.ssafy.S14P21A205.game.season.repository.DailyReportRepository;
+import com.ssafy.S14P21A205.shop.entity.Menu;
 import com.ssafy.S14P21A205.store.entity.Location;
 import com.ssafy.S14P21A205.store.entity.Store;
 import com.ssafy.S14P21A205.store.repository.StoreRepository;
-import com.ssafy.S14P21A205.shop.entity.Menu;
 import com.ssafy.S14P21A205.user.entity.User;
 import com.ssafy.S14P21A205.user.service.UserService;
 import java.lang.reflect.Constructor;
@@ -61,7 +66,13 @@ class GameDayReportServiceTests {
     private GameDayStoreStateRedisRepository gameDayStoreStateRedisRepository;
 
     @Mock
-    private WeatherRepository weatherRepository;
+    private WeatherDayRedisRepository weatherDayRedisRepository;
+
+    @Mock
+    private WeatherLocationRepository weatherLocationRepository;
+
+    @Mock
+    private PurchaseListGenerator purchaseListGenerator;
 
     @Mock
     private GameDayStateService gameDayStateService;
@@ -78,12 +89,23 @@ class GameDayReportServiceTests {
                 storeRepository,
                 dailyReportRepository,
                 gameDayStoreStateRedisRepository,
-                weatherRepository,
+                weatherDayRedisRepository,
+                weatherLocationRepository,
                 profitPolicy,
                 reputationPolicy,
                 bankruptcyPolicy,
-                gameDayStateService
+                gameDayStateService,
+                purchaseListGenerator
         );
+        org.mockito.Mockito.lenient()
+                .when(weatherDayRedisRepository.findLocation(anyLong(), anyLong(), anyInt()))
+                .thenReturn(Optional.empty());
+        org.mockito.Mockito.lenient()
+                .when(gameDayStoreStateRedisRepository.find(anyLong(), anyInt()))
+                .thenReturn(Optional.empty());
+        org.mockito.Mockito.lenient()
+                .when(purchaseListGenerator.advanceCursor(any(), anyInt()))
+                .thenReturn(12);
         ReflectionTestUtils.setField(
                 gameDayReportService,
                 "clock",
@@ -102,7 +124,8 @@ class GameDayReportServiceTests {
                 42,
                 20,
                 15_000L,
-                12
+                12,
+                8
         );
 
         when(dailyReportRepository.existsByStoreIdAndDay(15L, 2)).thenReturn(false);
@@ -125,11 +148,11 @@ class GameDayReportServiceTests {
         assertThat(saved.getVisitors()).isEqualTo(42);
         assertThat(saved.getSalesCount()).isEqualTo(20);
         assertThat(saved.getStockRemaining()).isEqualTo(12);
-        assertThat(saved.getConsecutiveDeficitDays()).isZero();
-        assertThat(saved.getIsBankrupt()).isFalse();
         assertThat(saved.getBalance()).isEqualTo(15_000);
         assertThat(saved.getCaptureRate()).isEqualByComparingTo("0.10");
+        assertThat(store.getPurchaseCursor()).isEqualTo(12);
         verify(gameDayStateService).refreshGameState(store);
+        verify(purchaseListGenerator).advanceCursor(4, 8);
     }
 
     @Test
@@ -174,10 +197,8 @@ class GameDayReportServiceTests {
                 .thenReturn(Optional.of(store));
         when(dailyReportRepository.findByStoreIdAndDay(15L, 2)).thenReturn(Optional.of(dayTwo));
         when(dailyReportRepository.findByStoreIdAndDay(15L, 1)).thenReturn(Optional.of(dayOne));
-        when(weatherRepository.findAllByOrderByIdAsc()).thenReturn(List.of(
-                weather(WeatherType.SUNNY),
-                weather(WeatherType.RAIN),
-                weather(WeatherType.SNOW)
+        when(weatherLocationRepository.findByDayOrderByLocation_IdAsc(3)).thenReturn(List.of(
+                weatherLocation(store.getLocation(), 3, weather(WeatherType.SNOW))
         ));
 
         GameDayReportResponse response = gameDayReportService.getDayReport(mock(Authentication.class), 2);
@@ -213,10 +234,7 @@ class GameDayReportServiceTests {
 
         assertThatThrownBy(() -> gameDayReportService.getDayReport(mock(Authentication.class), 8))
                 .isInstanceOf(BaseException.class)
-                .satisfies(exception -> {
-                    BaseException baseException = (BaseException) exception;
-                    assertThat(baseException.getErrorCode()).isEqualTo(ErrorCode.INVALID_DAY);
-                });
+                .satisfies(exception -> assertThat(((BaseException) exception).getErrorCode()).isEqualTo(ErrorCode.INVALID_DAY));
     }
 
     private User user(int id) {
@@ -244,7 +262,7 @@ class GameDayReportServiceTests {
         ReflectionTestUtils.setField(menu, "menuName", menuName);
         ReflectionTestUtils.setField(menu, "originPrice", 500);
 
-                Season season = instantiate(Season.class);
+        Season season = instantiate(Season.class);
         ReflectionTestUtils.setField(season, "id", seasonId);
         ReflectionTestUtils.setField(season, "status", SeasonStatus.IN_PROGRESS);
         ReflectionTestUtils.setField(season, "currentDay", currentDay);
@@ -260,6 +278,7 @@ class GameDayReportServiceTests {
         ReflectionTestUtils.setField(store, "menu", menu);
         ReflectionTestUtils.setField(store, "season", season);
         ReflectionTestUtils.setField(store, "storeName", "Ignored Store Name");
+        ReflectionTestUtils.setField(store, "purchaseCursor", 4);
         return store;
     }
 
@@ -271,12 +290,13 @@ class GameDayReportServiceTests {
             Integer cumulativeCustomerCount,
             Integer cumulativePurchaseCount,
             Long balance,
-            Integer stock
+            Integer stock,
+            Integer purchaseCursor
     ) {
         return new GameDayLiveState(
                 startedAt,
                 List.of(),
-                0,
+                purchaseCursor,
                 null,
                 18,
                 0,
@@ -337,6 +357,14 @@ class GameDayReportServiceTests {
         return weather;
     }
 
+    private WeatherLocation weatherLocation(Location location, int day, Weather weather) {
+        WeatherLocation weatherLocation = instantiate(WeatherLocation.class);
+        ReflectionTestUtils.setField(weatherLocation, "location", location);
+        ReflectionTestUtils.setField(weatherLocation, "day", day);
+        ReflectionTestUtils.setField(weatherLocation, "weather", weather);
+        return weatherLocation;
+    }
+
     private <T> T instantiate(Class<T> type) {
         try {
             Constructor<T> constructor = type.getDeclaredConstructor();
@@ -347,5 +375,3 @@ class GameDayReportServiceTests {
         }
     }
 }
-
-

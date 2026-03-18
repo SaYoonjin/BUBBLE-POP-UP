@@ -46,4 +46,24 @@ public class DailyEvent {
 
     @Column(name = "target_menu_id")
     private Long targetMenuId;
+
+    public static DailyEvent create(
+            Season season,
+            RandomEvent event,
+            Integer day,
+            Integer applyOffsetSeconds,
+            Integer expireOffsetSeconds,
+            Long targetLocationId,
+            Long targetMenuId
+    ) {
+        DailyEvent dailyEvent = new DailyEvent();
+        dailyEvent.season = season;
+        dailyEvent.event = event;
+        dailyEvent.day = day;
+        dailyEvent.applyOffsetSeconds = applyOffsetSeconds;
+        dailyEvent.expireOffsetSeconds = expireOffsetSeconds;
+        dailyEvent.targetLocationId = targetLocationId;
+        dailyEvent.targetMenuId = targetMenuId;
+        return dailyEvent;
+    }
 }

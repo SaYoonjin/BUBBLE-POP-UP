@@ -2,7 +2,8 @@ package com.ssafy.S14P21A205.game.environment.repository;
 
 import com.ssafy.S14P21A205.exception.BaseException;
 import com.ssafy.S14P21A205.exception.ErrorCode;
-import com.ssafy.S14P21A205.game.environment.entity.TrafficStatus;
+import com.ssafy.S14P21A205.game.environment.entity.WeatherType;
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
@@ -14,15 +15,15 @@ import tools.jackson.databind.ObjectMapper;
 
 @Repository
 @RequiredArgsConstructor
-public class TrafficDayRedisRepository {
+public class WeatherDayRedisRepository {
 
-    private static final String TRAFFIC_DAY_KEY_PATTERN = "season:%d:traffic:location:%d:day:%d";
+    private static final String WEATHER_DAY_KEY_PATTERN = "season:%d:weather:day:%d";
 
     private final StringRedisTemplate stringRedisTemplate;
     private final ObjectMapper objectMapper;
 
-    public Optional<List<TrafficEntry>> findDay(Long seasonId, Long locationId, int day) {
-        String payload = stringRedisTemplate.opsForValue().get(buildKey(seasonId, locationId, day));
+    public Optional<List<WeatherDayEntry>> findDay(Long seasonId, int day) {
+        String payload = stringRedisTemplate.opsForValue().get(buildKey(seasonId, day));
         if (!StringUtils.hasText(payload)) {
             return Optional.empty();
         }
@@ -35,28 +36,30 @@ public class TrafficDayRedisRepository {
         }
     }
 
-    public Optional<TrafficEntry> findHour(Long seasonId, Long locationId, int day, int hour) {
-        return findDay(seasonId, locationId, day)
+    public Optional<WeatherDayEntry> findLocation(Long seasonId, Long locationId, int day) {
+        return findDay(seasonId, day)
                 .flatMap(entries -> entries.stream()
-                        .filter(entry -> entry.hour() == hour)
+                        .filter(entry -> locationId.equals(entry.locationId()))
                         .findFirst());
     }
 
-    public void saveDay(Long seasonId, Long locationId, int day, List<TrafficEntry> entries) {
+    public void saveDay(Long seasonId, int day, List<WeatherDayEntry> entries) {
         try {
-            stringRedisTemplate.opsForValue().set(buildKey(seasonId, locationId, day), objectMapper.writeValueAsString(entries));
+            stringRedisTemplate.opsForValue().set(buildKey(seasonId, day), objectMapper.writeValueAsString(entries));
         } catch (Exception e) {
             throw new BaseException(ErrorCode.INTERNAL_SERVER_ERROR, e);
         }
     }
 
-    private String buildKey(Long seasonId, Long locationId, int day) {
-        return TRAFFIC_DAY_KEY_PATTERN.formatted(seasonId, locationId, day);
+    private String buildKey(Long seasonId, int day) {
+        return WEATHER_DAY_KEY_PATTERN.formatted(seasonId, day);
     }
 
-    public record TrafficEntry(
-            Integer hour,
-            TrafficStatus trafficStatus
+    public record WeatherDayEntry(
+            Long locationId,
+            Integer day,
+            WeatherType weatherType,
+            BigDecimal populationMultiplier
     ) {
     }
 }

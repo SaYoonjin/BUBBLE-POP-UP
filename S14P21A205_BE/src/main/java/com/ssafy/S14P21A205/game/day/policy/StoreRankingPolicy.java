@@ -2,7 +2,6 @@ package com.ssafy.S14P21A205.game.day.policy;
 
 import com.ssafy.S14P21A205.game.day.dto.GameDayStartResponse;
 import com.ssafy.S14P21A205.game.day.model.DaySchedule;
-import com.ssafy.S14P21A205.game.environment.entity.Festival;
 import com.ssafy.S14P21A205.store.entity.Store;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -34,16 +33,18 @@ public class StoreRankingPolicy {
             Store store,
             List<Store> seasonStores,
             DaySchedule daySchedule,
-            Festival festival
+            String festivalName,
+            BigDecimal festivalMultiplier
     ) {
-        return resolveSnapshot(store, seasonStores, daySchedule, festival, null, null);
+        return resolveSnapshot(store, seasonStores, daySchedule, festivalName, festivalMultiplier, null, null);
     }
 
     public GameDayStartResponse.MarketSnapshot resolveSnapshot(
             Store store,
             List<Store> seasonStores,
             DaySchedule daySchedule,
-            Festival festival,
+            String festivalName,
+            BigDecimal festivalMultiplier,
             Integer locationPopularityRankOverride,
             Integer menuTrendRankOverride
     ) {
@@ -79,8 +80,8 @@ public class StoreRankingPolicy {
                 priceBand.multiplier(),
                 trendMultiplier,
                 REPUTATION_MULTIPLIER,
-                festival == null ? null : festival.getFestivalName(),
-                festival == null ? null : normalizeScale(festival.getPopulationRate())
+                festivalName,
+                festivalMultiplier == null ? null : normalizeScale(festivalMultiplier)
         );
     }
 

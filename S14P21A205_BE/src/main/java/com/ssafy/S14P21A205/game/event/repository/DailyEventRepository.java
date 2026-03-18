@@ -7,6 +7,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface DailyEventRepository extends JpaRepository<DailyEvent, Long> {
 
+    void deleteBySeasonId(Long seasonId);
+
     @EntityGraph(attributePaths = {"event"})
     List<DailyEvent> findBySeasonIdAndDayOrderByIdAsc(Long seasonId, Integer day);
 

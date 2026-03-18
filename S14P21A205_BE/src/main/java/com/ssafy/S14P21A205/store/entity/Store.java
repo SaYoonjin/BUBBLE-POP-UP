@@ -54,6 +54,12 @@ public class Store {
     @Column(name = "playable_from_day")
     private Integer playableFromDay;
 
+    @Column(name = "purchase_seed")
+    private Long purchaseSeed;
+
+    @Column(name = "purchase_cursor")
+    private Integer purchaseCursor = 0;
+
     @UpdateTimestamp
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
@@ -98,6 +104,15 @@ public class Store {
 
     public void changePrice(Integer price) {
         this.price = price;
+    }
+
+    public void initializePurchaseQueue(long purchaseSeed) {
+        this.purchaseSeed = purchaseSeed;
+        this.purchaseCursor = 0;
+    }
+
+    public void changePurchaseCursor(Integer purchaseCursor) {
+        this.purchaseCursor = purchaseCursor == null ? 0 : purchaseCursor;
     }
 }
 

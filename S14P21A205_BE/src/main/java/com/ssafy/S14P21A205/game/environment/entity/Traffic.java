@@ -38,4 +38,20 @@ public class Traffic {
     @Enumerated(EnumType.STRING)
     @Column(name = "traffic_status", nullable = false)
     private TrafficStatus trafficStatus;
+
+    @Column(name = "source_batch_key", length = 64)
+    private String sourceBatchKey;
+
+    public static Traffic create(Location location, LocalDateTime date, TrafficStatus trafficStatus) {
+        return create(location, date, trafficStatus, null);
+    }
+
+    public static Traffic create(Location location, LocalDateTime date, TrafficStatus trafficStatus, String sourceBatchKey) {
+        Traffic traffic = new Traffic();
+        traffic.location = location;
+        traffic.date = date;
+        traffic.trafficStatus = trafficStatus;
+        traffic.sourceBatchKey = sourceBatchKey;
+        return traffic;
+    }
 }

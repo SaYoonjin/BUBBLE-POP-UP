@@ -37,18 +37,24 @@ public class PopulationPolicy {
     private final SeasonTimelineService seasonTimelineService = new SeasonTimelineService();
 
     public DaySchedule buildDaySchedule(Long locationId, int day, BigDecimal weatherMultiplier) {
-        List<Population> populations = populationRepository.findByLocationIdOrderByDateAsc(locationId);
-        List<Traffic> traffics = trafficRepository.findByLocationIdOrderByDateAsc(locationId);
+        List<Population> populations = resolveDayRows(
+                populationRepository.findByLocationIdOrderByDateAsc(locationId),
+                Population::getDate,
+                day
+        );
+        List<Traffic> traffics = resolveDayRows(
+                trafficRepository.findByLocationIdOrderByDateAsc(locationId),
+                Traffic::getDate,
+                day
+        );
         if (populations.isEmpty() || traffics.isEmpty()) {
             throw new BaseException(ErrorCode.RESOURCE_NOT_FOUND);
         }
 
-        List<Population> selectedPopulations = selectRowsForDay(populations, Population::getDate, day);
-        List<Traffic> selectedTraffics = selectRowsForDay(traffics, Traffic::getDate, day);
         BigDecimal trafficBaseline = averageTrafficStatus(traffics);
 
         Map<Integer, Integer> populationByHour = new LinkedHashMap<>();
-        for (Population population : selectedPopulations) {
+        for (Population population : populations) {
             int hour = population.getDate().getHour();
             if (hour >= BUSINESS_OPEN_HOUR && hour < BUSINESS_CLOSE_HOUR) {
                 populationByHour.put(hour, population.getFloatingPopulation());
@@ -56,7 +62,7 @@ public class PopulationPolicy {
         }
 
         Map<Integer, Integer> trafficByHour = new LinkedHashMap<>();
-        for (Traffic traffic : selectedTraffics) {
+        for (Traffic traffic : traffics) {
             int hour = traffic.getDate().getHour();
             if (hour >= BUSINESS_OPEN_HOUR && hour < BUSINESS_CLOSE_HOUR) {
                 trafficByHour.put(hour, traffic.getTrafficStatus().getValue());
@@ -129,27 +135,29 @@ public class PopulationPolicy {
         return population.setScale(0, RoundingMode.HALF_UP).intValue();
     }
 
-    private <T> List<T> selectRowsForDay(List<T> rows, Function<T, LocalDateTime> dateExtractor, int day) {
-        Map<LocalDate, List<T>> rowsByDate = new LinkedHashMap<>();
-        for (T row : rows) {
-            rowsByDate.computeIfAbsent(dateExtractor.apply(row).toLocalDate(), key -> new ArrayList<>()).add(row);
-        }
-
-        List<List<T>> groupedRows = new ArrayList<>(rowsByDate.values());
-        if (groupedRows.isEmpty()) {
-            throw new BaseException(ErrorCode.RESOURCE_NOT_FOUND);
-        }
-
-        int index = Math.floorMod(day - 1, groupedRows.size());
-        return groupedRows.get(index);
-    }
-
     private BigDecimal averageTrafficStatus(List<Traffic> traffics) {
         BigDecimal total = BigDecimal.ZERO;
         for (Traffic traffic : traffics) {
             total = total.add(BigDecimal.valueOf(traffic.getTrafficStatus().getValue()));
         }
         return total.divide(BigDecimal.valueOf(traffics.size()), 6, RoundingMode.HALF_UP);
+    }
+
+    private <T> List<T> resolveDayRows(List<T> rows, Function<T, LocalDateTime> dateExtractor, int day) {
+        if (rows.isEmpty() || day < 1) {
+            return List.of();
+        }
+
+        Map<LocalDate, List<T>> rowsByDate = new LinkedHashMap<>();
+        for (T row : rows) {
+            rowsByDate.computeIfAbsent(dateExtractor.apply(row).toLocalDate(), key -> new ArrayList<>()).add(row);
+        }
+
+        List<List<T>> groupedRows = new ArrayList<>(rowsByDate.values());
+        if (groupedRows.size() < day) {
+            return List.of();
+        }
+        return groupedRows.get(day - 1);
     }
 
     private BigDecimal ratio(int trafficStatus, BigDecimal baseline) {

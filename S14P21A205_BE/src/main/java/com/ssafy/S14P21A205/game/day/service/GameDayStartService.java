@@ -14,9 +14,7 @@ import com.ssafy.S14P21A205.game.day.resolver.EventScheduleResolver;
 import com.ssafy.S14P21A205.game.day.resolver.NewsRankingResolver;
 import com.ssafy.S14P21A205.game.day.state.GameDayLiveState;
 import com.ssafy.S14P21A205.game.day.state.repository.GameDayStoreStateRedisRepository;
-import com.ssafy.S14P21A205.game.environment.entity.Festival;
 import com.ssafy.S14P21A205.game.environment.entity.WeatherType;
-import com.ssafy.S14P21A205.game.environment.repository.FestivalRepository;
 import com.ssafy.S14P21A205.game.season.entity.Season;
 import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
 import com.ssafy.S14P21A205.game.time.model.SeasonPhase;
@@ -54,7 +52,6 @@ public class GameDayStartService {
     private final UserService userService;
     private final StoreRepository storeRepository;
     private final EnvironmentScheduleResolver environmentScheduleResolver;
-    private final FestivalRepository festivalRepository;
     private final OrderRepository orderRepository;
     private final RentPolicy rentPolicy;
     private final CaptureRatePolicy captureRatePolicy;
@@ -64,12 +61,15 @@ public class GameDayStartService {
     private final GameDayStoreStateRedisRepository gameDayStoreStateRedisRepository;
     private final PurchaseListGenerator purchaseListGenerator;
     private final Clock clock;
+
     private final SeasonTimelineService seasonTimelineService = new SeasonTimelineService();
 
     @Transactional
     public GameDayStartResponse startDay(Authentication authentication) {
         User user = userService.getCurrentUser(authentication);
         Store store = getActiveStore(user.getId());
+        ensurePurchaseQueueInitialized(store);
+
         LocalDateTime now = LocalDateTime.now(clock);
         SeasonTimePoint seasonTimePoint = seasonTimelineService.resolve(store.getSeason(), now);
         int day = resolveCurrentDay(store.getSeason(), seasonTimePoint);
@@ -101,13 +101,20 @@ public class GameDayStartService {
         );
         DaySchedule daySchedule = resolvedEnvironment.daySchedule();
         List<Store> seasonStores = storeRepository.findBySeason_IdOrderByIdAsc(store.getSeason().getId());
-        Festival festival = selectFestival(store.getLocation().getId(), store.getSeason().getId(), day);
         NewsRankingResolver.PreviousDayRanking previousDayRanking = newsRankingResolver.resolve(store, day);
+        List<GameDayStartResponse.EventSchedule> eventSchedule = eventScheduleResolver.resolve(
+                store.getSeason().getId(),
+                day,
+                store.getLocation().getId(),
+                store.getMenu().getId()
+        );
+        FestivalSummary festivalSummary = resolveFestivalSummary(eventSchedule, store.getLocation().getId());
         GameDayStartResponse.MarketSnapshot marketSnapshot = marketRankingPolicy.resolveSnapshot(
                 store,
                 seasonStores,
                 daySchedule,
-                festival,
+                festivalSummary.name(),
+                festivalSummary.populationMultiplier(),
                 previousDayRanking.areaEntryRank(),
                 previousDayRanking.menuEntryRank()
         );
@@ -116,12 +123,6 @@ public class GameDayStartService {
         BigDecimal captureRate = captureRatePolicy.resolveStartingCaptureRate(
                 marketSnapshot.priceBandMultiplier(),
                 marketRankingPolicy.resolveTrendKeywordCaptureMultiplier(previousDayRanking.trendKeywordRank())
-        );
-        List<GameDayStartResponse.EventSchedule> eventSchedule = eventScheduleResolver.resolve(
-                store.getSeason().getId(),
-                day,
-                store.getLocation().getId(),
-                store.getMenu().getId()
         );
 
         GameDayStartResponse response = new GameDayStartResponse(
@@ -182,18 +183,6 @@ public class GameDayStartService {
         }
     }
 
-    private Festival selectFestival(Long locationId, Long seasonId, int day) {
-        if (day != 4) {
-            return null;
-        }
-        List<Festival> festivals = festivalRepository.findByLocationIdOrderByIdAsc(locationId);
-        if (festivals.isEmpty()) {
-            return null;
-        }
-        int index = Math.floorMod(Math.toIntExact(seasonId - 1L), festivals.size());
-        return festivals.get(index);
-    }
-
     private void writeInitialState(
             Store store,
             int day,
@@ -201,7 +190,11 @@ public class GameDayStartService {
             GameDayStartResponse response,
             SeasonTimePoint seasonTimePoint
     ) {
-        List<Integer> purchaseList = purchaseListGenerator.generate(response.hourlySchedule());
+        List<Integer> purchaseList = purchaseListGenerator.generate(
+                response.hourlySchedule(),
+                store.getPurchaseSeed(),
+                store.getPurchaseCursor()
+        );
         LocalDateTime startedAt = seasonTimePoint.phaseStartAt() == null
                 ? LocalDateTime.now(clock)
                 : seasonTimePoint.phaseStartAt();
@@ -233,6 +226,30 @@ public class GameDayStartService {
         );
     }
 
+    private void ensurePurchaseQueueInitialized(Store store) {
+        if (store.getPurchaseSeed() == null) {
+            store.initializePurchaseQueue(purchaseListGenerator.issueSeed());
+            return;
+        }
+        store.changePurchaseCursor(purchaseListGenerator.normalizeCursor(store.getPurchaseCursor()));
+    }
+
+    private FestivalSummary resolveFestivalSummary(
+            List<GameDayStartResponse.EventSchedule> eventSchedule,
+            Long locationId
+    ) {
+        for (GameDayStartResponse.EventSchedule schedule : eventSchedule) {
+            if (schedule.scope() == null) {
+                continue;
+            }
+            if (!locationId.equals(schedule.scope().region()) || schedule.scope().menu() != null) {
+                continue;
+            }
+            return new FestivalSummary(schedule.type(), schedule.populationMultiplier());
+        }
+        return new FestivalSummary(null, null);
+    }
+
     private String toWeatherLabel(WeatherType weatherType) {
         return weatherType.name();
     }
@@ -240,5 +257,10 @@ public class GameDayStartService {
     private String formatHour(int hour) {
         return LocalTime.of(hour % 24, 0).format(TIME_FORMATTER);
     }
-}
 
+    private record FestivalSummary(
+            String name,
+            BigDecimal populationMultiplier
+    ) {
+    }
+}

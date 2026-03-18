@@ -47,7 +47,8 @@ class EventEffectResolverTests {
         assertThat(effect.populationEventMultiplier()).isEqualByComparingTo("1.50");
         assertThat(effect.ingredientCostMultiplier()).isEqualByComparingTo("1.05");
         assertThat(effect.appliedEvents()).hasSize(1);
-        assertThat(effect.appliedEvents().get(0).newsTitle()).isEqualTo("CELEBRITY");
+        assertThat(effect.appliedEvents().get(0).eventType()).isEqualTo("CELEBRITY_APPEARANCE");
+        assertThat(effect.appliedEvents().get(0).eventName()).isEqualTo("연예인 등장");
     }
 
     @Test
@@ -84,8 +85,8 @@ class EventEffectResolverTests {
     private DailyEvent dailyEvent(Season season, Long targetLocationId, Long targetMenuId) {
         RandomEvent randomEvent = instantiate(RandomEvent.class);
         ReflectionTestUtils.setField(randomEvent, "id", 2L);
-        ReflectionTestUtils.setField(randomEvent, "eventCategory", EventCategory.GOOD);
-        ReflectionTestUtils.setField(randomEvent, "eventType", "CELEBRITY");
+        ReflectionTestUtils.setField(randomEvent, "eventCategory", EventCategory.CELEBRITY_APPEARANCE);
+        ReflectionTestUtils.setField(randomEvent, "eventName", "연예인 등장");
         ReflectionTestUtils.setField(randomEvent, "startTime", EventStartTime.IMMEDIATE);
         ReflectionTestUtils.setField(randomEvent, "endTime", EventEndTime.SAME_DAY);
         ReflectionTestUtils.setField(randomEvent, "populationRate", new BigDecimal("1.50"));
