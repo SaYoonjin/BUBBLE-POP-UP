@@ -69,6 +69,10 @@ public class User {
         this.nickname = nickname;
     }
 
+    public void addPoints(int points) {
+        this.point += points;
+    }
+
     public void usePoints(int points) {
         this.point -= points;
     }

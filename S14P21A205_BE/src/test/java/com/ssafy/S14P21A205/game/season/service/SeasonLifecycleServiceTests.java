@@ -147,8 +147,10 @@ class SeasonLifecycleServiceTests {
         when(menuRepository.findAllByOrderByIdAsc()).thenReturn(List.of(menu));
         when(weatherRepository.findAllByOrderByIdAsc()).thenReturn(allWeatherMasters());
         when(festivalRepository.findAllByOrderByIdAsc()).thenReturn(List.of(festival(location)));
-        when(populationRepository.findByLocationIdOrderByDateAsc(3L)).thenReturn(populations(location, batchKey, seasonStartAt.toLocalDate()));
-        when(trafficRepository.findByLocationIdOrderByDateAsc(3L)).thenReturn(traffics(location, batchKey, seasonStartAt.toLocalDate()));
+        when(populationRepository.findByLocationIdOrderByDateAsc(3L))
+                .thenReturn(populations(location, batchKey, seasonStartAt.toLocalDate()));
+        when(trafficRepository.findByLocationIdOrderByDateAsc(3L))
+                .thenReturn(traffics(location, batchKey, seasonStartAt.toLocalDate()));
 
         seasonLifecycleService.synchronize();
 

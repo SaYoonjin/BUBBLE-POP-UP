@@ -23,9 +23,12 @@ import com.ssafy.S14P21A205.store.entity.Location;
 import com.ssafy.S14P21A205.store.entity.Store;
 import com.ssafy.S14P21A205.store.repository.StoreRepository;
 import com.ssafy.S14P21A205.user.entity.User;
+import com.ssafy.S14P21A205.user.repository.UserRepository;
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.BeanUtils;
@@ -39,6 +42,7 @@ class SeasonFinalRankingServiceTests {
     private final GameDayReportService gameDayReportService = org.mockito.Mockito.mock(GameDayReportService.class);
     private final ProfitPolicy profitPolicy = new ProfitPolicy();
     private final ReputationPolicy reputationPolicy = new ReputationPolicy();
+    private final UserRepository userRepository = org.mockito.Mockito.mock(UserRepository.class);
 
     private final SeasonFinalRankingService seasonFinalRankingService = new SeasonFinalRankingService(
             storeRepository,
@@ -46,22 +50,25 @@ class SeasonFinalRankingServiceTests {
             seasonRankingRecordRepository,
             gameDayReportService,
             profitPolicy,
-            reputationPolicy
+            reputationPolicy,
+            userRepository
     );
 
     @Test
     @SuppressWarnings("unchecked")
-    void saveFinalRankingsPersistsAllRanksAndAppliesRewardRule() {
+    void saveFinalRankingsPersistsRankedStoresSeparatelyAndGrantsRewardPoints() {
         Season season = org.mockito.Mockito.mock(Season.class);
         when(season.getId()).thenReturn(11L);
         when(season.getTotalDays()).thenReturn(7);
 
         List<Store> stores = new ArrayList<>();
         List<DailyReport> reports = new ArrayList<>();
+        Map<Integer, User> usersById = new LinkedHashMap<>();
         int[] rois = {200, 190, 180, 170, 160, 150, 140, 130, 120, 110, 110, 100};
         for (int index = 0; index < rois.length; index++) {
             Store store = createStore((long) (100 + index), index + 1, "user-" + (index + 1));
             stores.add(store);
+            usersById.put(store.getUser().getId(), store.getUser());
             boolean bankrupt = index == 10;
             reports.add(createDailyReport(store, 7, 100 + rois[index], 100, 10 + index, new BigDecimal("0.12"), bankrupt));
         }
@@ -69,6 +76,8 @@ class SeasonFinalRankingServiceTests {
         when(seasonRankingRecordRepository.existsByStore_Season_Id(11L)).thenReturn(false);
         when(storeRepository.findBySeason_IdOrderByIdAsc(11L)).thenReturn(stores);
         when(dailyReportRepository.findByStore_Season_IdAndDayLessThanOrderByStore_IdAscDayAsc(11L, 8)).thenReturn(reports);
+        when(userRepository.findByIdForUpdate(org.mockito.ArgumentMatchers.anyInt()))
+                .thenAnswer(invocation -> java.util.Optional.ofNullable(usersById.get(invocation.getArgument(0))));
 
         seasonFinalRankingService.saveFinalRankings(season);
 
@@ -80,16 +89,23 @@ class SeasonFinalRankingServiceTests {
         assertThat(savedRecords).hasSize(12);
         assertThat(savedRecords)
                 .extracting(SeasonRankingRecord::getFinalRank)
-                .containsExactly(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 12);
+                .containsExactly(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 0);
         assertThat(savedRecords)
                 .extracting(record -> record.getStore().getUser().getId())
-                .containsExactly(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12);
+                .containsExactly(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 11);
         assertThat(savedRecords)
                 .extracting(SeasonRankingRecord::getRewardPoints)
-                .containsExactly(30, 20, 10, 5, 5, 5, 5, 5, 5, 5, 0, 5);
-        assertThat(savedRecords.get(10).getIsBankruptcy()).isTrue();
-        assertThat(savedRecords.get(11).getFinalRank()).isEqualTo(12);
-        assertThat(savedRecords.get(11).getRewardPoints()).isEqualTo(5);
+                .containsExactly(30, 20, 10, 5, 5, 5, 5, 5, 5, 5, 5, 0);
+        assertThat(savedRecords.get(10).getIsBankruptcy()).isFalse();
+        assertThat(savedRecords.get(11).getFinalRank()).isEqualTo(0);
+        assertThat(savedRecords.get(11).getRewardPoints()).isEqualTo(0);
+        assertThat(usersById.get(1).getPoint()).isEqualTo(30);
+        assertThat(usersById.get(2).getPoint()).isEqualTo(20);
+        assertThat(usersById.get(3).getPoint()).isEqualTo(10);
+        assertThat(usersById.get(4).getPoint()).isEqualTo(5);
+        assertThat(usersById.get(10).getPoint()).isEqualTo(5);
+        assertThat(usersById.get(11).getPoint()).isZero();
+        assertThat(usersById.get(12).getPoint()).isEqualTo(5);
     }
 
     @Test

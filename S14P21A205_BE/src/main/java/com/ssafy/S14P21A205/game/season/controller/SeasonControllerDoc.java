@@ -101,7 +101,7 @@ public interface SeasonControllerDoc {
 
     @Operation(
             summary = "Get finalized season rankings",
-            description = "Return the finalized season rankings from SQL, including top 10 and the requesting user's ranking.",
+            description = "Return the finalized season rankings from SQL, including top 10 and the requesting user's additional stores.",
             security = @SecurityRequirement(name = "bearerAuth")
     )
     @ApiResponses({

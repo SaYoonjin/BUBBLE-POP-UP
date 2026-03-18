@@ -222,7 +222,7 @@ public class UserService {
         var store = record.getStore();
         return new UserRecordResponse(
                 Math.toIntExact(store.getSeason().getId()),
-                record.getFinalRank(),
+                Boolean.TRUE.equals(record.getIsBankruptcy()) ? null : record.getFinalRank(),
                 store.getLocation().getLocationName(),
                 store.getStoreName(),
                 record.getTotalNetProfit(),
