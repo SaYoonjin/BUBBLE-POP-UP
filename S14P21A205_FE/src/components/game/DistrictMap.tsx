@@ -24,153 +24,289 @@ interface DistrictMapProps {
   onSelect: (id: number) => void;
 }
 
-const gradeStyle: Record<string, string> = {
-  S: "bg-rose-500 text-white",
-  A: "bg-amber-400 text-amber-900",
-  B: "bg-slate-400 text-white",
+const MAP_WIDTH = 920;
+const MAP_HEIGHT = 640;
+
+const gradeStyle: Record<string, { token: string; halo: string; area: string; stroke: string }> = {
+  S: {
+    token: "border-rose-200 bg-accent-rose text-white",
+    halo: "shadow-[0_18px_42px_rgba(212,165,165,0.28)]",
+    area: "#F7E8E8",
+    stroke: "#D4A5A5",
+  },
+  A: {
+    token: "border-amber-200 bg-amber-100 text-amber-800",
+    halo: "shadow-[0_18px_42px_rgba(251,191,36,0.2)]",
+    area: "#FFF5DD",
+    stroke: "#EAC56D",
+  },
+  B: {
+    token: "border-primary/20 bg-primary/15 text-primary-dark",
+    halo: "shadow-[0_18px_42px_rgba(168,191,169,0.24)]",
+    area: "#ECF3EC",
+    stroke: "#A8BFA9",
+  },
 };
 
-export default function DistrictMap({ districts, connections, selectedId, onSelect }: DistrictMapProps) {
+const congestionStyle: Record<string, { chip: string; text: string; label: string }> = {
+  "매우 혼잡": {
+    chip: "border-rose-100 bg-rose-50 text-rose-500",
+    text: "text-rose-500",
+    label: "매우 혼잡",
+  },
+  혼잡: {
+    chip: "border-amber-100 bg-amber-50 text-amber-600",
+    text: "text-amber-600",
+    label: "혼잡",
+  },
+  보통: {
+    chip: "border-primary/20 bg-primary/10 text-primary-dark",
+    text: "text-primary-dark",
+    label: "보통",
+  },
+  여유: {
+    chip: "border-sky-100 bg-sky-50 text-sky-600",
+    text: "text-sky-600",
+    label: "여유",
+  },
+  "매우 여유": {
+    chip: "border-slate-200 bg-slate-100 text-slate-500",
+    text: "text-slate-500",
+    label: "매우 여유",
+  },
+};
+
+function percentToPixels(value: string, size: number) {
+  return (Number.parseFloat(value) / 100) * size;
+}
+
+function buildConnectionPath(from: District, to: District) {
+  const x1 = percentToPixels(from.x, MAP_WIDTH);
+  const y1 = percentToPixels(from.y, MAP_HEIGHT);
+  const x2 = percentToPixels(to.x, MAP_WIDTH);
+  const y2 = percentToPixels(to.y, MAP_HEIGHT);
+  const midpointX = (x1 + x2) / 2;
+  const midpointY = (y1 + y2) / 2 - Math.max(22, Math.abs(x1 - x2) * 0.12);
+
+  return `M ${x1} ${y1} Q ${midpointX} ${midpointY} ${x2} ${y2}`;
+}
+
+function getTooltipClasses(x: string, y: string) {
+  const xValue = Number.parseFloat(x);
+  const yValue = Number.parseFloat(y);
+
+  if (xValue <= 28) {
+    return "left-[calc(100%+16px)] top-1/2 -translate-y-1/2";
+  }
+
+  if (xValue >= 74) {
+    return "right-[calc(100%+16px)] top-1/2 -translate-y-1/2";
+  }
+
+  if (yValue <= 34) {
+    return "left-1/2 top-[calc(100%+16px)] -translate-x-1/2";
+  }
+
+  return "left-1/2 bottom-[calc(100%+18px)] -translate-x-1/2";
+}
+
+function getTooltipPlacement(district: District) {
+  if (district.id === 3) {
+    return "left-[calc(100%+16px)] top-1/2 -translate-y-1/2";
+  }
+
+  return getTooltipClasses(district.x, district.y);
+}
+
+export default function DistrictMap({
+  districts,
+  connections,
+  selectedId,
+  onSelect,
+}: DistrictMapProps) {
   const [hoveredId, setHoveredId] = useState<number | null>(null);
 
-  const getPos = (id: number) => {
-    const d = districts.find((d) => d.id === id);
-    return d ? { x: d.x, y: d.y } : { x: "0%", y: "0%" };
-  };
-
   return (
-    <div className="relative w-full h-full flex items-center justify-center overflow-hidden">
-      {/* Subtle dot grid */}
-      <div className="absolute inset-0 pointer-events-none opacity-[0.06]" style={{
-        backgroundImage: "radial-gradient(#334155 1px, transparent 1px)",
-        backgroundSize: "32px 32px",
-      }} />
+    <div className="relative flex h-full min-h-[620px] w-full items-center justify-center overflow-hidden">
+      <div className="relative aspect-[23/16] w-[min(920px,100%)] overflow-visible rounded-[40px] border border-white/70 bg-white/55 shadow-premium backdrop-blur-sm">
+        <div className="absolute inset-0 rounded-[40px] bg-gradient-to-br from-white/75 via-white/40 to-primary/10" />
 
-      <div className="relative w-[900px] h-[620px]">
-        {/* Han River decoration */}
-        <svg className="absolute inset-0 w-full h-full pointer-events-none z-0">
+        <svg
+          viewBox={`0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`}
+          className="absolute inset-0 h-full w-full"
+          aria-hidden="true"
+        >
+          <defs>
+            <linearGradient id="riverFlow" x1="0%" x2="100%" y1="0%" y2="100%">
+              <stop offset="0%" stopColor="#DCECF0" stopOpacity="0.96" />
+              <stop offset="100%" stopColor="#BDD7DD" stopOpacity="0.98" />
+            </linearGradient>
+          </defs>
+
           <path
-            d="M 0,320 Q 220,280 420,310 Q 620,345 900,295"
+            d="M110 120C170 78 255 58 341 87C427 117 508 73 606 109C706 146 812 188 842 282C869 366 832 470 736 537C639 604 510 592 418 585C325 578 223 587 148 529C83 479 66 392 73 317C80 245 83 166 110 120Z"
+            fill="#FFFFFF"
+            fillOpacity="0.85"
+            stroke="#8DA98E"
+            strokeOpacity="0.24"
+            strokeWidth="2.5"
+          />
+
+          <path
+            d="M118 322C244 286 365 282 481 308C598 335 712 341 820 305"
             fill="none"
-            stroke="#60a5fa"
-            strokeWidth="24"
-            opacity="0.08"
+            stroke="url(#riverFlow)"
+            strokeWidth="36"
             strokeLinecap="round"
+            opacity="0.82"
           />
           <path
-            d="M 0,320 Q 220,280 420,310 Q 620,345 900,295"
+            d="M118 322C244 286 365 282 481 308C598 335 712 341 820 305"
             fill="none"
-            stroke="#60a5fa"
-            strokeWidth="2"
-            opacity="0.15"
-            strokeDasharray="8 6"
+            stroke="#8EB4BC"
+            strokeWidth="2.5"
             strokeLinecap="round"
+            strokeDasharray="9 8"
+            opacity="0.45"
           />
-          <text x="140" y="335" fill="#60a5fa" opacity="0.2" fontSize="12" fontStyle="italic" fontWeight="500">
+
+          <path d="M172 164L262 526" stroke="#DFE8DF" strokeWidth="1.6" opacity="0.85" />
+          <path d="M358 110L418 576" stroke="#E5ECE5" strokeWidth="1.5" opacity="0.85" />
+          <path d="M592 120L518 562" stroke="#E5ECE5" strokeWidth="1.5" opacity="0.78" />
+          <path d="M162 236L774 204" stroke="#E3EBE3" strokeWidth="1.5" opacity="0.8" />
+          <path d="M140 408L776 382" stroke="#E9EFE9" strokeWidth="1.5" opacity="0.72" />
+
+          {connections.map((connection) => {
+            const from = districts.find((district) => district.id === connection.from);
+            const to = districts.find((district) => district.id === connection.to);
+
+            if (!from || !to) {
+              return null;
+            }
+
+            return (
+              <path
+                key={`${connection.from}-${connection.to}`}
+                d={buildConnectionPath(from, to)}
+                fill="none"
+                stroke="#A8BFA9"
+                strokeWidth="2"
+                strokeDasharray="6 7"
+                opacity="0.26"
+                strokeLinecap="round"
+              />
+            );
+          })}
+
+          {districts.map((district) => {
+            const grade = district.grade.charAt(0);
+            const gradeMeta = gradeStyle[grade] ?? gradeStyle.B;
+            const isActive = district.id === selectedId;
+            const isHovered = district.id === hoveredId;
+            const centerX = percentToPixels(district.x, MAP_WIDTH);
+            const centerY = percentToPixels(district.y, MAP_HEIGHT);
+
+            return (
+              <ellipse
+                key={`area-${district.id}`}
+                cx={centerX}
+                cy={centerY}
+                rx={grade === "S" ? 64 : 58}
+                ry={grade === "S" ? 44 : 40}
+                fill={gradeMeta.area}
+                stroke={gradeMeta.stroke}
+                strokeWidth={isActive ? 2.3 : 1.4}
+                opacity={isActive ? 0.92 : isHovered ? 0.68 : 0.4}
+                style={{
+                  transformOrigin: `${centerX}px ${centerY}px`,
+                  transform: isActive || isHovered ? "scale(1.08)" : "scale(1)",
+                  transition: "transform 260ms ease, opacity 260ms ease",
+                }}
+              />
+            );
+          })}
+
+          <text x="116" y="344" fill="#7EA5AE" opacity="0.4" fontSize="12" fontStyle="italic" fontWeight="700">
             Han River
           </text>
         </svg>
 
-        {/* Connection lines */}
-        <svg className="absolute inset-0 w-full h-full pointer-events-none z-[1]">
-          {connections.map((c, i) => {
-            const from = getPos(c.from);
-            const to = getPos(c.to);
-            return (
-              <line
-                key={i}
-                x1={from.x} y1={from.y}
-                x2={to.x} y2={to.y}
-                stroke="#94a3b8"
-                strokeDasharray="6 4"
-                strokeWidth="1.5"
-                opacity="0.25"
-              />
-            );
-          })}
-        </svg>
-
-        {/* District nodes */}
-        {districts.map((d) => {
-          const isActive = d.id === selectedId;
-          const isHovered = d.id === hoveredId;
-          const grade = d.grade.charAt(0);
+        {districts.map((district) => {
+          const isActive = district.id === selectedId;
+          const isHovered = district.id === hoveredId;
+          const grade = district.grade.charAt(0);
+          const gradeMeta = gradeStyle[grade] ?? gradeStyle.B;
+          const congestionMeta = congestionStyle[district.congestion] ?? congestionStyle["보통"];
 
           return (
             <div
-              key={d.id}
-              className="absolute z-10 flex flex-col items-center"
-              style={{ top: d.y, left: d.x, transform: "translate(-50%, -50%)" }}
-              onMouseEnter={() => setHoveredId(d.id)}
+              key={district.id}
+              className={`absolute ${isActive || isHovered ? "z-30" : "z-10"}`}
+              style={{ top: district.y, left: district.x, transform: "translate(-50%, -50%)" }}
+              onMouseEnter={() => setHoveredId(district.id)}
               onMouseLeave={() => setHoveredId(null)}
             >
-              {/* Node circle */}
-              <button
-                onClick={() => onSelect(d.id)}
-                className={`
-                  relative w-11 h-11 rounded-xl cursor-pointer
-                  transition-all duration-300 ease-out
-                  flex items-center justify-center text-lg
-                  ${isActive
-                    ? "bg-indigo-500 shadow-lg shadow-indigo-500/30 scale-110 -translate-y-1 text-white"
-                    : "bg-slate-700 shadow-md hover:bg-indigo-500 hover:shadow-lg hover:shadow-indigo-500/20 hover:scale-110 hover:-translate-y-1 text-white"
-                  }
-                `}
+              <div
+                className={`relative flex flex-col items-center transition-transform duration-300 ${
+                  isActive || isHovered ? "scale-[1.04]" : "scale-100"
+                }`}
               >
-                🏪
-                {isActive && (
-                  <span className="absolute inset-0 rounded-xl border-2 border-indigo-400 animate-ping opacity-40" />
-                )}
-              </button>
+                <button
+                  type="button"
+                  onClick={() => onSelect(district.id)}
+                  className="group relative flex flex-col items-center"
+                >
+                  <span
+                    className={`relative flex h-6 w-6 items-center justify-center rounded-full border-4 transition-all duration-300 ${
+                      isActive
+                        ? `border-primary bg-primary-dark text-white ${gradeMeta.halo}`
+                        : "border-white bg-primary-dark text-white shadow-soft hover:border-primary/60"
+                    }`}
+                  >
+                    <span className="absolute inset-0 rounded-full border border-white/40" />
+                    <span className="material-symbols-outlined text-[12px]">place</span>
+                  </span>
 
-              {/* Name label */}
-              <div className={`
-                mt-2 px-3 py-1 rounded-full text-[13px] font-semibold
-                whitespace-nowrap border transition-all duration-300
-                ${isActive
-                  ? "bg-indigo-500 text-white border-indigo-600 shadow-md"
-                  : "bg-white text-slate-700 border-slate-200 shadow-sm hover:border-indigo-400 hover:text-indigo-600"
-                }
-              `}>
-                {d.name}
-              </div>
+                  <span
+                    className={`mt-2 flex items-center gap-1.5 rounded-full border border-white/80 bg-white/95 px-3 py-1.5 shadow-soft transition-all duration-300 ${
+                      isActive ? "shadow-premium" : ""
+                    }`}
+                  >
+                    <span
+                      className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-black ${gradeMeta.token}`}
+                    >
+                      {district.grade}
+                    </span>
+                    <span className="text-[12px] font-bold text-slate-800">{district.name}</span>
+                  </span>
 
-              {/* Grade badge */}
-              <span className={`
-                absolute -top-1 -right-2 text-[9px] font-bold px-1.5 py-0.5 rounded-md
-                ${gradeStyle[grade] || gradeStyle.B}
-              `}>
-                {grade}
-              </span>
+                  <span
+                    className={`mt-2 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold shadow-soft transition-all duration-300 ${
+                      congestionMeta.chip
+                    } ${isActive || isHovered ? "translate-y-0 opacity-100" : "translate-y-1 opacity-0"}`}
+                  >
+                    <span className="material-symbols-outlined text-[12px]">local_fire_department</span>
+                    {congestionMeta.label}
+                  </span>
+                </button>
 
-              {/* Hover tooltip */}
-              <div className={`
-                absolute bottom-full left-1/2 -translate-x-1/2 mb-3
-                bg-white rounded-xl shadow-xl border border-slate-100
-                px-4 py-3 min-w-[150px]
-                transition-all duration-200 pointer-events-none
-                ${isHovered && !isActive ? "opacity-100 visible translate-y-0" : "opacity-0 invisible translate-y-2"}
-              `}>
-                <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-white border-r border-b border-slate-100 rotate-45" />
-                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">임대료</p>
-                <p className="text-sm font-mono font-bold text-indigo-600">{d.rent}</p>
-                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-1.5 mb-0.5">혼잡도</p>
-                <p className="text-sm font-bold text-slate-700">{d.congestion}</p>
+                <div
+                  className={`pointer-events-none absolute z-40 min-w-[182px] rounded-[22px] border border-white/80 bg-white/96 px-4 py-3 shadow-premium backdrop-blur transition-all duration-300 ${
+                    getTooltipPlacement(district)
+                  } ${isActive || isHovered ? "translate-y-0 scale-100 opacity-100" : "translate-y-2 scale-95 opacity-0"}`}
+                >
+                  <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-slate-400">일일 임대료</p>
+                  <p className="mt-1 font-mono text-sm font-bold text-slate-900">{district.rent}</p>
+                  <div className="mt-2 flex items-center gap-2">
+                    <span className={`text-[11px] font-bold ${congestionMeta.text}`}>{congestionMeta.label}</span>
+                    <span className="h-1 w-1 rounded-full bg-slate-300" />
+                    <span className="text-[11px] font-semibold text-slate-500">{district.grade}</span>
+                  </div>
+                </div>
               </div>
             </div>
           );
         })}
-
-        {/* Map label */}
-        <div className="absolute bottom-3 left-4 text-slate-300 text-sm italic select-none tracking-wide">
-          Seoul District Map
-        </div>
-
-        {/* Compass */}
-        <div className="absolute top-4 right-5 flex flex-col items-center text-slate-300 select-none">
-          <span className="material-symbols-outlined text-2xl">explore</span>
-          <span className="text-[9px] font-bold tracking-widest mt-0.5">N</span>
-        </div>
       </div>
     </div>
   );
