@@ -22,8 +22,10 @@ import com.ssafy.S14P21A205.exception.ErrorCode;
 import com.ssafy.S14P21A205.game.day.dto.GameDayStartResponse;
 import com.ssafy.S14P21A205.game.day.policy.CaptureRatePolicy;
 import com.ssafy.S14P21A205.game.day.resolver.EventEffectResolver;
+import com.ssafy.S14P21A205.game.day.resolver.TrafficDelayResolver;
 import com.ssafy.S14P21A205.game.day.state.GameDayLiveState;
 import com.ssafy.S14P21A205.game.day.state.repository.GameDayStoreStateRedisRepository;
+import com.ssafy.S14P21A205.game.environment.entity.TrafficStatus;
 import com.ssafy.S14P21A205.game.season.entity.Season;
 import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
 import com.ssafy.S14P21A205.order.entity.Order;
@@ -74,13 +76,13 @@ class ActionServiceImplTests {
     private OrderRepository orderRepository;
 
     @Mock
-    private com.ssafy.S14P21A205.game.environment.repository.TrafficRepository trafficRepository;
-
-    @Mock
     private ItemUserRepository itemUserRepository;
 
     @Mock
     private EventEffectResolver eventEffectResolver;
+
+    @Mock
+    private TrafficDelayResolver trafficDelayResolver;
 
     private ActionServiceImpl actionService;
     private Clock fixedClock;
@@ -95,9 +97,9 @@ class ActionServiceImplTests {
                 storeRepository,
                 seasonRepository,
                 orderRepository,
-                trafficRepository,
                 itemUserRepository,
                 eventEffectResolver,
+                trafficDelayResolver,
                 new CaptureRatePolicy(),
                 fixedClock
         );
@@ -128,6 +130,7 @@ class ActionServiceImplTests {
         verify(gameDayStoreStateRedisRepository).updateField(15L, 2, "sale_price", "4000");
         verify(gameDayStoreStateRedisRepository).updateField(15L, 2, "capture_rate", "0.0010");
         verify(gameDayStoreStateRedisRepository).markActionUsed(15L, 2, "discount");
+        verify(gameDayStoreStateRedisRepository).saveBalance(15L, 2, 499_500L);
     }
 
     @Test
@@ -234,15 +237,12 @@ class ActionServiceImplTests {
         Store store = store(15L, 1, 3L, 7L, 2, 7, 2_000, 2_500);
         Season season = store.getSeason();
         Action discountAction = action(ActionCategory.DISCOUNT, 500);
-        GameDayLiveState state = state(500_000L);
-
         when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
                 .thenReturn(Optional.of(store));
         when(seasonRepository.findFirstByStatusOrderByIdDesc(SeasonStatus.IN_PROGRESS))
                 .thenReturn(Optional.of(season));
         when(gameDayStoreStateRedisRepository.isActionUsed(15L, 2, "discount")).thenReturn(false);
         when(actionRepository.findByCategory(ActionCategory.DISCOUNT)).thenReturn(List.of(discountAction));
-        when(gameDayStoreStateRedisRepository.find(15L, 2)).thenReturn(Optional.of(state));
 
         assertThatThrownBy(() -> actionService.executeDiscount(1, new DiscountRequest(600)))
                 .isInstanceOf(BaseException.class)
@@ -272,6 +272,7 @@ class ActionServiceImplTests {
         verify(gameDayStoreStateRedisRepository).updateField(15L, 2, "stock", "25");
         verify(gameDayStoreStateRedisRepository).updateField(15L, 2, "capture_rate", "0.1100");
         verify(gameDayStoreStateRedisRepository).markActionUsed(15L, 2, "donation");
+        verify(gameDayStoreStateRedisRepository).saveBalance(15L, 2, 500_000L);
     }
 
     @Test
@@ -280,6 +281,7 @@ class ActionServiceImplTests {
         Season season = store.getSeason();
         Action emergencyAction = action(ActionCategory.EMERGENCY_ORDER, 500);
         GameDayLiveState state = state(500_000L);
+        LocalDateTime now = LocalDateTime.of(2026, 3, 17, 10, 0);
 
         when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
                 .thenReturn(Optional.of(store));
@@ -288,7 +290,6 @@ class ActionServiceImplTests {
         when(gameDayStoreStateRedisRepository.isActionUsed(15L, 2, "emergency")).thenReturn(false);
         when(actionRepository.findByCategory(ActionCategory.EMERGENCY_ORDER)).thenReturn(List.of(emergencyAction));
         when(gameDayStoreStateRedisRepository.find(15L, 2)).thenReturn(Optional.of(state));
-        when(trafficRepository.findByLocationIdOrderByDateAsc(3L)).thenReturn(List.of());
         when(itemUserRepository.findPurchasedDiscountRateByUserIdAndCategory(1, ItemCategory.INGREDIENT))
                 .thenReturn(Optional.of(new BigDecimal("0.80")));
         when(eventEffectResolver.resolve(
@@ -296,17 +297,23 @@ class ActionServiceImplTests {
                 eq(2),
                 eq(7),
                 eq(state.startedAt()),
-                eq(LocalDateTime.of(2026, 3, 17, 10, 0)),
+                eq(now),
                 eq(3L),
                 eq(7L)
-        ))
-                .thenReturn(new EventEffectResolver.EventEffect(
-                        0L,
-                        0,
-                        BigDecimal.ONE,
-                        new BigDecimal("1.05"),
-                        List.of()
-                ));
+        )).thenReturn(new EventEffectResolver.EventEffect(
+                0L,
+                0,
+                BigDecimal.ONE,
+                new BigDecimal("1.05"),
+                List.of()
+        ));
+        when(trafficDelayResolver.resolve(
+                eq(3L),
+                eq(2),
+                eq(7),
+                eq(state.startedAt()),
+                eq(now)
+        )).thenReturn(resolvedTraffic(LocalDateTime.of(2023, 12, 9, 10, 0), TrafficStatus.NORMAL, 20));
         when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         EmergencyOrderResponse response = actionService.executeEmergencyOrder(1, new EmergencyOrderRequest(10));
@@ -318,6 +325,7 @@ class ActionServiceImplTests {
         assertThat(response.totalCost()).isEqualTo(25_200);
         assertThat(response.quantity()).isEqualTo(10);
         verify(gameDayStoreStateRedisRepository).markActionUsed(15L, 2, "emergency");
+        verify(gameDayStoreStateRedisRepository).saveBalance(15L, 2, 474_300L);
     }
 
     @Test
@@ -350,9 +358,9 @@ class ActionServiceImplTests {
                 storeRepository,
                 seasonRepository,
                 orderRepository,
-                trafficRepository,
                 itemUserRepository,
                 eventEffectResolver,
+                trafficDelayResolver,
                 new CaptureRatePolicy(),
                 fixedClock
         );
@@ -383,7 +391,6 @@ class ActionServiceImplTests {
         when(actionRepository.findByCategory(ActionCategory.EMERGENCY_ORDER)).thenReturn(List.of(emergencyAction));
         when(gameDayStoreStateRedisRepository.find(GameDayTestFixtures.STORE_ID, GameDayTestFixtures.CURRENT_DAY))
                 .thenReturn(Optional.of(state));
-        when(trafficRepository.findByLocationIdOrderByDateAsc(GameDayTestFixtures.LOCATION_ID)).thenReturn(List.of());
         when(itemUserRepository.findPurchasedDiscountRateByUserIdAndCategory(
                 GameDayTestFixtures.USER_ID,
                 ItemCategory.INGREDIENT
@@ -403,6 +410,13 @@ class ActionServiceImplTests {
                 new BigDecimal("1.05"),
                 List.of()
         ));
+        when(trafficDelayResolver.resolve(
+                eq(GameDayTestFixtures.LOCATION_ID),
+                eq(GameDayTestFixtures.CURRENT_DAY),
+                eq(GameDayTestFixtures.TOTAL_DAYS),
+                eq(GameDayTestFixtures.DAY4_STARTED_AT),
+                eq(GameDayTestFixtures.DAY4_STARTED_AT)
+        )).thenReturn(resolvedTraffic(LocalDateTime.of(2023, 12, 11, 10, 0), TrafficStatus.NORMAL, 20));
         when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         EmergencyOrderResponse response = actionService.executeEmergencyOrder(
@@ -417,6 +431,19 @@ class ActionServiceImplTests {
                 GameDayTestFixtures.CURRENT_DAY,
                 "emergency"
         );
+        verify(gameDayStoreStateRedisRepository).saveBalance(
+                GameDayTestFixtures.STORE_ID,
+                GameDayTestFixtures.CURRENT_DAY,
+                9_337_000L
+        );
+    }
+
+    private TrafficDelayResolver.ResolvedTraffic resolvedTraffic(
+            LocalDateTime resolvedDateTime,
+            TrafficStatus trafficStatus,
+            int delaySeconds
+    ) {
+        return new TrafficDelayResolver.ResolvedTraffic(resolvedDateTime, trafficStatus, delaySeconds);
     }
 
     private GameDayLiveState state(long balance) {
