@@ -5,9 +5,12 @@ import NicknameEditModal from "../components/mypage/NicknameEditModal";
 import ProfileSummaryCard from "../components/mypage/ProfileSummaryCard";
 import SeasonHistoryCard from "../components/mypage/SeasonHistoryCard";
 import SeasonHistoryEmptyState from "../components/mypage/SeasonHistoryEmptyState";
+import SeasonSortDropdown from "../components/mypage/SeasonSortDropdown";
+import { matchesHangulSearch } from "../utils/hangulSearch";
 
 type RankVariant = "gold" | "gray" | "rose";
 type SeasonStatus = "default" | "bankrupt" | "comeback";
+type SeasonSortOption = "latest" | "oldest" | "revenue" | "rank";
 
 interface SeasonHistoryItem {
   id: string;
@@ -97,46 +100,43 @@ const seasonHistory: SeasonHistoryItem[] = [
   },
 ];
 
-const MAX_VISIBLE_SEASONS = 10;
-
-const seasonStatusPriority: Record<SeasonStatus, number> = {
+const latestSeasonStatusPriority: Record<SeasonStatus, number> = {
   comeback: 0,
   default: 1,
   bankrupt: 2,
 };
+
+const oldestSeasonStatusPriority: Record<SeasonStatus, number> = {
+  bankrupt: 0,
+  default: 1,
+  comeback: 2,
+};
+
+const seasonSortOptions: { value: SeasonSortOption; label: string }[] = [
+  { value: "latest", label: "최신순" },
+  { value: "oldest", label: "오래된순" },
+  { value: "revenue", label: "수익순" },
+  { value: "rank", label: "순위순" },
+];
+
+const seasonSortLabels: Record<SeasonSortOption, string> = Object.fromEntries(
+  seasonSortOptions.map((option) => [option.value, option.label]),
+) as Record<SeasonSortOption, string>;
+
+function parseRevenue(value: string) {
+  return Number(value.replace(/[^\d]/g, "")) || 0;
+}
 
 export default function MyPage() {
   const [nickname, setNickname] = useState("버블킹");
   const [isNicknameModalOpen, setIsNicknameModalOpen] = useState(false);
   const [draftNickname, setDraftNickname] = useState("버블킹");
   const [nicknameError, setNicknameError] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortOption, setSortOption] = useState<SeasonSortOption>("latest");
+  const [sortAnimationCycle, setSortAnimationCycle] = useState(0);
 
-  const seasonHistoryBySeason = seasonHistory.reduce<Map<number, SeasonHistoryItem[]>>(
-    (groups, record) => {
-      const existingSeasonRecords = groups.get(record.season);
-
-      if (existingSeasonRecords) {
-        existingSeasonRecords.push(record);
-      } else {
-        groups.set(record.season, [record]);
-      }
-
-      return groups;
-    },
-    new Map(),
-  );
-
-  const visibleSeasonGroups = Array.from(seasonHistoryBySeason.entries())
-    .sort(([seasonA], [seasonB]) => seasonB - seasonA)
-    .slice(0, MAX_VISIBLE_SEASONS)
-    .map(([season, records]) => [
-      season,
-      [...records].sort(
-        (recordA, recordB) =>
-          seasonStatusPriority[recordA.status] - seasonStatusPriority[recordB.status],
-      ),
-    ] as const);
-  const visibleSeasonHistory = visibleSeasonGroups.flatMap(([, records]) => records);
+  const uniqueSeasonCount = new Set(seasonHistory.map((record) => record.season)).size;
   const rankedSeasons = seasonHistory.filter(
     (season): season is SeasonHistoryItem & { rankValue: number } => season.rankValue !== null,
   );
@@ -144,10 +144,71 @@ export default function MyPage() {
     rankedSeasons.length > 0
       ? `${Math.min(...rankedSeasons.map((season) => season.rankValue))}위`
       : "-";
+  const normalizedSearchQuery = searchQuery.trim().toLowerCase();
+  const filteredSeasonHistory = [...seasonHistory]
+    .filter((record) => {
+      if (!normalizedSearchQuery) {
+        return true;
+      }
+
+      return [record.location, record.storeName].some((value) =>
+        matchesHangulSearch(value, normalizedSearchQuery),
+      );
+    })
+    .sort((recordA, recordB) => {
+      if (sortOption === "latest") {
+        if (recordA.season !== recordB.season) {
+          return recordB.season - recordA.season;
+        }
+
+        return latestSeasonStatusPriority[recordA.status] - latestSeasonStatusPriority[recordB.status];
+      }
+
+      if (sortOption === "oldest") {
+        if (recordA.season !== recordB.season) {
+          return recordA.season - recordB.season;
+        }
+
+        return oldestSeasonStatusPriority[recordA.status] - oldestSeasonStatusPriority[recordB.status];
+      }
+
+      if (sortOption === "revenue") {
+        const revenueDiff = parseRevenue(recordB.revenue) - parseRevenue(recordA.revenue);
+
+        if (revenueDiff !== 0) {
+          return revenueDiff;
+        }
+      }
+
+      if (sortOption === "rank") {
+        const rankA = recordA.rankValue ?? Number.POSITIVE_INFINITY;
+        const rankB = recordB.rankValue ?? Number.POSITIVE_INFINITY;
+        const rankDiff = rankA - rankB;
+
+        if (rankDiff !== 0) {
+          return rankDiff;
+        }
+      }
+
+      if (recordA.season !== recordB.season) {
+        return recordB.season - recordA.season;
+      }
+
+      return latestSeasonStatusPriority[recordA.status] - latestSeasonStatusPriority[recordB.status];
+    });
   const summaryBadges = [
-    `참여 시즌 ${seasonHistoryBySeason.size}회`,
+    `참여 시즌 ${uniqueSeasonCount}회`,
     `최고 순위 ${bestRankLabel}`,
   ];
+
+  const handleSortChange = (nextSortOption: SeasonSortOption) => {
+    if (nextSortOption === sortOption) {
+      return;
+    }
+
+    setSortOption(nextSortOption);
+    setSortAnimationCycle((prev) => prev + 1);
+  };
 
   const openNicknameModal = () => {
     setDraftNickname(nickname);
@@ -201,34 +262,78 @@ export default function MyPage() {
                     시즌 기록
                   </h2>
                   <p className="mt-2 text-sm leading-6 text-slate-500">
-                    최근 10개 시즌 기준으로 핵심 기록만 정리해서 보여드려요.
+                    위치나 가게 이름으로 검색하고, 원하는 기준으로 정렬해서 기록을 볼 수 있어요.
                   </p>
                 </div>
               </div>
 
               <Badge variant="gray" size="md">
-                {visibleSeasonGroups.length > 0 ? `최근 ${visibleSeasonGroups.length}개 시즌` : "기록 없음"}
+                총 {uniqueSeasonCount}개 시즌
               </Badge>
             </div>
 
-            {visibleSeasonGroups.length > 0 ? (
+            <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_180px]">
+              <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-soft">
+                <span className="material-symbols-outlined text-slate-400">search</span>
+                <input
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  className="w-full border-none bg-transparent text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none"
+                  placeholder="위치 또는 가게 이름 검색"
+                />
+              </label>
+
+              <SeasonSortDropdown
+                value={sortOption}
+                onChange={(value) => handleSortChange(value as SeasonSortOption)}
+                options={seasonSortOptions}
+              />
+            </div>
+
+            {seasonHistory.length === 0 ? (
+              <SeasonHistoryEmptyState nickname={nickname} />
+            ) : filteredSeasonHistory.length > 0 ? (
               <div className="space-y-4">
-                {visibleSeasonHistory.map((season) => (
-                  <SeasonHistoryCard
-                    key={season.id}
-                    season={season.season}
-                    location={season.location}
-                    storeName={season.storeName}
-                    revenue={season.revenue}
-                    rewardPoints={season.rewardPoints}
-                    rank={season.rank}
-                    rankVariant={season.rankVariant}
-                    status={season.status}
-                  />
+                <p className="text-sm text-slate-500">
+                  검색 결과 {filteredSeasonHistory.length}건 · {seasonSortLabels[sortOption]}
+                </p>
+                {filteredSeasonHistory.map((season, index) => (
+                  <div
+                    key={`${sortAnimationCycle}-${season.id}`}
+                    className={sortAnimationCycle > 0 ? "history-reorder-enter" : undefined}
+                    style={
+                      sortAnimationCycle > 0
+                        ? { animationDelay: `${Math.min(index, 5) * 35}ms` }
+                        : undefined
+                    }
+                  >
+                    <SeasonHistoryCard
+                      season={season.season}
+                      location={season.location}
+                      storeName={season.storeName}
+                      revenue={season.revenue}
+                      rewardPoints={season.rewardPoints}
+                      rank={season.rank}
+                      rankVariant={season.rankVariant}
+                      status={season.status}
+                    />
+                  </div>
                 ))}
               </div>
             ) : (
-              <SeasonHistoryEmptyState nickname={nickname} />
+              <div className="rounded-[28px] border border-dashed border-slate-300 bg-white/80 p-8 shadow-soft sm:p-10">
+                <div className="flex size-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-500">
+                  <span className="material-symbols-outlined text-3xl">search_off</span>
+                </div>
+                <div className="mt-6 space-y-3">
+                  <h3 className="text-2xl font-bold tracking-tight text-slate-900">
+                    검색 결과가 없어요
+                  </h3>
+                  <p className="text-sm leading-7 text-slate-500">
+                    위치나 가게 이름을 다시 확인해 보세요.
+                  </p>
+                </div>
+              </div>
             )}
           </section>
         </div>
