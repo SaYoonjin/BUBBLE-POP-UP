@@ -1,4 +1,5 @@
 import CountdownTimer from "../common/CountdownTimer";
+import { formatMoneyUnit } from "../../utils/formatMoneyUnit";
 
 type CongestionLevel = "very_crowded" | "crowded" | "normal" | "relaxed" | "very_relaxed";
 
@@ -24,63 +25,80 @@ const congestionMap: Record<CongestionLevel, { label: string; color: string }> =
 };
 
 export default function PlayHeader({
-  location, storeName, menuName, day, remainingSeconds, gameTime, congestion, guests, stock, balance,
+  location,
+  storeName,
+  menuName,
+  day,
+  remainingSeconds,
+  gameTime,
+  congestion,
+  guests,
+  stock,
+  balance,
 }: PlayHeaderProps) {
-  const cong = congestionMap[congestion];
+  const congestionInfo = congestionMap[congestion];
+  const formattedBalance = formatMoneyUnit(balance);
 
   return (
-    <header className="h-16 px-5 flex items-center justify-between glass-panel sticky top-0 z-50 shadow-sm border-b border-white/40">
-      {/* Left: Store info */}
+    <header className="sticky top-0 z-50 flex h-16 items-center justify-between border-b border-white/40 px-5 shadow-sm glass-panel">
       <div className="flex items-center gap-3 text-sm font-medium text-slate-600">
         <div className="flex items-center gap-1.5">
-          <span className="material-symbols-outlined text-primary text-[18px]">location_on</span>
+          <span className="material-symbols-outlined text-[18px] text-primary">location_on</span>
           <span className="font-bold text-slate-800">{location}</span>
         </div>
-        <div className="w-px h-3.5 bg-slate-300" />
+        <div className="h-3.5 w-px bg-slate-300" />
         <div className="flex items-center gap-1.5">
-          <span className="material-symbols-outlined text-primary text-[18px]">storefront</span>
+          <span className="material-symbols-outlined text-[18px] text-primary">storefront</span>
           <span className="font-bold text-slate-800">{storeName}</span>
         </div>
-        <div className="w-px h-3.5 bg-slate-300" />
+        <div className="h-3.5 w-px bg-slate-300" />
         <div className="flex items-center gap-1.5">
-          <span className="material-symbols-outlined text-primary text-[18px]">restaurant_menu</span>
+          <span className="material-symbols-outlined text-[18px] text-primary">restaurant_menu</span>
           <span className="font-bold text-slate-800">{menuName}</span>
         </div>
       </div>
 
-      {/* Center: Day + Timer + Game Clock */}
-      <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-2.5">
-        <div className="bg-primary/15 px-3.5 py-1.5 rounded-full border border-primary/20">
-          <span className="font-extrabold tracking-wider text-primary-dark text-sm">DAY {day}</span>
+      <div className="absolute left-1/2 flex -translate-x-1/2 items-center gap-2.5">
+        <div className="rounded-full border border-primary/20 bg-primary/15 px-3.5 py-1.5">
+          <span className="text-sm font-extrabold tracking-wider text-primary-dark">DAY {day}</span>
         </div>
         <CountdownTimer initialSeconds={remainingSeconds} label="영업 시간" />
-        <div className="flex items-center gap-1.5 bg-white px-3 py-1.5 rounded-full shadow-sm border border-slate-100">
-          <span className="material-symbols-outlined text-slate-400 text-[16px]">schedule</span>
-          <span className="font-countdown font-bold text-sm text-slate-700 tabular-nums">{gameTime}</span>
+        <div className="flex items-center gap-1.5 rounded-full border border-slate-100 bg-white px-3 py-1.5 shadow-sm">
+          <span className="material-symbols-outlined text-[16px] text-slate-400">schedule</span>
+          <span className="font-countdown text-sm font-bold tabular-nums text-slate-700">{gameTime}</span>
         </div>
       </div>
 
-      {/* Right: Stats */}
-      <div className="flex items-center gap-4 bg-white/60 px-4 py-1.5 rounded-xl backdrop-blur-sm shadow-sm border border-white/50">
-        <StatItem label="유동인구" icon="groups" value={cong.label} valueColor={cong.color} />
-        <div className="w-px h-7 bg-slate-200" />
+      <div className="flex items-center gap-4 rounded-xl border border-white/50 bg-white/60 px-4 py-1.5 shadow-sm backdrop-blur-sm">
+        <StatItem label="유동인구" icon="groups" value={congestionInfo.label} valueColor={congestionInfo.color} />
+        <div className="h-7 w-px bg-slate-200" />
         <StatItem label="손님" icon="person" value={String(guests)} />
-        <div className="w-px h-7 bg-slate-200" />
+        <div className="h-7 w-px bg-slate-200" />
         <StatItem label="재고" icon="inventory_2" value={String(stock)} />
-        <div className="w-px h-7 bg-slate-200" />
-        <StatItem label="잔액" icon="account_balance_wallet" value={balance.toLocaleString()} />
+        <div className="h-7 w-px bg-slate-200" />
+        <StatItem label="잔액" icon="account_balance_wallet" value={formattedBalance} />
       </div>
     </header>
   );
 }
 
-function StatItem({ label, icon, value, valueColor }: { label: string; icon: string; value: string; valueColor?: string }) {
+function StatItem({
+  label,
+  icon,
+  value,
+  valueColor,
+}: {
+  label: string;
+  icon: string;
+  value: string;
+  valueColor?: string;
+}) {
   return (
-    <div className="flex flex-col items-center min-w-[3rem]">
-      <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wide">{label}</span>
+    <div className="flex min-w-[3rem] flex-col items-center">
+      <span className="text-[10px] font-bold uppercase tracking-wide text-slate-400">{label}</span>
       <div className="flex items-center gap-1">
-        <span className="material-symbols-outlined text-slate-400 text-[14px]">{icon}</span>
-        <span className={`font-bold text-sm ${valueColor || "text-slate-800"}`}>{value}</span>
+        <span className="material-symbols-outlined text-[14px] text-slate-400">{icon}</span>
+        <span className={`text-sm font-bold ${valueColor || "text-slate-800"}`}>{value}</span>
       </div>
     </div>
   );

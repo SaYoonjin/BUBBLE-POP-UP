@@ -13,12 +13,12 @@ import MoveModal from "../components/play/modals/MoveModal";
 // TODO: Replace with real data from API / game state
 const MOCK = {
   location: "성수",
-  storeName: "윤진이의 까까이",
+  storeName: "까매진 솔히",
   menuName: "쿠키",
   congestion: "crowded" as const,
   guests: 24,
   stock: 85,
-  balance: 450,
+  balance: 4_500_000,
   gameTime: "14:30",
   originalPrice: 10000,
   menuItems: [
@@ -42,18 +42,25 @@ const mockAlerts: GameAlert[] = [
 ];
 
 const mockRankings: RankEntry[] = [
-  { rank: 1, name: "김사장", storeName: "홍대 쿠키팩토리", revenue: "₩12.4M" },
-  { rank: 2, name: "이대표", storeName: "강남 버블티", revenue: "₩11.8M" },
-  { rank: 3, name: "나", storeName: "성수 윤진이의 까까이", revenue: "₩10.2M", isMe: true },
-  { rank: 4, name: "박점장", storeName: "명동 핫도그", revenue: "₩9.7M" },
-  { rank: 5, name: "최사장", storeName: "잠실 붕어빵", revenue: "₩8.3M" },
+  { id: "kim-boss", name: "김사장", storeName: "쿠키팩토리", revenue: 12_400_000, roi: 42.8 },
+  { id: "lee-ceo", name: "이대표", storeName: "버블티하우스", revenue: 11_800_000, roi: 38.4 },
+  { id: "me", name: "나", storeName: "까매진 솔히", revenue: 10_200_000, roi: 34.2, isMe: true },
+  { id: "park-manager", name: "박점장", storeName: "핫도그랩", revenue: 9_700_000, roi: 27.5 },
+  { id: "choi-owner", name: "최사장", storeName: "붕어빵연구소", revenue: 830_000, roi: 18.7 },
 ];
+
+const promotionLabels: Record<string, string> = {
+  influencer: "인플루언서 홍보",
+  sns: "SNS 광고",
+  flyer: "전단지 배포",
+  referral: "지인 추천",
+};
 
 export default function PlayPage() {
   const { day } = useParams<{ day: string }>();
   const [activeModal, setActiveModal] = useState<ActionType | null>(null);
   const [usedActions, setUsedActions] = useState<Set<ActionType>>(new Set());
-  const [alerts] = useState<GameAlert[]>(mockAlerts);
+  const [alerts, setAlerts] = useState<GameAlert[]>(mockAlerts);
 
   const handleAction = (action: ActionType) => {
     setActiveModal(action);
@@ -61,8 +68,24 @@ export default function PlayPage() {
 
   const closeModal = () => setActiveModal(null);
 
-  const completeAction = (action: ActionType) => {
+  const pushActionAlert = (title: string, description: string) => {
+    setAlerts((prev) => [
+      {
+        id: Date.now(),
+        type: "action",
+        title,
+        description,
+        time: "방금 전",
+      },
+      ...prev,
+    ]);
+  };
+
+  const completeAction = (action: ActionType, alert?: { title: string; description: string }) => {
     setUsedActions((prev) => new Set(prev).add(action));
+    if (alert) {
+      pushActionAlert(alert.title, alert.description);
+    }
     closeModal();
   };
 
@@ -85,35 +108,76 @@ export default function PlayPage() {
         <div className="absolute inset-0 z-0 bg-transparent" />
         <div className="flex-1 relative z-0" />
 
-        {/* Left: Ranking */}
         <RankingSidebar rankings={mockRankings} />
-
-        {/* Right: Alerts */}
         <EventSidebar alerts={alerts} />
-
-        {/* Bottom: Actions */}
         <ActionBar onAction={handleAction} usedActions={usedActions} />
       </main>
 
       {activeModal === "discount" && (
-        <DiscountModal originalPrice={MOCK.originalPrice} onClose={closeModal}
-          onSubmit={(rate) => { console.log("할인율:", rate); completeAction("discount"); }} />
+        <DiscountModal
+          currentPrice={MOCK.originalPrice}
+          onClose={closeModal}
+          onSubmit={(rate) => {
+            console.log("할인율:", rate);
+            completeAction("discount", {
+              title: "할인 이벤트 적용됨",
+              description: `${rate}% 할인이 적용되었습니다.`,
+            });
+          }}
+        />
       )}
       {activeModal === "emergency" && (
-        <EmergencyOrderModal menuItems={MOCK.menuItems} onClose={closeModal}
-          onSubmit={(mi, qty) => { console.log("긴급발주:", MOCK.menuItems[mi].name, qty); completeAction("emergency"); }} />
+        <EmergencyOrderModal
+          menuItems={MOCK.menuItems}
+          onClose={closeModal}
+          onSubmit={(menuIndex, quantity) => {
+            console.log("긴급발주:", MOCK.menuItems[menuIndex].name, quantity);
+            completeAction("emergency", {
+              title: "긴급 발주 완료",
+              description: `${MOCK.menuItems[menuIndex].name} ${quantity}개를 긴급 발주했습니다.`,
+            });
+          }}
+        />
       )}
       {activeModal === "promotion" && (
-        <PromotionModal onClose={closeModal}
-          onSubmit={(id) => { console.log("홍보:", id); completeAction("promotion"); }} />
+        <PromotionModal
+          onClose={closeModal}
+          onSubmit={(promotionId) => {
+            console.log("홍보:", promotionId);
+            completeAction("promotion", {
+              title: "홍보 시작됨",
+              description: `${promotionLabels[promotionId] ?? "홍보"}를 시작했습니다.`,
+            });
+          }}
+        />
       )}
       {activeModal === "share" && (
-        <ShareModal currentStock={MOCK.stock} onClose={closeModal}
-          onSubmit={(qty) => { console.log("나눔:", qty); completeAction("share"); }} />
+        <ShareModal
+          currentStock={MOCK.stock}
+          onClose={closeModal}
+          onSubmit={(quantity) => {
+            console.log("나눔:", quantity);
+            completeAction("share", {
+              title: "나눔 이벤트 진행",
+              description: `재고 ${quantity}개 나눔을 시작했습니다.`,
+            });
+          }}
+        />
       )}
       {activeModal === "move" && (
-        <MoveModal regions={MOCK.moveRegions} onClose={closeModal}
-          onSubmit={(rid) => { console.log("이전:", rid); completeAction("move"); }} />
+        <MoveModal
+          regions={MOCK.moveRegions}
+          onClose={closeModal}
+          onSubmit={(regionId) => {
+            console.log("이전:", regionId);
+            const destination = MOCK.moveRegions.find((region) => region.id === regionId);
+
+            completeAction("move", {
+              title: "영업 지역 이전 예약",
+              description: `${destination?.name ?? "선택한 지역"}으로 다음 영업부터 이동합니다.`,
+            });
+          }}
+        />
       )}
     </div>
   );
