@@ -119,10 +119,13 @@ const promotionLabels: Record<string, string> = {
   referral: "지인 소개",
 };
 
+const persistentActionTypes = new Set<ActionType>(["discount", "promotion", "share"]);
+
 export default function PlayPage() {
   const { day } = useParams<{ day: string }>();
   const [activeModal, setActiveModal] = useState<ActionType | null>(null);
   const [usedActions, setUsedActions] = useState<Set<ActionType>>(new Set());
+  const [activeEffects, setActiveEffects] = useState<Set<ActionType>>(new Set());
   const [alerts, setAlerts] = useState<GameAlert[]>(mockAlerts);
   const [balance, setBalance] = useState(MOCK.balance);
   const [stock, setStock] = useState(MOCK.stock);
@@ -160,6 +163,10 @@ export default function PlayPage() {
     },
   ) => {
     setUsedActions((prev) => new Set(prev).add(action));
+
+    if (persistentActionTypes.has(action)) {
+      setActiveEffects((prev) => new Set(prev).add(action));
+    }
 
     const cost = options?.cost;
     const stockDelta = options?.stockDelta;
@@ -200,7 +207,7 @@ export default function PlayPage() {
 
         <RankingSidebar rankings={mockRankings} />
         <EventSidebar alerts={alerts} />
-        <ActionBar onAction={handleAction} usedActions={usedActions} />
+        <ActionBar onAction={handleAction} usedActions={usedActions} activeEffects={activeEffects} />
       </main>
 
       {activeModal === "discount" && (
