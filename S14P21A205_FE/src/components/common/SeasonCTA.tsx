@@ -1,14 +1,35 @@
 import { Link } from "react-router-dom";
+import { useEffect, useState } from "react";
 
 interface SeasonCTAProps {
   seasonNumber: number;
   day: number;
-  countdown: string;
-  bestRank?: number;
+  deadlineTime: Date;
   linkTo: string;
 }
 
-export default function SeasonCTA({ seasonNumber, day, countdown, bestRank, linkTo }: SeasonCTAProps) {
+function formatTime(totalSeconds: number): string {
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = totalSeconds % 60;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return h > 0 ? `${pad(h)}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
+}
+
+export default function SeasonCTA({ seasonNumber, day, deadlineTime, linkTo }: SeasonCTAProps) {
+  const [remaining, setRemaining] = useState(() =>
+    Math.max(0, Math.floor((deadlineTime.getTime() - Date.now()) / 1000))
+  );
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const diff = Math.max(0, Math.floor((deadlineTime.getTime() - Date.now()) / 1000));
+      setRemaining(diff);
+      if (diff <= 0) clearInterval(timer);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [deadlineTime]);
+
   return (
     <div className="bg-white rounded-[24px] shadow-soft p-8 w-full flex flex-col min-h-[400px] relative overflow-hidden justify-between">
       <div className="space-y-6 relative z-10">
@@ -20,9 +41,9 @@ export default function SeasonCTA({ seasonNumber, day, countdown, bestRank, link
         </div>
         <h2 className="text-2xl md:text-3xl font-bold">{seasonNumber}번째 시즌</h2>
         <div className="flex flex-col mt-4">
-          <span className="text-sm text-gray-500 font-medium mb-1">오늘 마감까지</span>
+          <span className="text-sm text-gray-500 font-medium mb-1">마감까지</span>
           <div className="text-[64px] font-bold font-mono leading-none tracking-tight tabular-nums">
-            {countdown}
+            {formatTime(remaining)}
           </div>
         </div>
       </div>
@@ -34,9 +55,6 @@ export default function SeasonCTA({ seasonNumber, day, countdown, bestRank, link
           게임 참여하기
           <span className="material-symbols-outlined text-[20px] font-bold group-hover:translate-x-1 transition-transform">arrow_forward</span>
         </Link>
-        {bestRank && (
-          <p className="text-center text-gray-500 text-sm mt-4 font-medium">최근 최고 순위: {bestRank}위</p>
-        )}
       </div>
       <div className="absolute -right-10 -bottom-10 w-64 h-64 bg-gradient-to-br from-primary/10 to-transparent rounded-full opacity-50 pointer-events-none" />
     </div>
