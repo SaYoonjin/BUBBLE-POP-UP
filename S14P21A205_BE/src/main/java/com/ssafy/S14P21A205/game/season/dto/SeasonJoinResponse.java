@@ -1,10 +1,14 @@
 package com.ssafy.S14P21A205.game.season.dto;
 
-import io.swagger.v3.oas.annotations.media.Schema;
-
 public record SeasonJoinResponse(
         Long storeId,
         String storeName,
-        Integer balance
+        Integer balance,
+        Integer playableFromDay,
+        Boolean waitingForPlayableDay
 ) {
+    public SeasonJoinResponse(Long storeId, String storeName, Integer balance) {
+        this(storeId, storeName, balance, 1, false);
+    }
 }
+

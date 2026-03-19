@@ -33,6 +33,7 @@ const config: Config = {
         display: ["Spline Sans", "Noto Sans KR", "sans-serif"],
         body: ["Spline Sans", "Noto Sans KR", "sans-serif"],
         mono: ["ui-monospace", "SFMono-Regular", "monospace"],
+        countdown: ["Space Grotesk", "sans-serif"],
         // Cozy
         "cozy-display": ["Be Vietnam Pro", "sans-serif"],
         "cozy-serif": ["Playfair Display", "serif"],

@@ -25,11 +25,11 @@ public class RandomEvent {
     private Long id;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "event_category", nullable = false, length = 10)
+    @Column(name = "event_category", nullable = false, length = 50)
     private EventCategory eventCategory;
 
-    @Column(name = "event_type", nullable = false, length = 50)
-    private String eventType;
+    @Column(name = "event_type", nullable = false, length = 255)
+    private String eventName;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "start_time", nullable = false, length = 20)
@@ -50,4 +50,48 @@ public class RandomEvent {
 
     @Column(name = "capital_flat", nullable = false)
     private Integer capitalFlat;
+
+    public static RandomEvent create(
+            EventCategory eventCategory,
+            String eventName,
+            EventStartTime startTime,
+            EventEndTime endTime,
+            BigDecimal populationRate,
+            BigDecimal stockFlat,
+            BigDecimal costRate,
+            Integer capitalFlat
+    ) {
+        RandomEvent randomEvent = new RandomEvent();
+        randomEvent.sync(
+                eventCategory,
+                eventName,
+                startTime,
+                endTime,
+                populationRate,
+                stockFlat,
+                costRate,
+                capitalFlat
+        );
+        return randomEvent;
+    }
+
+    public void sync(
+            EventCategory eventCategory,
+            String eventName,
+            EventStartTime startTime,
+            EventEndTime endTime,
+            BigDecimal populationRate,
+            BigDecimal stockFlat,
+            BigDecimal costRate,
+            Integer capitalFlat
+    ) {
+        this.eventCategory = eventCategory;
+        this.eventName = eventName;
+        this.startTime = startTime;
+        this.endTime = endTime;
+        this.populationRate = populationRate;
+        this.stockFlat = stockFlat;
+        this.costRate = costRate;
+        this.capitalFlat = capitalFlat;
+    }
 }

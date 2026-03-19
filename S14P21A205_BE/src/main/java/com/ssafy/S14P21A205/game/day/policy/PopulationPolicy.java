@@ -36,19 +36,25 @@ public class PopulationPolicy {
     private final TrafficRepository trafficRepository;
     private final SeasonTimelineService seasonTimelineService = new SeasonTimelineService();
 
-    public DaySchedule buildDaySchedule(Long locationId, int day) {
-        List<Population> populations = populationRepository.findByLocationIdOrderByDateAsc(locationId);
-        List<Traffic> traffics = trafficRepository.findByLocationIdOrderByDateAsc(locationId);
+    public DaySchedule buildDaySchedule(Long locationId, int day, BigDecimal weatherMultiplier) {
+        List<Population> populations = resolveDayRows(
+                populationRepository.findByLocationIdOrderByDateAsc(locationId),
+                Population::getDate,
+                day
+        );
+        List<Traffic> traffics = resolveDayRows(
+                trafficRepository.findByLocationIdOrderByDateAsc(locationId),
+                Traffic::getDate,
+                day
+        );
         if (populations.isEmpty() || traffics.isEmpty()) {
             throw new BaseException(ErrorCode.RESOURCE_NOT_FOUND);
         }
 
-        List<Population> selectedPopulations = selectRowsForDay(populations, Population::getDate, day);
-        List<Traffic> selectedTraffics = selectRowsForDay(traffics, Traffic::getDate, day);
         BigDecimal trafficBaseline = averageTrafficStatus(traffics);
 
         Map<Integer, Integer> populationByHour = new LinkedHashMap<>();
-        for (Population population : selectedPopulations) {
+        for (Population population : populations) {
             int hour = population.getDate().getHour();
             if (hour >= BUSINESS_OPEN_HOUR && hour < BUSINESS_CLOSE_HOUR) {
                 populationByHour.put(hour, population.getFloatingPopulation());
@@ -56,7 +62,7 @@ public class PopulationPolicy {
         }
 
         Map<Integer, Integer> trafficByHour = new LinkedHashMap<>();
-        for (Traffic traffic : selectedTraffics) {
+        for (Traffic traffic : traffics) {
             int hour = traffic.getDate().getHour();
             if (hour >= BUSINESS_OPEN_HOUR && hour < BUSINESS_CLOSE_HOUR) {
                 trafficByHour.put(hour, traffic.getTrafficStatus().getValue());
@@ -65,15 +71,26 @@ public class PopulationPolicy {
 
         LinkedHashMap<String, GameDayStartResponse.HourlySchedule> hourlySchedule = new LinkedHashMap<>();
         List<BigDecimal> hourlyMultipliers = new ArrayList<>();
+        BigDecimal resolvedWeatherMultiplier = normalizeRate(weatherMultiplier);
         for (int hour = BUSINESS_OPEN_HOUR; hour < BUSINESS_CLOSE_HOUR; hour++) {
             BigDecimal trafficMultiplier = trafficByHour.containsKey(hour)
                     ? ratio(trafficByHour.get(hour), trafficBaseline)
                     : DECIMAL_ONE;
+            BigDecimal eventMultiplier = DECIMAL_ONE;
+            int population = populationByHour.getOrDefault(hour, 0);
+            int effectivePopulation = BigDecimal.valueOf(population)
+                    .multiply(resolvedWeatherMultiplier)
+                    .multiply(normalizeRate(trafficMultiplier))
+                    .multiply(eventMultiplier)
+                    .setScale(0, RoundingMode.HALF_UP)
+                    .intValue();
             hourlySchedule.put(
                     String.valueOf(hour),
                     new GameDayStartResponse.HourlySchedule(
-                            populationByHour.getOrDefault(hour, 0),
-                            trafficMultiplier
+                            population,
+                            trafficMultiplier,
+                            eventMultiplier,
+                            effectivePopulation
                     )
             );
             hourlyMultipliers.add(trafficMultiplier);
@@ -106,26 +123,16 @@ public class PopulationPolicy {
         );
         GameDayStartResponse.HourlySchedule schedule = schedules.get(scheduleIndex);
 
-        BigDecimal population = BigDecimal.valueOf(schedule.population())
+        BigDecimal populationBase = schedule.effectivePopulation() != null
+                ? BigDecimal.valueOf(schedule.effectivePopulation())
+                : BigDecimal.valueOf(schedule.population())
                 .multiply(normalizeRate(startResponse.weatherMultiplier()))
                 .multiply(normalizeRate(schedule.trafficMultiplier()))
+                .multiply(normalizeRate(schedule.eventMultiplier()));
+
+        BigDecimal population = populationBase
                 .multiply(normalizeRate(populationEventMultiplier));
         return population.setScale(0, RoundingMode.HALF_UP).intValue();
-    }
-
-    private <T> List<T> selectRowsForDay(List<T> rows, Function<T, LocalDateTime> dateExtractor, int day) {
-        Map<LocalDate, List<T>> rowsByDate = new LinkedHashMap<>();
-        for (T row : rows) {
-            rowsByDate.computeIfAbsent(dateExtractor.apply(row).toLocalDate(), key -> new ArrayList<>()).add(row);
-        }
-
-        List<List<T>> groupedRows = new ArrayList<>(rowsByDate.values());
-        if (groupedRows.isEmpty()) {
-            throw new BaseException(ErrorCode.RESOURCE_NOT_FOUND);
-        }
-
-        int index = Math.floorMod(day - 1, groupedRows.size());
-        return groupedRows.get(index);
     }
 
     private BigDecimal averageTrafficStatus(List<Traffic> traffics) {
@@ -134,6 +141,23 @@ public class PopulationPolicy {
             total = total.add(BigDecimal.valueOf(traffic.getTrafficStatus().getValue()));
         }
         return total.divide(BigDecimal.valueOf(traffics.size()), 6, RoundingMode.HALF_UP);
+    }
+
+    private <T> List<T> resolveDayRows(List<T> rows, Function<T, LocalDateTime> dateExtractor, int day) {
+        if (rows.isEmpty() || day < 1) {
+            return List.of();
+        }
+
+        Map<LocalDate, List<T>> rowsByDate = new LinkedHashMap<>();
+        for (T row : rows) {
+            rowsByDate.computeIfAbsent(dateExtractor.apply(row).toLocalDate(), key -> new ArrayList<>()).add(row);
+        }
+
+        List<List<T>> groupedRows = new ArrayList<>(rowsByDate.values());
+        if (groupedRows.size() < day) {
+            return List.of();
+        }
+        return groupedRows.get(day - 1);
     }
 
     private BigDecimal ratio(int trafficStatus, BigDecimal baseline) {

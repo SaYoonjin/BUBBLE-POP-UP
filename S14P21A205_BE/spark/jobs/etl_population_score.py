@@ -15,6 +15,7 @@ if len(sys.argv) < 2:
     sys.exit(1)
 
 start_date_str = sys.argv[1]
+batch_key = sys.argv[2] if len(sys.argv) >= 3 else f"spark-{start_date_str}"
 start_date = datetime.strptime(start_date_str, "%Y%m%d")
 last_date = start_date + timedelta(days=6)
 date_range = [(start_date + timedelta(days=i)).strftime("%Y%m%d") for i in range(7)]
@@ -126,6 +127,7 @@ df_population = df_final.select(
     col("location_id"),
     col("date"),
     col("floating_population"),
+    lit(batch_key).alias("source_batch_key"),
 ).filter(
     col("location_id").isNotNull() & col("date").isNotNull()
 )

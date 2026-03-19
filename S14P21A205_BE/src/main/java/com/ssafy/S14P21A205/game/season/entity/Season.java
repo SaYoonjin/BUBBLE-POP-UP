@@ -33,6 +33,9 @@ public class Season {
     @Column(name = "current_day")
     private Integer currentDay;
 
+    @Column(name = "source_batch_key", length = 64)
+    private String sourceBatchKey;
+
     @Column(name = "total_days", nullable = false)
     private Integer totalDays;
 
@@ -49,4 +52,48 @@ public class Season {
     @UpdateTimestamp
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
+
+    private Season(SeasonStatus status, Integer currentDay, Integer totalDays, LocalDateTime startTime, LocalDateTime endTime) {
+        this.status = status;
+        this.currentDay = currentDay;
+        this.totalDays = totalDays;
+        this.startTime = startTime;
+        this.endTime = endTime;
+    }
+
+    public static Season createScheduled(int totalDays, LocalDateTime startTime, LocalDateTime endTime) {
+        return new Season(SeasonStatus.SCHEDULED, 1, totalDays, startTime, endTime);
+    }
+
+    public void start() {
+        start(null);
+    }
+
+    public void start(String sourceBatchKey) {
+        this.status = SeasonStatus.IN_PROGRESS;
+        this.currentDay = 1;
+        this.sourceBatchKey = sourceBatchKey;
+    }
+
+    public void advanceToDay(int nextDay) {
+        this.currentDay = nextDay;
+    }
+
+    public void finish() {
+        this.status = SeasonStatus.FINISHED;
+        if (totalDays != null) {
+            this.currentDay = totalDays;
+        }
+    }
+
+    public void syncCurrentDay(Integer currentDay) {
+        if (currentDay == null) {
+            return;
+        }
+        this.currentDay = currentDay;
+    }
+
+    public void updateEndTime(LocalDateTime endTime) {
+        this.endTime = endTime;
+    }
 }

@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import ActionBalanceSummary from "../../common/ActionBalanceSummary";
 import ModalWrapper from "./ModalWrapper";
 
 interface PromotionOption {
@@ -6,73 +7,159 @@ interface PromotionOption {
   icon: string;
   name: string;
   price: number;
+  multiplier: number;
+}
+
+interface PromotionModalProps {
+  currentBalance: number;
+  onClose: () => void;
+  onSubmit: (payload: { promotionId: string; cost: number }) => void;
 }
 
 const promotionOptions: PromotionOption[] = [
-  { id: "influencer", icon: "🤳", name: "인플루언서", price: 50000 },
-  { id: "sns", icon: "📱", name: "SNS 광고", price: 30000 },
-  { id: "flyer", icon: "📰", name: "전단지 배포", price: 10000 },
-  { id: "referral", icon: "🗣️", name: "지인 추천", price: 0 },
+  { id: "influencer", icon: "📣", name: "인플루언서 홍보", price: 50_000, multiplier: 1.2 },
+  { id: "sns", icon: "📱", name: "SNS 홍보", price: 30_000, multiplier: 1.15 },
+  { id: "flyer", icon: "📰", name: "전단지 배포", price: 10_000, multiplier: 1.1 },
+  { id: "referral", icon: "🤝", name: "지인 추천", price: 0, multiplier: 1.05 },
 ];
 
-interface PromotionModalProps {
-  onClose: () => void;
-  onSubmit: (promotionId: string) => void;
+function formatWon(amount: number) {
+  return amount > 0 ? `₩${amount.toLocaleString()}` : "무료";
 }
 
-export default function PromotionModal({ onClose, onSubmit }: PromotionModalProps) {
+export default function PromotionModal({
+  currentBalance,
+  onClose,
+  onSubmit,
+}: PromotionModalProps) {
   const [selected, setSelected] = useState<string>("influencer");
+  const selectedOption = useMemo(
+    () => promotionOptions.find((option) => option.id === selected) ?? promotionOptions[0],
+    [selected],
+  );
+  const canAfford = currentBalance >= selectedOption.price;
 
   return (
     <ModalWrapper onClose={onClose}>
-      <div className="px-8 pt-8 pb-4 text-center">
-        <h3 className="text-2xl font-bold text-slate-800 flex items-center justify-center gap-2">
-          <span className="text-3xl">📢</span> 홍보하기
+      <style>{`
+        @keyframes promotionSelect {
+          0% {
+            transform: translateY(4px) scale(0.985);
+            opacity: 0.9;
+          }
+          100% {
+            transform: translateY(0) scale(1);
+            opacity: 1;
+          }
+        }
+
+        @keyframes promotionCheck {
+          0% {
+            transform: scale(0.7);
+            opacity: 0;
+          }
+          100% {
+            transform: scale(1);
+            opacity: 1;
+          }
+        }
+      `}</style>
+      <div className="px-8 pb-4 pt-8 text-center">
+        <h3 className="flex items-center justify-center gap-2 text-2xl font-bold text-slate-800">
+          <span className="text-3xl">📢</span>
+          홍보하기
         </h3>
-        <p className="text-sm text-slate-500 mt-2">다양한 채널을 통해 가게를 알리세요.</p>
+        <p className="mt-2 text-sm text-slate-500">
+          홍보 채널별 비용과 유입 효과를 비교해서 선택해보세요.
+        </p>
       </div>
 
-      <div className="px-6 py-2">
-        <div className="grid grid-cols-2 gap-3 mb-6">
-          {promotionOptions.map((opt) => (
-            <button
-              key={opt.id}
-              onClick={() => setSelected(opt.id)}
-              className={`relative p-4 rounded-2xl border-2 text-left transition-all hover:shadow-md ${
-                selected === opt.id
-                  ? "border-primary bg-primary/5"
-                  : "border-slate-200 bg-white hover:border-primary/50"
-              }`}
-            >
-              {selected === opt.id && (
-                <div className="absolute top-3 right-3 text-primary">
-                  <span className="material-symbols-outlined text-[20px]">check_circle</span>
+      <div className="space-y-4 px-6 py-2">
+        <div className="space-y-2">
+          {promotionOptions.map((option) => {
+            const isSelected = selected === option.id;
+
+            return (
+              <button
+                key={option.id}
+                type="button"
+                onClick={() => setSelected(option.id)}
+                className={`relative flex w-full items-center justify-between rounded-2xl border px-4 py-4 text-left transition-all ${
+                  isSelected
+                    ? "border-primary bg-primary/5 shadow-md ring-1 ring-primary/10"
+                    : "border-slate-200 bg-white hover:border-primary/40 hover:bg-slate-50"
+                }`}
+                style={
+                  isSelected
+                    ? { animation: "promotionSelect 0.22s ease-out" }
+                    : undefined
+                }
+              >
+                <div className="flex min-w-0 items-center gap-3">
+                  <div
+                    className={`flex size-12 shrink-0 items-center justify-center rounded-2xl text-2xl ${
+                      isSelected ? "bg-white shadow-sm" : "bg-slate-50"
+                    }`}
+                  >
+                    {option.icon}
+                  </div>
+                  <div className="min-w-0">
+                    <p
+                      className={`truncate text-sm ${
+                        isSelected ? "font-bold text-slate-900" : "font-medium text-slate-700"
+                      }`}
+                    >
+                      {option.name}
+                    </p>
+                    <p className="mt-1 text-xs text-slate-400">
+                      {formatWon(option.price)}
+                    </p>
+                  </div>
                 </div>
-              )}
-              <div className="text-2xl mb-2">{opt.icon}</div>
-              <div className="font-bold text-slate-800 text-sm">{opt.name}</div>
-              <div className={`text-xs font-semibold mt-1 ${selected === opt.id ? "text-primary" : "text-slate-500"}`}>
-                {opt.price > 0 ? `₩${opt.price.toLocaleString()}` : "무료"}
-              </div>
-            </button>
-          ))}
+
+                <div className="ml-4 flex shrink-0 items-center gap-3">
+                  <div className="text-right">
+                    <p className="text-[11px] font-medium text-slate-400">유입 배수</p>
+                    <p
+                      className={`mt-1 text-sm font-bold ${
+                        isSelected ? "text-primary-dark" : "text-slate-700"
+                      }`}
+                    >
+                      x{option.multiplier.toFixed(2)}
+                    </p>
+                  </div>
+                  {isSelected && (
+                    <span
+                      className="material-symbols-outlined text-[20px] text-primary"
+                      style={{ animation: "promotionCheck 0.2s ease-out" }}
+                    >
+                      check_circle
+                    </span>
+                  )}
+                </div>
+              </button>
+            );
+          })}
         </div>
 
-        <div className="bg-slate-50 rounded-xl p-4 mb-6 border border-slate-100">
-          <div className="flex items-center gap-2 mb-2">
-            <span className="material-symbols-outlined text-primary text-sm">auto_awesome</span>
-            <span className="text-xs font-bold text-slate-700">기대 효과</span>
-          </div>
-          <p className="text-sm text-slate-600 leading-relaxed">
-            평판 상승 및 <span className="text-primary font-bold">유동인구 보너스 +15%</span>
-          </p>
-        </div>
+        <ActionBalanceSummary
+          currentBalance={currentBalance}
+          actionCost={selectedOption.price}
+          costLabel="이번 홍보 비용"
+        />
       </div>
 
-      <div className="px-6 pb-8">
+      <div className="px-6 pb-8 pt-2">
         <button
-          onClick={() => onSubmit(selected)}
-          className="w-full bg-primary hover:bg-primary-dark text-white font-bold py-4 rounded-xl shadow-lg shadow-primary/30 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+          type="button"
+          onClick={() =>
+            onSubmit({
+              promotionId: selected,
+              cost: selectedOption.price,
+            })
+          }
+          disabled={!canAfford}
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-4 font-bold text-white shadow-lg shadow-primary/30 transition-all active:scale-[0.98] hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-40"
         >
           <span>홍보 시작하기</span>
           <span className="material-symbols-outlined text-sm">arrow_forward</span>

@@ -2,14 +2,15 @@ package com.ssafy.S14P21A205.game.season.service;
 
 import com.ssafy.S14P21A205.exception.BaseException;
 import com.ssafy.S14P21A205.exception.ErrorCode;
-import com.ssafy.S14P21A205.game.season.dto.CurrentSeasonMyRankingResponse;
 import com.ssafy.S14P21A205.game.season.dto.CurrentSeasonRankingItemResponse;
 import com.ssafy.S14P21A205.game.season.dto.CurrentSeasonRankingsResponse;
 import com.ssafy.S14P21A205.game.season.dto.CurrentSeasonTopRankingItemResponse;
 import com.ssafy.S14P21A205.game.season.dto.CurrentSeasonTopRankingsResponse;
+import com.ssafy.S14P21A205.game.season.entity.DailyReport;
 import com.ssafy.S14P21A205.game.season.entity.Season;
 import com.ssafy.S14P21A205.game.season.entity.SeasonRankingRecord;
 import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
+import com.ssafy.S14P21A205.game.season.repository.DailyReportRepository;
 import com.ssafy.S14P21A205.game.season.repository.SeasonRankingRecordRepository;
 import com.ssafy.S14P21A205.game.season.repository.SeasonRankingRedisRepository;
 import com.ssafy.S14P21A205.game.season.repository.SeasonRepository;
@@ -17,7 +18,11 @@ import com.ssafy.S14P21A205.user.service.UserService;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
@@ -31,6 +36,7 @@ public class SeasonRankingService {
     private final SeasonRankingRedisRepository seasonRankingRedisRepository;
     private final SeasonRepository seasonRepository;
     private final SeasonRankingRecordRepository seasonRankingRecordRepository;
+    private final DailyReportRepository dailyReportRepository;
     private final UserService userService;
 
     public CurrentSeasonTopRankingsResponse getCurrentTopRankings() {
@@ -57,21 +63,23 @@ public class SeasonRankingService {
     private CurrentSeasonRankingsResponse getCurrentFinalRankings(Integer userId) {
         Season season = seasonRepository.findFirstByStatusOrderByIdDesc(SeasonStatus.FINISHED)
                 .orElseThrow(() -> new BaseException(ErrorCode.RESOURCE_NOT_FOUND));
+        Map<Long, Integer> bankruptcyDays = bankruptcyDays(season);
 
-        List<CurrentSeasonRankingItemResponse> allRankings = seasonRankingRecordRepository
+        List<RankingView> allRankings = seasonRankingRecordRepository
                 .findByStore_Season_IdOrderByFinalRankAsc(season.getId())
                 .stream()
-                .map(this::toRankingItem)
+                .map(record -> toRankingView(record, bankruptcyDays.get(record.getStore().getId())))
+                .sorted(rankingViewComparator())
                 .toList();
         if (allRankings.isEmpty()) {
             throw new BaseException(ErrorCode.RESOURCE_NOT_FOUND);
         }
 
-        CurrentSeasonRankingItemResponse myRanking = findMyRanking(userId, allRankings);
+        List<CurrentSeasonRankingItemResponse> rankings = extractDisplayRankings(allRankings);
         return new CurrentSeasonRankingsResponse(
                 season.getId(),
-                extractTopTenRanks(allRankings),
-                toMyRankingResponse(myRanking)
+                rankings,
+                extractMyRankings(userId, allRankings)
         );
     }
 
@@ -93,9 +101,9 @@ public class SeasonRankingService {
         return new CurrentSeasonTopRankingsResponse(seasonId, List.of(), null);
     }
 
-    private CurrentSeasonRankingItemResponse toRankingItem(SeasonRankingRecord record) {
-        return new CurrentSeasonRankingItemResponse(
-                record.getFinalRank(),
+    private RankingView toRankingView(SeasonRankingRecord record, Integer bankruptcyDay) {
+        CurrentSeasonRankingItemResponse item = new CurrentSeasonRankingItemResponse(
+                Boolean.TRUE.equals(record.getIsBankruptcy()) ? null : record.getFinalRank(),
                 record.getStore().getUser().getId(),
                 record.getStore().getUser().getNickname(),
                 record.getStore().getStoreName(),
@@ -103,37 +111,110 @@ public class SeasonRankingService {
                 record.getStore().getMenu().getMenuName(),
                 normalizeRoi(record.getRoi()),
                 valueOf(record.getTotalRevenue()),
-                record.getRewardPoints()
+                record.getRewardPoints(),
+                record.getIsBankruptcy()
+        );
+        return new RankingView(
+                record.getStore().getId(),
+                item.userId(),
+                Boolean.TRUE.equals(record.getIsBankruptcy()),
+                bankruptcyDay,
+                item.rank(),
+                item
         );
     }
 
-    private List<CurrentSeasonRankingItemResponse> extractTopTenRanks(List<CurrentSeasonRankingItemResponse> allRankings) {
-        return allRankings.stream()
+    private List<CurrentSeasonRankingItemResponse> extractDisplayRankings(List<RankingView> allRankings) {
+        List<CurrentSeasonRankingItemResponse> topRankings = allRankings.stream()
+                .filter(ranking -> !ranking.bankrupt())
+                .map(RankingView::item)
                 .filter(ranking -> ranking.rank() != null && ranking.rank() <= 10)
+                .toList();
+
+        if (allRankings.size() >= 10) {
+            return topRankings;
+        }
+
+        List<CurrentSeasonRankingItemResponse> bankruptRankings = allRankings.stream()
+                .filter(RankingView::bankrupt)
+                .map(RankingView::item)
+                .toList();
+
+        if (bankruptRankings.isEmpty()) {
+            return topRankings;
+        }
+
+        return java.util.stream.Stream.concat(topRankings.stream(), bankruptRankings.stream())
                 .toList();
     }
 
-    private CurrentSeasonRankingItemResponse findMyRanking(
+    private List<CurrentSeasonRankingItemResponse> extractMyRankings(
             Integer userId,
-            List<CurrentSeasonRankingItemResponse> allRankings
+            List<RankingView> allRankings
     ) {
+        Set<Long> displayedStoreIds = resolveDisplayedStoreIds(allRankings);
+
         return allRankings.stream()
                 .filter(ranking -> ranking.userId().equals(userId))
-                .findFirst()
-                .orElseThrow(() -> new BaseException(ErrorCode.RESOURCE_NOT_FOUND));
+                .filter(ranking -> !displayedStoreIds.contains(ranking.storeId()))
+                .map(RankingView::item)
+                .toList();
     }
 
-    private CurrentSeasonMyRankingResponse toMyRankingResponse(CurrentSeasonRankingItemResponse ranking) {
-        return new CurrentSeasonMyRankingResponse(
-                ranking.rank(),
-                ranking.nickname(),
-                ranking.storeName(),
-                ranking.locationName(),
-                ranking.menuName(),
-                ranking.roi(),
-                ranking.totalRevenue(),
-                ranking.rewardPoints()
-        );
+    private Set<Long> resolveDisplayedStoreIds(List<RankingView> allRankings) {
+        if (allRankings.size() < 10) {
+            return allRankings.stream()
+                    .map(RankingView::storeId)
+                    .collect(java.util.stream.Collectors.toSet());
+        }
+
+        Set<Long> displayedStoreIds = new HashSet<>();
+        for (RankingView ranking : allRankings) {
+            if (!ranking.bankrupt() && ranking.rank() != null && ranking.rank() <= 10) {
+                displayedStoreIds.add(ranking.storeId());
+            }
+        }
+        return displayedStoreIds;
+    }
+
+    private Comparator<RankingView> rankingViewComparator() {
+        return (left, right) -> {
+            if (left.bankrupt() != right.bankrupt()) {
+                return left.bankrupt() ? 1 : -1;
+            }
+            if (!left.bankrupt()) {
+                int rankCompare = Comparator.nullsLast(Integer::compareTo).compare(left.rank(), right.rank());
+                if (rankCompare != 0) {
+                    return rankCompare;
+                }
+                int userCompare = left.userId().compareTo(right.userId());
+                if (userCompare != 0) {
+                    return userCompare;
+                }
+                return left.storeId().compareTo(right.storeId());
+            }
+
+            int bankruptcyDayCompare = Comparator.nullsLast(Integer::compareTo)
+                    .compare(left.bankruptcyDay(), right.bankruptcyDay());
+            if (bankruptcyDayCompare != 0) {
+                return bankruptcyDayCompare;
+            }
+            return left.storeId().compareTo(right.storeId());
+        };
+    }
+
+    private Map<Long, Integer> bankruptcyDays(Season season) {
+        int dayUpperBound = season.getTotalDays() == null ? Integer.MAX_VALUE : season.getTotalDays() + 1;
+        Map<Long, Integer> bankruptcyDays = new HashMap<>();
+        List<DailyReport> reports = dailyReportRepository
+                .findByStore_Season_IdAndDayLessThanOrderByStore_IdAscDayAsc(season.getId(), dayUpperBound);
+        for (DailyReport report : reports) {
+            if (!Boolean.TRUE.equals(report.getIsBankrupt())) {
+                continue;
+            }
+            bankruptcyDays.putIfAbsent(report.getStore().getId(), report.getDay());
+        }
+        return bankruptcyDays;
     }
 
     private BigDecimal normalizeRoi(Float roi) {
@@ -145,5 +226,15 @@ public class SeasonRankingService {
 
     private long valueOf(Integer value) {
         return value == null ? 0L : value.longValue();
+    }
+
+    private record RankingView(
+            Long storeId,
+            Integer userId,
+            boolean bankrupt,
+            Integer bankruptcyDay,
+            Integer rank,
+            CurrentSeasonRankingItemResponse item
+    ) {
     }
 }

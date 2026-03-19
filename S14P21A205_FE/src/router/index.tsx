@@ -1,6 +1,6 @@
 import { createBrowserRouter } from "react-router-dom";
-import PrivateRoute from "./PrivateRoute";
-import LobbyPage from "../pages/LobbyPage";
+//import PrivateRoute from "./PrivateRoute";
+import HomePage from "../pages/HomePage";
 import LoginPage from "../pages/LoginPage";
 import MyPage from "../pages/MyPage";
 import LocationSelectPage from "../pages/LocationSelectPage";
@@ -10,7 +10,6 @@ import PlayPage from "../pages/PlayPage";
 import ReportPage from "../pages/ReportPage";
 import RankingPage from "../pages/RankingPage";
 import ComponentTestPage from "../pages/ComponentTestPage";
-import CozyTestPage from "../pages/CozyTestPage";
 import NewsPage from "../pages/NewsPage";
 import CozyPrepPage from "../pages/CozyPrepPage";
 import DashboardPage from "../pages/DashboardPage";
@@ -21,21 +20,15 @@ import CozyMyPage from "../pages/CozyMyPage";
 import AuthCallbackPage from "../pages/AuthCallbackPage";
 
 const router = createBrowserRouter([
-  { path: "/", element: <LobbyPage /> },
+  { path: "/", element: <HomePage /> },
   { path: "/login", element: <LoginPage /> },
   { path: "/auth/callback", element: <AuthCallbackPage /> },
   { path: "/test", element: <ComponentTestPage /> },
-  { path: "/test/cozy", element: <CozyTestPage /> },
   { path: "/news", element: <NewsPage /> },
-  { path: "/cozy", element: <CozyLobbyPage /> },
-  { path: "/cozy/login", element: <CozyLoginPage /> },
-  { path: "/cozy/dashboard", element: <CozyDashboardPage /> },
-  { path: "/cozy/mypage", element: <CozyMyPage /> },
   { path: "/cozy/prep", element: <CozyPrepPage /> },
   {
-    element: <PrivateRoute />,
+    //element: <PrivateRoute />,
     children: [
-      { path: "/dashboard", element: <DashboardPage /> },
       { path: "/mypage", element: <MyPage /> },
       { path: "/game/setup/location", element: <LocationSelectPage /> },
       { path: "/game/setup/naming", element: <BrandNamingPage /> },

@@ -7,13 +7,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import com.ssafy.S14P21A205.game.season.dto.CurrentSeasonRankingItemResponse;
 import com.ssafy.S14P21A205.game.season.dto.CurrentSeasonRankingsResponse;
 import com.ssafy.S14P21A205.game.season.dto.CurrentSeasonTopRankingItemResponse;
 import com.ssafy.S14P21A205.game.season.dto.CurrentSeasonTopRankingsResponse;
+import com.ssafy.S14P21A205.game.season.entity.DailyReport;
 import com.ssafy.S14P21A205.game.season.entity.Season;
 import com.ssafy.S14P21A205.game.season.entity.SeasonRankingRecord;
 import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
+import com.ssafy.S14P21A205.game.season.repository.DailyReportRepository;
 import com.ssafy.S14P21A205.game.season.repository.SeasonRankingRecordRepository;
 import com.ssafy.S14P21A205.game.season.repository.SeasonRankingRedisRepository;
 import com.ssafy.S14P21A205.game.season.repository.SeasonRepository;
@@ -36,12 +37,14 @@ class SeasonRankingServiceTests {
     private final SeasonRankingRedisRepository seasonRankingRedisRepository = mock(SeasonRankingRedisRepository.class);
     private final SeasonRepository seasonRepository = mock(SeasonRepository.class);
     private final SeasonRankingRecordRepository seasonRankingRecordRepository = mock(SeasonRankingRecordRepository.class);
+    private final DailyReportRepository dailyReportRepository = mock(DailyReportRepository.class);
     private final UserService userService = mock(UserService.class);
 
     private final SeasonRankingService seasonRankingService = new SeasonRankingService(
             seasonRankingRedisRepository,
             seasonRepository,
             seasonRankingRecordRepository,
+            dailyReportRepository,
             userService
     );
 
@@ -64,24 +67,44 @@ class SeasonRankingServiceTests {
     }
 
     @Test
-    void getCurrentFinalRankingsReturnsTopTenAndMyRankingFromSql() {
+    void getCurrentFinalRankingsReturnsTopTenAndAdditionalMyStores() {
         Integer myUserId = 200;
         Authentication authentication = authenticate(myUserId, "me");
-        Season season = mock(Season.class);
-        when(season.getId()).thenReturn(12L);
-        when(season.getStatus()).thenReturn(SeasonStatus.FINISHED);
+        Season season = finishedSeason(12L);
 
-        List<SeasonRankingRecord> finalizedRecords = buildFinalizedRecords(myUserId);
+        List<SeasonRankingRecord> finalizedRecords = new ArrayList<>();
+        for (int rank = 1; rank <= 11; rank++) {
+            finalizedRecords.add(createFinalizedRecord(
+                    (long) rank,
+                    rank,
+                    rank,
+                    "user-" + rank,
+                    rank * 100_000,
+                    100 - rank,
+                    rank == 1 ? 30 : rank == 2 ? 20 : rank == 3 ? 10 : 5,
+                    false
+            ));
+        }
+        SeasonRankingRecord myRankedStore = createFinalizedRecord(1000L, 12, myUserId, "me", 50_000, 10, 5, false);
+        SeasonRankingRecord myBankruptStore = createFinalizedRecord(1001L, 0, myUserId, "me", 0, 0, 0, true);
+        finalizedRecords.add(myRankedStore);
+        finalizedRecords.add(myBankruptStore);
+        Store myBankruptStoreEntity = myBankruptStore.getStore();
 
         when(seasonRepository.findFirstByStatusOrderByIdDesc(SeasonStatus.FINISHED)).thenReturn(Optional.of(season));
         when(seasonRankingRecordRepository.findByStore_Season_IdOrderByFinalRankAsc(12L)).thenReturn(finalizedRecords);
+        when(dailyReportRepository.findByStore_Season_IdAndDayLessThanOrderByStore_IdAscDayAsc(12L, 8))
+                .thenReturn(List.of(createDailyReport(myBankruptStoreEntity, 3, true)));
 
         CurrentSeasonRankingsResponse response = seasonRankingService.getCurrentFinalRankings(authentication);
 
         assertEquals(12L, response.seasonId());
         assertEquals(10, response.rankings().size());
-        assertEquals(12, response.myRanking().rank());
-        assertEquals("me", response.myRanking().nickname());
+        assertEquals(2, response.myRankings().size());
+        assertEquals(12, response.myRankings().get(0).rank());
+        assertFalse(response.myRankings().get(0).isBankrupt());
+        assertNull(response.myRankings().get(1).rank());
+        assertTrue(response.myRankings().get(1).isBankrupt());
         assertFalse(response.rankings().stream().anyMatch(ranking -> ranking.userId().equals(myUserId)));
     }
 
@@ -89,14 +112,39 @@ class SeasonRankingServiceTests {
     void getCurrentFinalRankingsIncludesAllTiedUsersWithinTopTenRanks() {
         Integer myUserId = 999;
         Authentication authentication = authenticate(myUserId, "me");
-        Season season = mock(Season.class);
-        when(season.getId()).thenReturn(12L);
-        when(season.getStatus()).thenReturn(SeasonStatus.FINISHED);
+        Season season = finishedSeason(12L);
 
-        List<SeasonRankingRecord> finalizedRecords = buildFinalizedRecordsWithTiedEighth(myUserId);
+        List<SeasonRankingRecord> finalizedRecords = new ArrayList<>();
+        for (int rank = 1; rank <= 7; rank++) {
+            finalizedRecords.add(createFinalizedRecord(
+                    (long) rank,
+                    rank,
+                    rank,
+                    "user-" + rank,
+                    rank * 100_000,
+                    100 - rank,
+                    rank == 1 ? 30 : rank == 2 ? 20 : rank == 3 ? 10 : 5,
+                    false
+            ));
+        }
+        for (int userId = 8; userId <= 12; userId++) {
+            finalizedRecords.add(createFinalizedRecord(
+                    100L + userId,
+                    8,
+                    userId,
+                    "user-" + userId,
+                    userId * 100_000,
+                    92,
+                    5,
+                    false
+            ));
+        }
+        finalizedRecords.add(createFinalizedRecord(999L, 13, myUserId, "me", 50_000, 50, 5, false));
 
         when(seasonRepository.findFirstByStatusOrderByIdDesc(SeasonStatus.FINISHED)).thenReturn(Optional.of(season));
         when(seasonRankingRecordRepository.findByStore_Season_IdOrderByFinalRankAsc(12L)).thenReturn(finalizedRecords);
+        when(dailyReportRepository.findByStore_Season_IdAndDayLessThanOrderByStore_IdAscDayAsc(12L, 8))
+                .thenReturn(List.of());
 
         CurrentSeasonRankingsResponse response = seasonRankingService.getCurrentFinalRankings(authentication);
 
@@ -104,8 +152,46 @@ class SeasonRankingServiceTests {
         assertEquals(12, response.rankings().size());
         assertEquals(8, response.rankings().get(7).rank());
         assertEquals(8, response.rankings().get(11).rank());
-        assertTrue(response.rankings().stream().allMatch(ranking -> ranking.rank() <= 10));
-        assertEquals(13, response.myRanking().rank());
+        assertTrue(response.rankings().stream().allMatch(ranking -> ranking.rank() != null && ranking.rank() <= 10));
+        assertEquals(13, response.myRankings().get(0).rank());
+    }
+
+    @Test
+    void getCurrentFinalRankingsAppendsBankruptStoresAtBottomWhenTotalStoreCountIsBelowTen() {
+        Integer myUserId = 77;
+        Authentication authentication = authenticate(myUserId, "me");
+        Season season = finishedSeason(15L);
+
+        SeasonRankingRecord rankedFirst = createFinalizedRecord(1L, 1, 1, "alpha", 100_000, 120, 30, false);
+        SeasonRankingRecord rankedSecond = createFinalizedRecord(2L, 2, 2, "beta", 90_000, 90, 20, false);
+        SeasonRankingRecord rankedThird = createFinalizedRecord(3L, 2, 3, "gamma", 80_000, 90, 20, false);
+        SeasonRankingRecord bankruptEarly = createFinalizedRecord(11L, 0, myUserId, "me", 0, 0, 0, true);
+        SeasonRankingRecord bankruptLate = createFinalizedRecord(12L, 0, 88, "delta", 0, 0, 0, true);
+        Store bankruptEarlyStore = bankruptEarly.getStore();
+        Store bankruptLateStore = bankruptLate.getStore();
+
+        when(seasonRepository.findFirstByStatusOrderByIdDesc(SeasonStatus.FINISHED)).thenReturn(Optional.of(season));
+        when(seasonRankingRecordRepository.findByStore_Season_IdOrderByFinalRankAsc(15L))
+                .thenReturn(List.of(bankruptLate, rankedThird, rankedFirst, bankruptEarly, rankedSecond));
+        when(dailyReportRepository.findByStore_Season_IdAndDayLessThanOrderByStore_IdAscDayAsc(15L, 8))
+                .thenReturn(List.of(
+                        createDailyReport(bankruptLateStore, 5, true),
+                        createDailyReport(bankruptEarlyStore, 3, true)
+                ));
+
+        CurrentSeasonRankingsResponse response = seasonRankingService.getCurrentFinalRankings(authentication);
+
+        assertEquals(5, response.rankings().size());
+        assertEquals(1, response.rankings().get(0).rank());
+        assertEquals(2, response.rankings().get(1).rank());
+        assertEquals(2, response.rankings().get(2).rank());
+        assertNull(response.rankings().get(3).rank());
+        assertNull(response.rankings().get(4).rank());
+        assertEquals("me-store", response.rankings().get(3).storeName());
+        assertEquals("delta-store", response.rankings().get(4).storeName());
+        assertTrue(response.rankings().get(3).isBankrupt());
+        assertTrue(response.rankings().get(4).isBankrupt());
+        assertTrue(response.myRankings().isEmpty());
     }
 
     @Test
@@ -120,6 +206,14 @@ class SeasonRankingServiceTests {
         assertEquals(3L, response.seasonId());
         assertTrue(response.rankings().isEmpty());
         assertNull(response.refreshedAt());
+    }
+
+    private Season finishedSeason(Long seasonId) {
+        Season season = mock(Season.class);
+        when(season.getId()).thenReturn(seasonId);
+        when(season.getStatus()).thenReturn(SeasonStatus.FINISHED);
+        when(season.getTotalDays()).thenReturn(7);
+        return season;
     }
 
     private Authentication authenticate(Integer userId, String nickname) {
@@ -138,51 +232,48 @@ class SeasonRankingServiceTests {
                     "store-" + rank,
                     BigDecimal.valueOf(100 - rank).setScale(1),
                     rank * 100000L,
-                    rank == 1 ? 100 : rank == 2 ? 50 : rank == 3 ? 30 : 0
+                    rank == 1 ? 30 : rank == 2 ? 20 : rank == 3 ? 10 : 5
             ));
         }
         return rankings;
     }
 
-    private List<SeasonRankingRecord> buildFinalizedRecordsWithTiedEighth(Integer myUserId) {
-        List<SeasonRankingRecord> records = new ArrayList<>();
-        for (int rank = 1; rank <= 7; rank++) {
-            records.add(createFinalizedRecord(rank, rank, "user-" + rank, rank * 100_000));
-        }
-        for (int userId = 8; userId <= 12; userId++) {
-            records.add(createFinalizedRecord(8, userId, "user-" + userId, userId * 100_000));
-        }
-        records.add(createFinalizedRecord(13, myUserId, "me", 50_000));
-        return records;
-    }
-
-    private List<SeasonRankingRecord> buildFinalizedRecords(Integer myUserId) {
-        List<SeasonRankingRecord> records = new ArrayList<>();
-        for (int rank = 1; rank <= 11; rank++) {
-            records.add(createFinalizedRecord(rank, rank, "user-" + rank, rank * 100_000));
-        }
-        records.add(createFinalizedRecord(12, myUserId, "me", 50_000));
-        return records;
-    }
-
-    private SeasonRankingRecord createFinalizedRecord(int rank, Integer userId, String nickname, int totalRevenue) {
+    private SeasonRankingRecord createFinalizedRecord(
+            Long storeId,
+            Integer finalRank,
+            Integer userId,
+            String nickname,
+            int totalRevenue,
+            float roi,
+            int rewardPoints,
+            boolean bankrupt
+    ) {
         SeasonRankingRecord record = mock(SeasonRankingRecord.class);
         Store store = createStore(
-                Long.valueOf(rank),
+                storeId,
                 userId,
                 nickname,
                 nickname + "-store",
-                "location-" + rank,
-                "menu-" + rank,
+                "location-" + storeId,
+                "menu-" + storeId,
                 10
         );
 
-        when(record.getFinalRank()).thenReturn(rank);
+        when(record.getFinalRank()).thenReturn(finalRank);
         when(record.getStore()).thenReturn(store);
-        when(record.getRoi()).thenReturn((float) (100 - rank));
+        when(record.getRoi()).thenReturn(roi);
         when(record.getTotalRevenue()).thenReturn(totalRevenue);
-        when(record.getRewardPoints()).thenReturn(rank == 1 ? 50 : rank == 2 ? 30 : rank == 3 ? 20 : 0);
+        when(record.getRewardPoints()).thenReturn(rewardPoints);
+        when(record.getIsBankruptcy()).thenReturn(bankrupt);
         return record;
+    }
+
+    private DailyReport createDailyReport(Store store, int day, boolean bankrupt) {
+        DailyReport report = BeanUtils.instantiateClass(DailyReport.class);
+        ReflectionTestUtils.setField(report, "store", store);
+        ReflectionTestUtils.setField(report, "day", day);
+        ReflectionTestUtils.setField(report, "isBankrupt", bankrupt);
+        return report;
     }
 
     private Store createStore(

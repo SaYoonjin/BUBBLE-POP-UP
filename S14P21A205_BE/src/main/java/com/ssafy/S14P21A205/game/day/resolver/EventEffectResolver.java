@@ -2,9 +2,11 @@ package com.ssafy.S14P21A205.game.day.resolver;
 
 import com.ssafy.S14P21A205.game.day.dto.GameStateResponse;
 import com.ssafy.S14P21A205.game.event.entity.DailyEvent;
+import com.ssafy.S14P21A205.game.event.entity.EventCategory;
 import com.ssafy.S14P21A205.game.event.entity.EventStartTime;
 import com.ssafy.S14P21A205.game.event.entity.RandomEvent;
 import com.ssafy.S14P21A205.game.event.repository.DailyEventRepository;
+import com.ssafy.S14P21A205.game.season.entity.Season;
 import com.ssafy.S14P21A205.game.time.service.SeasonTimelineService;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -24,15 +26,14 @@ public class EventEffectResolver {
     private final SeasonTimelineService seasonTimelineService = new SeasonTimelineService();
 
     public EventEffect resolve(
-            Long seasonId,
+            Season season,
             int currentDay,
-            int totalDays,
-            LocalDateTime currentDayStart,
-            LocalDateTime effectiveNow
+            LocalDateTime effectiveNow,
+            Long locationId,
+            Long menuId
     ) {
-        // TODO: Extend this resolver when event cost/festival-style modifiers are added to live gameplay.
         List<DailyEvent> dailyEvents = dailyEventRepository.findBySeasonIdAndDayBetweenOrderByDayAscIdAsc(
-                seasonId,
+                season.getId(),
                 1,
                 currentDay
         );
@@ -40,18 +41,22 @@ public class EventEffectResolver {
         long capitalChange = 0L;
         int stockChange = 0;
         BigDecimal populationEventMultiplier = DECIMAL_ONE;
+        BigDecimal ingredientCostMultiplier = DECIMAL_ONE;
         List<GameStateResponse.AppliedEvent> appliedEvents = new ArrayList<>();
+        List<StockRateEvent> appliedStockRateEvents = new ArrayList<>();
 
         for (DailyEvent dailyEvent : dailyEvents) {
+            if (!matchesScope(dailyEvent, locationId, menuId)) {
+                continue;
+            }
+
             int appliedDay = resolveAppliedDay(dailyEvent);
             if (appliedDay < 1 || appliedDay > currentDay) {
                 continue;
             }
 
             LocalDateTime appliedAt = seasonTimelineService.resolveAppliedAt(
-                    currentDayStart,
-                    currentDay,
-                    totalDays,
+                    season,
                     appliedDay,
                     dailyEvent.getApplyOffsetSeconds()
             );
@@ -60,36 +65,56 @@ public class EventEffectResolver {
             }
 
             LocalDateTime endedAt = seasonTimelineService.resolveEndedAt(
-                    currentDayStart,
-                    currentDay,
-                    totalDays,
+                    season,
                     appliedDay,
                     dailyEvent.getExpireOffsetSeconds(),
                     dailyEvent.getEvent().getEndTime()
             );
             ResolvedEvent resolvedEvent = new ResolvedEvent(dailyEvent, appliedDay, appliedAt, endedAt);
             RandomEvent event = resolvedEvent.dailyEvent().getEvent();
-            if (!resolvedEvent.appliedAt().isAfter(currentDayStart)) {
-                continue;
-            }
 
             if (resolvedEvent.appliedDay() == currentDay) {
                 capitalChange += event.getCapitalFlat() == null ? 0L : event.getCapitalFlat();
-                stockChange += toWholeNumber(event.getStockFlat());
+                if (!isNaturalDisaster(event.getEventCategory())) {
+                    stockChange += toWholeNumber(event.getStockFlat());
+                }
+            }
+            if (!appliedAt.isAfter(effectiveNow) && resolveStockRate(event) != null) {
+                appliedStockRateEvents.add(new StockRateEvent(
+                        dailyEvent.getId(),
+                        resolveStockRate(event)
+                ));
             }
 
             if (resolvedEvent.isActiveAt(effectiveNow)) {
                 populationEventMultiplier = populationEventMultiplier.multiply(normalizeRate(event.getPopulationRate()));
+                ingredientCostMultiplier = ingredientCostMultiplier.multiply(normalizeRate(event.getCostRate()));
                 appliedEvents.add(new GameStateResponse.AppliedEvent(
-                        event.getEventType(),
-                        event.getEventType(),
-                        event.getEventType(),
+                        event.getEventCategory().name(),
+                        event.getEventName(),
+                        event.getEventName(),
                         resolvedEvent.appliedAt()
                 ));
             }
         }
 
-        return new EventEffect(capitalChange, stockChange, populationEventMultiplier, appliedEvents);
+        return new EventEffect(
+                capitalChange,
+                stockChange,
+                populationEventMultiplier,
+                ingredientCostMultiplier,
+                appliedEvents,
+                appliedStockRateEvents
+        );
+    }
+
+    private boolean matchesScope(DailyEvent dailyEvent, Long locationId, Long menuId) {
+        Long targetLocationId = dailyEvent.getTargetLocationId();
+        Long targetMenuId = dailyEvent.getTargetMenuId();
+        if (targetLocationId != null && !targetLocationId.equals(locationId)) {
+            return false;
+        }
+        return targetMenuId == null || targetMenuId.equals(menuId);
     }
 
     private int resolveAppliedDay(DailyEvent dailyEvent) {
@@ -112,6 +137,24 @@ public class EventEffectResolver {
         return value.setScale(2, RoundingMode.HALF_UP);
     }
 
+    private BigDecimal resolveStockRate(RandomEvent event) {
+        if (event == null || !isNaturalDisaster(event.getEventCategory())) {
+            return null;
+        }
+        BigDecimal value = event.getStockFlat();
+        if (value == null || value.signum() <= 0) {
+            return null;
+        }
+        return value.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private boolean isNaturalDisaster(EventCategory category) {
+        return category == EventCategory.EARTHQUAKE
+                || category == EventCategory.FLOOD
+                || category == EventCategory.TYPHOON
+                || category == EventCategory.FIRE;
+    }
+
     private record ResolvedEvent(
             DailyEvent dailyEvent,
             int appliedDay,
@@ -127,7 +170,16 @@ public class EventEffectResolver {
             long capitalChange,
             int stockChange,
             BigDecimal populationEventMultiplier,
-            List<GameStateResponse.AppliedEvent> appliedEvents
+            BigDecimal ingredientCostMultiplier,
+            List<GameStateResponse.AppliedEvent> appliedEvents,
+            List<StockRateEvent> appliedStockRateEvents
+    ) {
+    }
+
+    public record StockRateEvent(
+            Long dailyEventId,
+            BigDecimal stockRate
     ) {
     }
 }
+
