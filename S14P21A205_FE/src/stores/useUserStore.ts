@@ -22,7 +22,7 @@ export const useUserStore = create<UserState>((set) => ({
 
   fetchUser: async () => {
     try {
-      const [userRes, pointsRes] = await Promise.all([
+      const [userRes, pointsData] = await Promise.all([
         getUser(),
         getUserPoints(),
       ]);
@@ -30,7 +30,7 @@ export const useUserStore = create<UserState>((set) => ({
         nickname: userRes.data.nickname,
         email: userRes.data.email,
         role: userRes.data.role,
-        currentPoints: pointsRes.data.currentPoints,
+        currentPoints: pointsData.currentPoints,
         isLoaded: true,
       });
     } catch {
@@ -45,11 +45,11 @@ export const useUserStore = create<UserState>((set) => ({
   },
 
   clearUser: () =>
-    set({
-      nickname: null,
-      email: null,
-      role: null,
-      currentPoints: null,
-      isLoaded: false,
-    }),
+      set({
+        nickname: null,
+        email: null,
+        role: null,
+        currentPoints: null,
+        isLoaded: false,
+      }),
 }));
