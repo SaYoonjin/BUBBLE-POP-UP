@@ -1,11 +1,15 @@
+import Badge from "../common/Badge";
+
 interface RankEntry {
   rank: number;
-  name: string;
+  nickname: string;
   storeName: string;
-  location: string;
-  roi: string;
-  revenue: string;
-  reward: string;
+  locationName: string;
+  menuName: string;
+  roi: number;
+  totalRevenue: number;
+  rewardPoints: number;
+  isBankrupt: boolean;
   isMe?: boolean;
 }
 
@@ -13,11 +17,13 @@ interface RankingListProps {
   entries: RankEntry[];
 }
 
+const fmt = (v: number) => `₩${v.toLocaleString()}`;
+
 export default function RankingList({ entries }: RankingListProps) {
   return (
-    <div className="flex flex-col gap-3 w-full pb-12">
+    <div className="flex flex-col gap-3 w-full">
       {/* Header */}
-      <div className="flex px-6 pb-2 text-xs font-bold text-slate-400 uppercase tracking-wider hidden md:flex">
+      <div className="hidden md:flex px-6 pb-2 text-xs font-bold text-slate-400 uppercase tracking-wider">
         <div className="w-16">Rank</div>
         <div className="w-16 mr-4" />
         <div className="flex-1">User Info</div>
@@ -26,9 +32,13 @@ export default function RankingList({ entries }: RankingListProps) {
         <div className="w-16 text-right ml-4">Reward</div>
       </div>
 
-      {entries.map((entry) => (
-        <div key={entry.rank} className={`flex items-center rounded-2xl p-4 shadow-soft border transition-shadow hover:shadow-md group relative overflow-hidden ${
-          entry.isMe ? "bg-primary/5 border-primary" : "bg-white border-slate-50"
+      {entries.map((entry, idx) => (
+        <div key={`${entry.rank}-${idx}`} className={`flex items-center rounded-2xl p-4 shadow-soft border transition-shadow hover:shadow-md group relative overflow-hidden ${
+          entry.isMe
+            ? "bg-primary/5 border-primary"
+            : entry.isBankrupt
+              ? "bg-slate-50 border-slate-100 opacity-60"
+              : "bg-white border-slate-50"
         }`}>
           {entry.isMe && <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-primary" />}
 
@@ -45,13 +55,16 @@ export default function RankingList({ entries }: RankingListProps) {
           <div className={`size-12 rounded-full bg-slate-100 overflow-hidden mr-4 flex-shrink-0 flex items-center justify-center text-xl ${
             entry.isMe ? "border-2 border-white shadow-sm ring-2 ring-primary/30" : ""
           }`}>
-            👤
+            <span className="material-symbols-outlined text-2xl text-slate-400">person</span>
           </div>
 
           {/* Info */}
           <div className="flex flex-col md:flex-row md:items-center flex-1 gap-1 md:gap-4 overflow-hidden">
             <div className="flex flex-col min-w-[140px]">
-              <span className="font-bold text-slate-900 text-lg truncate">{entry.name}</span>
+              <span className="font-bold text-slate-900 text-lg truncate flex items-center gap-1.5">
+                {entry.nickname}
+                {entry.isBankrupt && <Badge variant="rose" size="sm">파산</Badge>}
+              </span>
               {entry.isMe && <span className="text-xs text-primary font-bold">나 (Player)</span>}
             </div>
             <div className="flex flex-col text-sm text-slate-500">
@@ -61,7 +74,7 @@ export default function RankingList({ entries }: RankingListProps) {
               </span>
               <span className="flex items-center gap-1 text-xs truncate">
                 <span className="material-symbols-outlined text-sm">location_on</span>
-                {entry.location}
+                {entry.locationName} · {entry.menuName}
               </span>
             </div>
           </div>
@@ -70,13 +83,17 @@ export default function RankingList({ entries }: RankingListProps) {
           <div className="flex items-center gap-2 md:gap-6 ml-2">
             <div className="hidden sm:flex flex-col items-end justify-center w-24">
               <span className="text-xs text-slate-400 font-medium mb-0.5">ROI</span>
-              <span className="text-slate-700 font-bold">{entry.roi}</span>
+              <span className={`font-bold ${entry.roi < 0 ? "text-rose-500" : "text-slate-700"}`}>
+                {entry.roi.toFixed(1)}%
+              </span>
             </div>
             <div className="flex flex-col items-end w-[140px]">
-              <span className="font-mono font-bold text-primary text-lg">{entry.revenue}</span>
+              <span className="font-mono font-bold text-primary text-lg">{fmt(entry.totalRevenue)}</span>
             </div>
             <div className="w-16 flex justify-end">
-              <span className="bg-primary/20 text-primary-dark text-xs font-bold px-2.5 py-1 rounded-full">{entry.reward}</span>
+              <span className="bg-primary/20 text-primary-dark text-xs font-bold px-2.5 py-1 rounded-full">
+                {entry.rewardPoints}P
+              </span>
             </div>
           </div>
         </div>

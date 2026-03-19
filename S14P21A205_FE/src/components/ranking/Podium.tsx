@@ -1,9 +1,13 @@
 interface PodiumEntry {
   rank: number;
-  name: string;
+  nickname: string;
   storeName: string;
-  roi: string;
-  revenue: string;
+  locationName: string;
+  menuName: string;
+  roi: number;
+  totalRevenue: number;
+  rewardPoints: number;
+  isBankrupt: boolean;
   isMe?: boolean;
 }
 
@@ -16,6 +20,8 @@ const config: Record<number, { color: string; badgeBg: string; avatarBorder: str
   2: { color: "#C0C0C0", badgeBg: "bg-[#C0C0C0]", avatarBorder: "border-[#C0C0C0]/30", order: "md:order-1", mt: "mt-0", badgeSize: "size-8 -top-6" },
   3: { color: "#CD7F32", badgeBg: "bg-[#CD7F32]", avatarBorder: "border-[#CD7F32]/30", order: "md:order-3", mt: "mt-0", badgeSize: "size-8 -top-6" },
 };
+
+const fmt = (v: number) => `₩${v.toLocaleString()}`;
 
 export default function Podium({ entries }: PodiumProps) {
   const top3 = entries.filter((e) => e.rank <= 3);
@@ -46,19 +52,26 @@ export default function Podium({ entries }: PodiumProps) {
 
             {/* Name */}
             <h3 className={`font-bold ${isFirst ? "text-xl" : "text-lg"} text-slate-900 mb-0.5 flex items-center gap-1`}>
-              {entry.name}
+              {entry.nickname}
               {entry.isMe && <span className="text-[10px] bg-primary text-white px-1.5 py-0.5 rounded-full font-bold">ME</span>}
             </h3>
-            <p className="text-sm text-slate-500 mb-3 truncate max-w-[90%]">{entry.storeName}</p>
+            <p className="text-sm text-slate-500 mb-1 truncate max-w-[90%]">{entry.storeName}</p>
+            <p className="text-xs text-slate-400 mb-3 flex items-center gap-0.5">
+              <span className="material-symbols-outlined text-sm">location_on</span>
+              {entry.locationName} · {entry.menuName}
+            </p>
 
             {/* Stats */}
             <div className="flex flex-col items-center gap-1">
               <span className={`text-xs font-bold px-2.5 py-0.5 rounded-md ${
                 isFirst ? "bg-yellow-50 text-yellow-700 border border-yellow-100" : "bg-slate-100 text-slate-600"
               }`}>
-                ROI {entry.roi}
+                ROI {entry.roi.toFixed(1)}%
               </span>
-              <p className={`text-primary font-mono font-bold ${isFirst ? "text-xl" : "text-base"} mt-1`}>{entry.revenue}</p>
+              <p className={`text-primary font-mono font-bold ${isFirst ? "text-xl" : "text-base"} mt-1`}>
+                {fmt(entry.totalRevenue)}
+              </p>
+              <span className="text-xs text-primary-dark font-bold mt-0.5">{entry.rewardPoints}P</span>
             </div>
           </div>
         );
