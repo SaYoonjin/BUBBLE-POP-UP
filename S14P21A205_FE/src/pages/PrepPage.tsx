@@ -6,6 +6,7 @@ import MenuSelector from "../components/game/MenuSelector";
 import PriceSlider from "../components/game/PriceSlider";
 import QuantityCounter from "../components/game/QuantityCounter";
 import CozyNewspaper from "../components/game/CozyNewspaper";
+import bubbleNewsImage from "../assets/Bubblenewsimg.png";
 import {
   applyDiscount,
   getSelectedDiscountMultiplier,
@@ -108,6 +109,36 @@ export default function PrepPage() {
   const totalCost = originalCostPrice * quantity;
   const discountedTotalCost = discountedCostPrice * quantity;
   const discountAmount = totalCost - discountedTotalCost;
+  const newsSidebarSections =
+    day === 1
+      ? [
+          {
+            title: "유동인구 순위",
+            eyebrow: "Foot Traffic Ranking",
+            items: mockPopulationRanking,
+          },
+          {
+            title: "오픈 현장",
+            eyebrow: "",
+            imageSrc: bubbleNewsImage,
+            caption: "개점 첫날, 도심 한복판에 긴 대기 행렬",
+            captionDetail: "초기 반응이 기대치를 웃돌면서 첫날 흥행 가능성에 관심이 쏠리고 있다.",
+            meta: ["DAY 1 현장 스케치"],
+            imageAlt: "개점 첫날, 팝업 숍 앞에 모여든 방문객들",
+          },
+        ]
+      : [
+          {
+            title: "유동인구 순위",
+            eyebrow: "Foot Traffic Ranking",
+            items: mockPopulationRanking,
+          },
+          {
+            title: "지역 매출 순위",
+            eyebrow: "Regional Revenue Ranking",
+            items: mockRevenueRanking,
+          },
+        ];
 
   useEffect(() => {
     setPrice(defaultSellingPrice);
@@ -245,10 +276,7 @@ export default function PrepPage() {
               expandedId={expandedNewsId}
               onToggle={(id) => setExpandedNewsId(expandedNewsId === id ? null : id)}
               day={day}
-              rankings={[
-                { title: "유동인구 순위", eyebrow: "Foot Traffic Ranking", items: mockPopulationRanking },
-                { title: "지역 매출 순위", eyebrow: "Regional Revenue Ranking", items: mockRevenueRanking },
-              ]}
+              rankings={newsSidebarSections}
             />
           )}
         </div>
