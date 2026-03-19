@@ -15,14 +15,14 @@ interface LocationSpot {
 }
 
 const avatarColors = [
-  "bg-primary/30",
+  "bg-primary",
+  "bg-primary/70",
   "bg-primary/50",
-  "bg-primary/40",
-  "bg-slate-300",
-  "bg-primary/60",
   "bg-slate-400",
-  "bg-primary/45",
-  "bg-slate-350",
+  "bg-primary/60",
+  "bg-slate-500",
+  "bg-primary/80",
+  "bg-slate-400",
 ];
 
 interface AnimatedAvatar {
@@ -113,14 +113,6 @@ function LocationSlide() {
             {isA && <div className="absolute w-12 h-12 rounded-xl bg-primary/20 animate-ping" style={{ animationDuration:"2s" }} />}
             <div className={`w-9 h-9 rounded-xl ${gc[s.grade]} flex items-center justify-center text-white text-[11px] font-black shadow-lg transition-transform duration-200 ${isH||isA?"scale-125":""}`}>{s.grade}</div>
             <span className={`mt-1 text-[10px] font-bold px-2 py-0.5 rounded-md transition-all ${isA?"bg-slate-800 text-white shadow-lg":isH?"bg-white text-slate-800 shadow-md":"bg-white/80 text-slate-500 shadow-sm"}`}>{s.name}</span>
-            {(isA||isH) && (
-              <div className={`absolute -top-[44px] bg-white rounded-lg shadow-lg border border-slate-100 px-2.5 py-1.5 whitespace-nowrap ${isA?"":"animate-[fadeUp_.2s_ease-out]"}`}
-                style={isA?{animation:"floatBadge 2s ease-in-out infinite"}:undefined}>
-                <p className="text-[10px] font-bold text-primary">{isA?"✨ 팝업 성지":s.name}</p>
-                <p className="text-[9px] text-slate-400">{isA?"유동인구 최다 지역":`등급 ${s.grade}`}</p>
-                <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-white border-r border-b border-slate-100 rotate-45" />
-              </div>
-            )}
           </div>
         );
       })}
@@ -277,9 +269,9 @@ export function HeroCTA() {
 /* ─── Animated Avatars ─── */
 export function AnimatedParticipants({ count }: { count: number }) {
   const [items, setItems] = useState<AnimatedAvatar[]>(() =>
-    avatarColors.slice(0, 4).map((color, index) => ({ id: index, color })),
+    avatarColors.slice(0, 5).map((color, index) => ({ id: index, color })),
   );
-  const nextItemId = useRef(4);
+  const nextItemId = useRef(5);
 
   useEffect(() => {
     const t = setInterval(() => {
@@ -295,7 +287,7 @@ export function AnimatedParticipants({ count }: { count: number }) {
 
   return (
     <div className="flex items-center justify-center gap-4 opacity-70">
-      <div className="flex -space-x-2.5 relative h-8 overflow-hidden w-[90px]">
+      <div className="flex -space-x-2 relative h-8 w-[140px] overflow-visible">
         <style>{`
           @keyframes avatarSlide {
             0% { transform: translateX(24px); opacity: 0; }
@@ -307,7 +299,7 @@ export function AnimatedParticipants({ count }: { count: number }) {
         {items.map((item, i) => (
           <div key={item.id}
             className={`w-7 h-7 rounded-full ${item.color} border-2 border-white shrink-0`}
-            style={{ zIndex: 4-i, animation: i === items.length - 1 ? "avatarSlide 2.2s ease-in-out" : undefined }}
+            style={{ zIndex: 5-i, animation: i === items.length - 1 ? "avatarSlide 2.2s ease-in-out" : undefined }}
           />
         ))}
       </div>
