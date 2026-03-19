@@ -33,6 +33,7 @@ services:
       - "443:443"
     volumes:
       - ./ops/nginx/docker:/etc/nginx/templates:ro
+      - ./frontend/dist:/usr/share/nginx/html:ro
       - /etc/letsencrypt:/etc/letsencrypt:ro
       - /var/www/certbot:/var/www/certbot:ro
     command: >

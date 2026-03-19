@@ -29,7 +29,7 @@ public class AuthLoginFailureHandler implements AuthenticationFailureHandler {
      */
     public AuthLoginFailureHandler(
                   AuthRedirectService authRedirectService,
-                  @Value("${app.auth.default-redirect-url:/swagger-ui/index.html}") String defaultRedirectUrl
+                  @Value("${app.auth.default-redirect-url:/auth/callback}") String defaultRedirectUrl
     ) {
         this.authRedirectService = authRedirectService;
         this.defaultRedirectUrl = defaultRedirectUrl;
@@ -60,7 +60,7 @@ public class AuthLoginFailureHandler implements AuthenticationFailureHandler {
             redirect = defaultRedirectUrl;
         }
         if (!authRedirectService.isSafeRedirect(redirect)) {
-            redirect = "/swagger-ui/index.html";
+            redirect = "/auth/callback";
         }
 
         redirect = redirect.trim();
