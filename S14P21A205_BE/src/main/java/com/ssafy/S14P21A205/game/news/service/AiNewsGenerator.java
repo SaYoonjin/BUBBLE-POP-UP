@@ -3,6 +3,7 @@ package com.ssafy.S14P21A205.game.news.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ssafy.S14P21A205.game.news.dto.MenuMentionCount;
+import java.util.Collections;
 import java.util.List;
 import java.util.HashMap;
 import java.util.Map;
@@ -225,6 +226,93 @@ public class AiNewsGenerator {
                     "버블팝업 상권에 지각변동이 일어나고 있다. 일부 지역에서는 팝업 매장이 빠르게 빠져나가는 반면, "
                     + "특정 지역으로 점주들이 대거 몰리는 양상이 포착됐다.");
         }
+    }
+
+    // ---- Day 1 Guide News ----
+
+    public NewsGenerationResult generateIntroNews(long seasonId) {
+        String style = getRandomStyle();
+        String prompt = "서울에서 '버블팝업' 팝업스토어 주간이 개막했다. 홍대, 강남, 성수, 여의도, 잠실, 이태원, 명동, 건대입구 등 여덟 곳의 상권에 야심 찬 점주들이 모여들고 있다. 치열한 경쟁과 설렘이 공존하는 분위기를 담은 개막 뉴스 작성. 본문 300~400자. 스타일: %s"
+                .formatted(style);
+        try {
+            return callAi(prompt);
+        } catch (Exception e) {
+            log.error("AI intro news failed for season {}", seasonId, e);
+            return new NewsGenerationResult(
+                    "서울 팝업 주간 개막, 버블팝업 축제의 막이 오르다",
+                    "서울 전역에 팝업스토어 열풍이 불고 있다. 홍대, 강남, 성수, 여의도 등 주요 상권에 야심 찬 점주들이 속속 모여들며 저마다의 개성을 담은 매장을 준비하고 있다. "
+                    + "업계 관계자는 \"올 시즌은 그 어느 때보다 치열한 경쟁이 예상된다\"며 \"트렌드를 읽고 발 빠르게 대응하는 점주가 살아남을 것\"이라고 전망했다. "
+                    + "거리마다 풍기는 다양한 음식 냄새와 설렘 가득한 분위기 속에서, 과연 누가 이번 시즌의 주인공이 될지 귀추가 주목된다.");
+        }
+    }
+
+    private static final List<TipTemplate> TIP_TEMPLATES = List.of(
+            new TipTemplate(
+                    "팝업스토어 선배 점주가 신규 점주에게 부드럽게 조언하는 기사. 톤: '이렇게 해보는 건 어떨까요' 식의 제안. 핵심 내용: 지역마다 임대료와 유동인구 분위기가 다르니, 매장을 열기 전에 여러 지역을 한번 둘러보는 것도 좋겠다. 번화한 곳은 손님이 많은 대신 경쟁이 치열하고, 한적한 곳은 여유롭게 운영할 수 있다. 자기 스타일에 맞는 곳을 찾아보면 어떨까. 구체적인 수치나 금액은 절대 언급하지 말 것. 본문 300~400자. 스타일: %s",
+                    "선배 점주의 한마디, 발품을 팔아보는 건 어떨까요",
+                    "한 선배 점주가 이제 막 문을 연 신규 점주들에게 따뜻한 조언을 건넸다. \"지역마다 분위기가 정말 다르더라고요. "
+                    + "번화한 곳은 손님이 많은 대신 경쟁도 만만치 않고, 조용한 곳은 나름의 매력이 있어요. "
+                    + "매장을 열기 전에 여러 곳을 둘러보면서 자기 스타일에 맞는 동네를 찾아보는 건 어떨까요?\""
+            ),
+            new TipTemplate(
+                    "팝업스토어 관계자가 뉴스 활용법을 부드럽게 알려주는 기사. 톤: '한번 챙겨 보시는 건 어떨까요' 식의 제안. 핵심 내용: 매일 발행되는 뉴스에 요즘 어떤 메뉴가 뜨고 있는지, 어느 동네가 활기찬지 정보가 담겨 있다. 시간 날 때 뉴스를 한번 훑어보면 흐름을 읽는 데 도움이 될 수 있다. 구체적인 수치는 절대 언급하지 말 것. 본문 300~400자. 스타일: %s",
+                    "오늘의 뉴스, 한번 챙겨 보시는 건 어떨까요",
+                    "한 관계자가 신규 점주들에게 귀띔했다. \"매일 나오는 뉴스에 요즘 어떤 메뉴가 뜨고 있는지, 어느 동네가 활기찬지 정보가 담겨 있어요. "
+                    + "바쁘시겠지만 시간 날 때 한번 훑어보시면 흐름을 읽는 데 도움이 될 수도 있습니다. "
+                    + "지난 시즌에 잘된 점주들도 뉴스를 꼼꼼히 챙겨 봤다는 이야기가 있더라고요.\""
+            ),
+            new TipTemplate(
+                    "선배 점주가 할인 전략을 부드럽게 소개하는 기사. 톤: '한번 시도해 보는 것도 괜찮을 것 같아요' 식의 제안. 핵심 내용: 영업 중에 할인을 걸어보면 지나가는 손님의 눈길을 끌 수 있다. 다만 너무 많이 깎으면 남는 게 없으니 적당한 선에서 조절해 보는 게 좋겠다. 구체적인 수치나 퍼센트는 절대 언급하지 말 것. 본문 300~400자. 스타일: %s",
+                    "할인을 한번 걸어보는 건 어떨까요",
+                    "한 선배 점주가 넌지시 조언했다. \"손님이 뜸할 때 할인을 한번 걸어보는 것도 방법이에요. "
+                    + "가격이 내려가면 지나가던 분들도 한번쯤 들러보거든요. "
+                    + "다만 너무 많이 깎으면 남는 게 없으니, 적당한 선에서 조절해 보시는 게 좋을 것 같아요.\""
+            ),
+            new TipTemplate(
+                    "선배 점주가 홍보 활동을 부드럽게 소개하는 기사. 톤: '해보시는 것도 나쁘지 않을 것 같아요' 식의 제안. 핵심 내용: 영업 중에 홍보 활동을 해보면 매장을 알리는 데 도움이 된다. 여러 가지 홍보 방법이 있는데 각각 비용과 효과가 다르니 상황에 맞게 골라보면 좋겠다. 구체적인 수치나 금액은 절대 언급하지 말 것. 본문 300~400자. 스타일: %s",
+                    "매장을 알리고 싶다면 홍보를 해보시는 건 어떨까요",
+                    "한 선배 점주가 경험을 나눴다. \"처음엔 손님이 매장을 모르니까 홍보를 해보는 것도 나쁘지 않아요. "
+                    + "여러 가지 방법이 있는데 각각 느낌이 다르더라고요. "
+                    + "자기 상황에 맞는 걸 골라서 한번 시도해 보시면 어떨까요?\""
+            ),
+            new TipTemplate(
+                    "선배 점주가 긴급 발주를 부드럽게 소개하는 기사. 톤: '이런 방법도 있다는 걸 알아두시면 좋을 것 같아요' 식의 제안. 핵심 내용: 영업 중에 재고가 떨어지면 긴급 발주로 물량을 채울 수 있다. 다만 평소보다 비용이 좀 더 드니 참고하면 좋겠다. 예상 밖으로 손님이 몰릴 때 알아두면 쓸모 있는 수단이다. 구체적인 수치나 금액은 절대 언급하지 말 것. 본문 300~400자. 스타일: %s",
+                    "재고가 떨어졌을 때, 긴급 발주라는 방법도 있어요",
+                    "한 선배 점주가 귀띔했다. \"영업 중에 재고가 바닥나면 당황스럽잖아요. 그럴 때 긴급 발주라는 게 있어요. "
+                    + "비용이 좀 더 들긴 하지만, 예상 밖으로 손님이 몰릴 때 알아두면 쓸모가 있더라고요. "
+                    + "이런 방법도 있다는 걸 미리 알아두시면 좋을 것 같아요.\""
+            ),
+            new TipTemplate(
+                    "선배 점주가 나눔 활동을 부드럽게 소개하는 기사. 톤: '관심이 있으시면 한번 해보시는 것도 좋을 것 같아요' 식의 제안. 핵심 내용: 영업 중에 나눔 활동을 하면 당장 수익이 줄 수 있지만 매장 평판이 올라간다. 평판이 좋아지면 찾아오는 손님이 늘어날 수 있으니 장기적으로 봐주면 좋겠다. 구체적인 수치는 절대 언급하지 말 것. 본문 300~400자. 스타일: %s",
+                    "나눔 활동, 관심 있으시면 한번 해보시는 건 어떨까요",
+                    "한 선배 점주가 경험담을 전했다. \"나눔 활동을 하면 당장은 좀 아깝게 느껴질 수 있는데, 매장 평판이 올라가더라고요. "
+                    + "평판이 좋아지니까 찾아오는 분들이 조금씩 늘었어요. "
+                    + "관심이 있으시면 한번 해보시는 것도 괜찮을 것 같아요.\""
+            )
+    );
+
+    private record TipTemplate(String promptTemplate, String fallbackTitle, String fallbackContent) {}
+
+    /**
+     * 6개 팁 후보 중 랜덤 2개를 뽑아 AI로 뉴스 생성.
+     */
+    public List<NewsGenerationResult> generateRandomTipNews(long seasonId) {
+        List<TipTemplate> shuffled = new java.util.ArrayList<>(TIP_TEMPLATES);
+        Collections.shuffle(shuffled);
+        List<TipTemplate> picked = shuffled.subList(0, 2);
+
+        List<NewsGenerationResult> results = new java.util.ArrayList<>();
+        for (TipTemplate tip : picked) {
+            String style = getRandomStyle();
+            String prompt = tip.promptTemplate().formatted(style);
+            try {
+                results.add(callAi(prompt));
+            } catch (Exception e) {
+                log.error("AI tip news failed for season {}", seasonId, e);
+                results.add(new NewsGenerationResult(tip.fallbackTitle(), tip.fallbackContent()));
+            }
+        }
+        return results;
     }
 
     // ---- Common AI call ----
