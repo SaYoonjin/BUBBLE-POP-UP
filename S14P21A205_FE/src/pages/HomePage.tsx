@@ -1,9 +1,7 @@
 import LobbyPage from "./LobbyPage";
 import DashboardPage from "./DashboardPage";
+import { isAuthenticated } from "../hooks/useAuth";
 
 export default function HomePage() {
-  const token = localStorage.getItem("accessToken");
-  const shouldBypassAuth = import.meta.env.DEV;
-
-  return token || shouldBypassAuth ? <DashboardPage /> : <LobbyPage />;
+  return isAuthenticated() ? <DashboardPage /> : <LobbyPage />;
 }

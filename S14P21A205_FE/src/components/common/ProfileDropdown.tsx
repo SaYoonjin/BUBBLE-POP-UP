@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { clearAuthSession } from "../../hooks/useAuth";
 
 interface ProfileDropdownProps {
   nickname?: string;
@@ -19,7 +20,7 @@ export default function ProfileDropdown({ nickname = "Owner" }: ProfileDropdownP
   }, []);
 
   const handleLogout = () => {
-    localStorage.removeItem("accessToken");
+    clearAuthSession();
     navigate("/login");
   };
 

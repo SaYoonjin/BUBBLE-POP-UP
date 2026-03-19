@@ -59,7 +59,7 @@ export default function ReportPage() {
 
   return (
     <div className="min-h-screen bg-[#FDFDFB] text-slate-900 font-display flex flex-col">
-      <AppHeader nickname="Owner" />
+      <AppHeader />
 
       {showBankruptModal && (
         <BankruptModal onClose={() => { setShowBankruptModal(false); navigate("/"); }} />

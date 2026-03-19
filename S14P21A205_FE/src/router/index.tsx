@@ -1,5 +1,5 @@
 import { createBrowserRouter } from "react-router-dom";
-//import PrivateRoute from "./PrivateRoute";
+import PrivateRoute from "./PrivateRoute";
 import HomePage from "../pages/HomePage";
 import LoginPage from "../pages/LoginPage";
 import MyPage from "../pages/MyPage";
@@ -23,7 +23,7 @@ const router = createBrowserRouter([
   { path: "/news", element: <NewsPage /> },
   { path: "/cozy/prep", element: <CozyPrepPage /> },
   {
-    //element: <PrivateRoute />,
+    element: <PrivateRoute />,
     children: [
       { path: "/mypage", element: <MyPage /> },
       { path: "/game/setup/location", element: <LocationSelectPage /> },

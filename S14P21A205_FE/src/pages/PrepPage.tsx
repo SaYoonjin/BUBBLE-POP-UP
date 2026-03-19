@@ -118,7 +118,7 @@ export default function PrepPage() {
 
   return (
     <div className="min-h-screen bg-[#FDFDFB] text-slate-900 font-display flex flex-col">
-      <AppHeader nickname="Owner" />
+      <AppHeader />
 
       {/* Main */}
       <main className="flex-1 flex flex-col items-center py-6 pt-24 px-4 sm:px-8">
