@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import PlayHeader from "../components/play/PlayHeader";
 import EventSidebar, { type GameAlert } from "../components/play/EventSidebar";
@@ -66,7 +66,7 @@ const MOCK = {
   ],
 };
 
-const mockAlerts: GameAlert[] = [
+const initialAlerts: GameAlert[] = [
   {
     id: 1,
     type: "event",
@@ -76,31 +76,10 @@ const mockAlerts: GameAlert[] = [
   },
   {
     id: 2,
-    type: "deadline",
-    title: "마감 1분 전",
-    description: "영업 종료가 곧 다가옵니다.",
-    time: "1분 전",
-  },
-  {
-    id: 3,
-    type: "stock",
-    title: "재고 30개 이하",
-    description: "긴급 발주를 고려해보세요.",
-    time: "3분 전",
-  },
-  {
-    id: 4,
     type: "event",
     title: "주말 축제 개막",
     description: "유동인구가 20% 증가할 예정입니다.",
     time: "5분 전",
-  },
-  {
-    id: 5,
-    type: "action",
-    title: "할인 이벤트 적용됨",
-    description: "20% 할인이 적용되었습니다.",
-    time: "8분 전",
   },
 ];
 
@@ -152,13 +131,15 @@ export default function PlayPage() {
   const [activeModal, setActiveModal] = useState<ActionType | null>(null);
   const [usedActions, setUsedActions] = useState<Set<ActionType>>(new Set());
   const [activeEffects, setActiveEffects] = useState<Set<ActionType>>(new Set());
-  const [alerts, setAlerts] = useState<GameAlert[]>(mockAlerts);
+  const [alerts, setAlerts] = useState<GameAlert[]>(initialAlerts);
   const [balance, setBalance] = useState(MOCK.balance);
   const [stock, setStock] = useState(MOCK.stock);
   const [playEndTimestampMs, setPlayEndTimestampMs] = useState(() =>
     resolvePlaySessionEndTimestamp(dayNumber),
   );
   const [nowMs, setNowMs] = useState(() => Date.now());
+  const hasDeadlineAlertRef = useRef(false);
+  const hasLowStockAlertRef = useRef(false);
   const remainingMilliseconds = Math.max(0, playEndTimestampMs - nowMs);
   const remainingSeconds = Math.max(0, Math.ceil(remainingMilliseconds / 1000));
 
@@ -166,6 +147,9 @@ export default function PlayPage() {
     const nextPlayEndTimestampMs = resolvePlaySessionEndTimestamp(dayNumber);
     setPlayEndTimestampMs(nextPlayEndTimestampMs);
     setNowMs(Date.now());
+    setAlerts(initialAlerts);
+    hasDeadlineAlertRef.current = false;
+    hasLowStockAlertRef.current = false;
   }, [dayNumber]);
 
   useEffect(() => {
@@ -186,18 +170,50 @@ export default function PlayPage() {
 
   const closeModal = () => setActiveModal(null);
 
-  const pushActionAlert = (title: string, description: string) => {
+  const pushAlert = (
+    type: GameAlert["type"],
+    title: string,
+    description: string,
+    time = "방금 전",
+  ) => {
     setAlerts((prev) => [
       {
-        id: Date.now(),
-        type: "action",
+        id: Date.now() + Math.floor(Math.random() * 1000),
+        type,
         title,
         description,
-        time: "방금 전",
+        time,
       },
       ...prev,
     ]);
   };
+
+  const pushActionAlert = (title: string, description: string) => {
+    pushAlert("action", title, description);
+  };
+
+  useEffect(() => {
+    if (remainingSeconds > 60 || remainingSeconds <= 0 || hasDeadlineAlertRef.current) {
+      return;
+    }
+
+    hasDeadlineAlertRef.current = true;
+    pushAlert("deadline", "마감 1분 전", "영업 종료가 곧 다가옵니다.");
+  }, [remainingSeconds]);
+
+  useEffect(() => {
+    if (stock > 30) {
+      hasLowStockAlertRef.current = false;
+      return;
+    }
+
+    if (hasLowStockAlertRef.current) {
+      return;
+    }
+
+    hasLowStockAlertRef.current = true;
+    pushAlert("stock", "재고 30개 이하", "긴급 발주를 고려해보세요.");
+  }, [stock]);
 
   const completeAction = (
     action: ActionType,
