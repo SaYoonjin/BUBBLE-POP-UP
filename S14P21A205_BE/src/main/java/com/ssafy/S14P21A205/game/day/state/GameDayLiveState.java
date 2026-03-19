@@ -11,6 +11,7 @@ public record GameDayLiveState(
         Integer purchaseCursor,
         GameDayStartResponse startResponse,
         Integer tick,
+        Integer regionStoreCount,
         Integer populationPerStore,
         BigDecimal captureRate,
         Integer salePrice,
@@ -33,6 +34,7 @@ public record GameDayLiveState(
             LocalDateTime lastCalculatedAt
     ) {
         this(
+                null,
                 null,
                 null,
                 null,
