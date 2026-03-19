@@ -82,7 +82,7 @@ export default function RankingPage() {
 
   return (
     <div className="min-h-screen bg-[#FDFDFB] text-slate-900 font-display flex flex-col">
-      <AppHeader nickname="Owner" />
+      <AppHeader />
 
       <main className="flex-1 flex flex-col items-center py-8 px-4 sm:px-6 pt-24">
         <div className="w-full max-w-[1100px] flex flex-col gap-8">

@@ -88,6 +88,10 @@ function formatWon(amount: number) {
   return `₩${amount.toLocaleString()}`;
 }
 
+function formatExpenseWon(amount: number) {
+  return `- ${formatWon(amount)}`;
+}
+
 export default function EmergencyOrderModal({
   currentBalance,
   menuItems,
@@ -311,11 +315,11 @@ export default function EmergencyOrderModal({
                     schedule
                   </span>
                 </div>
-                <span className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">
+                <span className="shrink-0 whitespace-nowrap text-[11px] font-bold tracking-[0.1em] text-slate-500">
                   예상 도착시간
                 </span>
               </div>
-              <p className="text-[1.65rem] font-black tracking-tight text-slate-800">
+              <p className="whitespace-nowrap text-[1.65rem] font-black tracking-tight text-slate-800">
                 약 {trafficInfo.etaMinutes}분
               </p>
             </div>
@@ -334,21 +338,23 @@ export default function EmergencyOrderModal({
               </span>
             </div>
             <div className="flex items-center justify-between text-sm text-slate-600">
-              <span>원가 x 수량</span>
-              <span className="font-medium text-slate-800">
-                {formatWon(materialsCost)}
+              <span className="text-rose-400">원가 x 수량</span>
+              <span className="font-semibold text-rose-500">
+                {formatExpenseWon(materialsCost)}
               </span>
             </div>
             <div className="flex items-center justify-between text-sm text-slate-600">
-              <span>긴급 발주 수수료 ({SURCHARGE_RATE * 100}%)</span>
-              <span className="font-medium text-slate-800">
-                {formatWon(surcharge)}
+              <span className="text-rose-400">
+                긴급 발주 수수료 ({SURCHARGE_RATE * 100}%)
+              </span>
+              <span className="font-semibold text-rose-500">
+                {formatExpenseWon(surcharge)}
               </span>
             </div>
             <div className="h-px w-full bg-slate-200" />
             <div className="flex items-center justify-between">
               <span className="text-sm font-bold text-slate-700">총 결제 비용</span>
-              <span className="text-xl font-bold text-primary-dark">
+              <span className="text-xl font-black text-slate-900">
                 {formatWon(totalCost)}
               </span>
             </div>

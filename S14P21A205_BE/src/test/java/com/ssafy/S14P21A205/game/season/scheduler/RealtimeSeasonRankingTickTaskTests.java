@@ -48,17 +48,12 @@ class RealtimeSeasonRankingTickTaskTests {
     private final SeasonRankingRedisRepository seasonRankingRedisRepository = mock(SeasonRankingRedisRepository.class);
     private final ProfitPolicy profitPolicy = new ProfitPolicy();
 
-    private final RealtimeSeasonRankingTickTask scheduler = new RealtimeSeasonRankingTickTask(
-            seasonRepository,
-            storeRepository,
-            dailyReportRepository,
-            gameDayStoreStateRedisRepository,
-            seasonRankingRedisRepository,
-            profitPolicy
-    );
-
     @Test
     void refreshCurrentTopRankingsCombinesPastDailyReportsAndRedisState() {
+        RealtimeSeasonRankingTickTask scheduler = createScheduler(Clock.fixed(
+                Instant.parse("2026-03-13T15:00:00Z"),
+                ZoneId.of("UTC")
+        ));
         Season season = mock(Season.class);
         when(season.getId()).thenReturn(3L);
         when(season.getStatus()).thenReturn(SeasonStatus.IN_PROGRESS);
@@ -70,7 +65,6 @@ class RealtimeSeasonRankingTickTaskTests {
         Store thirdStore = createStore(103L, 3, "gamma", "Gamma Store", "Seongsu", "Cookie", 20);
 
         Instant fixedInstant = Instant.parse("2026-03-13T15:00:00Z");
-        ReflectionTestUtils.setField(scheduler, "clock", Clock.fixed(fixedInstant, ZoneId.of("UTC")));
         LocalDateTime refreshedAt = LocalDateTime.ofInstant(fixedInstant, ZoneId.of("UTC"));
 
         when(seasonRepository.findFirstByStatusOrderByIdDesc(SeasonStatus.IN_PROGRESS)).thenReturn(Optional.of(season));
@@ -108,6 +102,10 @@ class RealtimeSeasonRankingTickTaskTests {
 
     @Test
     void refreshCurrentTopRankingsAssignsCompetitionRankWhenRoiIsTied() {
+        RealtimeSeasonRankingTickTask scheduler = createScheduler(Clock.fixed(
+                Instant.parse("2026-03-13T15:00:00Z"),
+                ZoneId.of("UTC")
+        ));
         Season season = mock(Season.class);
         when(season.getId()).thenReturn(3L);
         when(season.getStatus()).thenReturn(SeasonStatus.IN_PROGRESS);
@@ -119,7 +117,6 @@ class RealtimeSeasonRankingTickTaskTests {
         Store thirdStore = createStore(103L, 3, "gamma", "Gamma Store", "Seongsu", "Cookie", 25);
 
         Instant fixedInstant = Instant.parse("2026-03-13T15:00:00Z");
-        ReflectionTestUtils.setField(scheduler, "clock", Clock.fixed(fixedInstant, ZoneId.of("UTC")));
         LocalDateTime refreshedAt = LocalDateTime.ofInstant(fixedInstant, ZoneId.of("UTC"));
 
         when(seasonRepository.findFirstByStatusOrderByIdDesc(SeasonStatus.IN_PROGRESS)).thenReturn(Optional.of(season));
@@ -150,6 +147,7 @@ class RealtimeSeasonRankingTickTaskTests {
 
     @Test
     void refreshCurrentTopRankingsDeletesRedisWhenCurrentSeasonDoesNotExist() {
+        RealtimeSeasonRankingTickTask scheduler = createScheduler(Clock.system(ZoneId.of("Asia/Seoul")));
         when(seasonRepository.findFirstByStatusOrderByIdDesc(SeasonStatus.IN_PROGRESS)).thenReturn(Optional.empty());
 
         scheduler.refreshCurrentTopRankings();
@@ -160,6 +158,7 @@ class RealtimeSeasonRankingTickTaskTests {
 
     @Test
     void refreshCurrentTopRankingsAggregatesMultiplePastDailyReportsIntoPastStats() {
+        RealtimeSeasonRankingTickTask scheduler = createScheduler(Clock.system(ZoneId.of("Asia/Seoul")));
         Season season = mock(Season.class);
         when(season.getId()).thenReturn(5L);
         when(season.getStatus()).thenReturn(SeasonStatus.IN_PROGRESS);
@@ -204,6 +203,7 @@ class RealtimeSeasonRankingTickTaskTests {
 
     @Test
     void refreshCurrentTopRankingsReflectsSequentialRedisCumulativeValuesAcrossTicks() {
+        RealtimeSeasonRankingTickTask scheduler = createScheduler(Clock.system(ZoneId.of("Asia/Seoul")));
         Season season = mock(Season.class);
         when(season.getId()).thenReturn(6L);
         when(season.getStatus()).thenReturn(SeasonStatus.IN_PROGRESS);
@@ -250,6 +250,18 @@ class RealtimeSeasonRankingTickTaskTests {
         assertTrue(messages.get(0).contains("revenue=120") && messages.get(0).contains("cost=60") && messages.get(0).contains("roi=100.0"));
         assertTrue(messages.get(1).contains("revenue=150") && messages.get(1).contains("cost=70") && messages.get(1).contains("roi=114.3"));
         assertTrue(messages.get(2).contains("revenue=190") && messages.get(2).contains("cost=90") && messages.get(2).contains("roi=111.1"));
+    }
+
+    private RealtimeSeasonRankingTickTask createScheduler(Clock clock) {
+        return new RealtimeSeasonRankingTickTask(
+                seasonRepository,
+                storeRepository,
+                dailyReportRepository,
+                gameDayStoreStateRedisRepository,
+                seasonRankingRedisRepository,
+                profitPolicy,
+                clock
+        );
     }
 
     private Store createStore(

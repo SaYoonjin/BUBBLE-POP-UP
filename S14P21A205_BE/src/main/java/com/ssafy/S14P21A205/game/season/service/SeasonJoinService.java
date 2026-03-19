@@ -56,7 +56,7 @@ public class SeasonJoinService {
     private final PurchaseListGenerator purchaseListGenerator;
 
     private final SeasonTimelineService seasonTimelineService = new SeasonTimelineService();
-    private Clock clock = Clock.systemDefaultZone();
+    private final Clock clock;
 
     @Transactional
     public SeasonJoinResponse joinCurrentSeason(Authentication authentication, SeasonJoinRequest request) {
