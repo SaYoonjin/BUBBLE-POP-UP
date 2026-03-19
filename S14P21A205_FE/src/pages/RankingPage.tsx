@@ -99,7 +99,7 @@ export default function RankingPage() {
           </div>
 
           {/* Title */}
-          <div className="flex flex-col items-center text-center gap-2 mt-4">
+          <div className="flex flex-col items-center text-center gap-2 mt-4 animate-fade-up">
             <Badge variant="gray" size="md">시즌 {data.seasonId}</Badge>
             <h1 className="text-4xl font-black leading-tight tracking-tight">시즌 랭킹</h1>
             <p className="text-slate-500 font-medium">이번 시즌 최고의 팝업스토어 마스터를 확인하세요.</p>
@@ -119,7 +119,7 @@ export default function RankingPage() {
                 나의 기록
               </h2>
               {myOutsideEntries.map((entry, idx) => (
-                <RankingRow key={idx} entry={{ ...entry, rank: entry.rank, isMe: true }} />
+                <RankingRow key={idx} entry={{ ...entry, rank: entry.rank, isMe: true }} animationDelay={800 + idx * 100} />
               ))}
             </div>
           )}
