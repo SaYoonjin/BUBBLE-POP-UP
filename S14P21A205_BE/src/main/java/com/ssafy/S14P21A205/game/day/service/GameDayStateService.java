@@ -10,6 +10,7 @@ import com.ssafy.S14P21A205.game.day.dto.GameStateResponse;
 import com.ssafy.S14P21A205.game.day.engine.StockEngine;
 import com.ssafy.S14P21A205.game.day.policy.CaptureRatePolicy;
 import com.ssafy.S14P21A205.game.day.policy.CostPolicy;
+import com.ssafy.S14P21A205.game.day.policy.CustomerScorePolicy;
 import com.ssafy.S14P21A205.game.day.policy.PopulationPolicy;
 import com.ssafy.S14P21A205.game.day.resolver.EventEffectResolver;
 import com.ssafy.S14P21A205.game.day.state.GameDayLiveState;
@@ -55,6 +56,7 @@ public class GameDayStateService {
     private final EventEffectResolver eventEffectResolver;
     private final StockEngine stockEngine;
     private final PopulationPolicy populationPolicy;
+    private final CustomerScorePolicy customerScorePolicy;
     private final CaptureRatePolicy captureRatePolicy;
     private final CostPolicy costPolicy;
     private final GameDayStoreStateRedisRepository gameDayStoreStateRedisRepository;
@@ -73,7 +75,6 @@ public class GameDayStateService {
         LocalDateTime serverTime = LocalDateTime.now(clock);
         SeasonTimePoint seasonTimePoint = SEASON_TIMELINE_SERVICE.resolve(store.getSeason(), serverTime);
         int day = resolveCurrentDay(store.getSeason(), seasonTimePoint);
-        int totalDays = store.getSeason().getTotalDays();
 
         GameDayLiveState rawState = gameDayStoreStateRedisRepository.find(store.getId(), day)
                 .orElse(null);
@@ -99,7 +100,7 @@ public class GameDayStateService {
                 effectiveNow
         );
         ActionUsage actionUsage = resolveActionUsage(store.getId(), day);
-        long regionStoreCount = resolveRegionStoreCount(store);
+        int regionStoreCount = resolveRegionStoreCount(store, state);
 
         CalculatedGameState calculatedState = calculateGameState(
                 store,
@@ -110,7 +111,6 @@ public class GameDayStateService {
                 effectiveNow,
                 dailyStartOrder,
                 day,
-                totalDays,
                 regionStoreCount
         );
 
@@ -134,6 +134,15 @@ public class GameDayStateService {
                 effectiveNow,
                 calculatedState.cash(),
                 calculatedState.liveState().cumulativeCustomerCount(),
+                new GameStateResponse.CustomerTick(
+                        calculatedState.liveState().tick(),
+                        calculatedState.tickCustomerCount(),
+                        calculatedState.baseFloatingPopulation(),
+                        calculatedState.populationGrowthRate(),
+                        calculatedState.currentFloatingPopulation(),
+                        calculatedState.regionStoreCount(),
+                        calculatedState.rValue()
+                ),
                 new GameStateResponse.Inventory(calculatedState.totalStock()),
                 new GameStateResponse.ActionStatus(
                         actionUsage.discountUsed(),
@@ -162,9 +171,28 @@ public class GameDayStateService {
         return currentDay;
     }
 
-    private long resolveRegionStoreCount(Store store) {
+    private int resolveRegionStoreCount(Store store, GameDayLiveState state) {
+        if (state.regionStoreCount() != null && state.regionStoreCount() > 0) {
+            return state.regionStoreCount();
+        }
+
+        if (state.startResponse() != null
+                && state.startResponse().marketSnapshot() != null
+                && state.startResponse().marketSnapshot().regionStoreCount() != null
+                && state.startResponse().marketSnapshot().regionStoreCount() > 0) {
+            return state.startResponse().marketSnapshot().regionStoreCount();
+        }
+
         long count = storeRepository.countBySeason_IdAndLocation_Id(store.getSeason().getId(), store.getLocation().getId());
-        return Math.max(1L, count);
+        int resolvedCount = Math.max(1, Math.toIntExact(count));
+        log.info(
+                "state-region-store-count-backfill storeId={} seasonId={} locationId={} regionStoreCount={}",
+                store.getId(),
+                store.getSeason().getId(),
+                store.getLocation().getId(),
+                resolvedCount
+        );
+        return resolvedCount;
     }
 
     private GameDayLiveState normalizeState(GameDayLiveState state, Order dailyStartOrder) {
@@ -180,6 +208,15 @@ public class GameDayStateService {
             lastCalculatedAt = startedAt;
         }
 
+        Integer regionStoreCount = state.regionStoreCount();
+        if ((regionStoreCount == null || regionStoreCount <= 0)
+                && state.startResponse() != null
+                && state.startResponse().marketSnapshot() != null
+                && state.startResponse().marketSnapshot().regionStoreCount() != null
+                && state.startResponse().marketSnapshot().regionStoreCount() > 0) {
+            regionStoreCount = state.startResponse().marketSnapshot().regionStoreCount();
+        }
+
         int purchaseCursor = state.purchaseCursor() == null ? 0 : state.purchaseCursor();
         return new GameDayLiveState(
                 startedAt,
@@ -187,6 +224,7 @@ public class GameDayStateService {
                 purchaseCursor,
                 state.startResponse(),
                 state.tick() == null ? 0 : state.tick(),
+                regionStoreCount,
                 state.populationPerStore() == null ? 0 : state.populationPerStore(),
                 state.captureRate(),
                 state.salePrice() == null ? 0 : state.salePrice(),
@@ -299,8 +337,7 @@ public class GameDayStateService {
             LocalDateTime effectiveNow,
             Order dailyStartOrder,
             int day,
-            int totalDays,
-            long regionStoreCount
+            int regionStoreCount
     ) {
         BigDecimal captureRate = resolveLiveCaptureRate(state);
         ProgressionState progressionState = progressStateByTick(
@@ -309,9 +346,7 @@ public class GameDayStateService {
                 currentTimeline,
                 tick,
                 effectiveNow,
-                captureRate,
                 day,
-                totalDays,
                 regionStoreCount
         );
         EventEffectResolver.EventEffect eventEffect = progressionState.currentEventEffect();
@@ -331,6 +366,12 @@ public class GameDayStateService {
                 costResult.cash(),
                 progressionState.stock(),
                 progressionState.populationPerStore(),
+                progressionState.tickCustomerCount(),
+                progressionState.currentPopulationSnapshot().baseFloatingPopulation(),
+                progressionState.currentPopulationSnapshot().populationGrowthRate(),
+                progressionState.currentPopulationSnapshot().currentFloatingPopulation(),
+                regionStoreCount,
+                progressionState.currentCustomerScore().rValue(),
                 emergencyOrderState,
                 eventEffect.appliedEvents(),
                 new GameDayLiveState(
@@ -339,6 +380,7 @@ public class GameDayStateService {
                         progressionState.purchaseCursor(),
                         state.startResponse(),
                         tick,
+                        regionStoreCount,
                         progressionState.populationPerStore(),
                         captureRate,
                         state.salePrice(),
@@ -362,10 +404,8 @@ public class GameDayStateService {
             DayWindow currentTimeline,
             int currentTick,
             LocalDateTime effectiveNow,
-            BigDecimal captureRate,
             int day,
-            int totalDays,
-            long regionStoreCount
+            int regionStoreCount
     ) {
         int processedTick = state.tick() == null ? 0 : state.tick();
         int purchaseCursor = state.purchaseCursor() == null ? 0 : state.purchaseCursor();
@@ -376,6 +416,8 @@ public class GameDayStateService {
         int cumulativePurchaseCount = state.cumulativePurchaseCount() == null ? 0 : state.cumulativePurchaseCount();
         long cumulativeSales = state.cumulativeSales() == null ? 0L : state.cumulativeSales();
         int stock = state.stock() == null ? initialStockOf(state) : state.stock();
+        PopulationPolicy.PopulationSnapshot currentPopulationSnapshot = PopulationPolicy.PopulationSnapshot.empty();
+        CustomerScorePolicy.CustomerScoreResult currentCustomerScore = CustomerScorePolicy.CustomerScoreResult.empty();
 
         LocalDateTime baselineTime = state.lastCalculatedAt();
         EventEffectResolver.EventEffect baselineEffect = resolveEventEffect(store, day, baselineTime);
@@ -386,14 +428,20 @@ public class GameDayStateService {
             EventEffectResolver.EventEffect tickEffect = resolveEventEffect(store, day, tickBoundary);
             EmergencyOrderState tickEmergency = resolveEmergencyOrderState(store.getId(), day, tickBoundary);
 
-            int populationPerStore = resolvePopulationPerStore(
+            PopulationPolicy.PopulationSnapshot populationSnapshot = resolvePopulationSnapshot(
                     state,
                     currentTimeline,
                     tickEffect.populationEventMultiplier(),
-                    tickBoundary,
+                    tickBoundary
+            );
+            CustomerScorePolicy.CustomerScoreResult customerScore = resolveCustomerScore(
+                    store,
+                    day,
+                    nextTick,
+                    populationSnapshot,
                     regionStoreCount
             );
-            int desiredCustomerCount = stockEngine.calculateTickCustomerCount(populationPerStore, captureRate);
+            int desiredCustomerCount = customerScore.customerCount();
             int nextCursor = stockEngine.advancePurchaseCursor(state.purchaseList(), purchaseCursor, desiredCustomerCount);
             int actualCustomerCount = Math.max(0, nextCursor - purchaseCursor);
             long demandUnits = stockEngine.calculateDemandUnits(state.purchaseList(), purchaseCursor, nextCursor);
@@ -413,6 +461,8 @@ public class GameDayStateService {
             cumulativeSales += tickSales;
             stock = availableStock - soldUnits;
             purchaseCursor = nextCursor;
+            currentPopulationSnapshot = populationSnapshot;
+            currentCustomerScore = customerScore;
             baselineEffect = tickEffect;
             baselineEmergency = tickEmergency;
         }
@@ -425,13 +475,20 @@ public class GameDayStateService {
                         + applyStockEventDelta(stock, baselineEffect, currentEffect)
                         + deltaArrivedStock(baselineEmergency, currentEmergency)
         );
-        int currentPopulationPerStore = resolvePopulationPerStore(
+        currentPopulationSnapshot = resolvePopulationSnapshot(
                 state,
                 currentTimeline,
                 currentEffect.populationEventMultiplier(),
-                effectiveNow,
+                effectiveNow
+        );
+        currentCustomerScore = resolveCustomerScore(
+                store,
+                day,
+                currentTick,
+                currentPopulationSnapshot,
                 regionStoreCount
         );
+        int currentPopulationPerStore = currentCustomerScore.populationPerStore();
 
         return new ProgressionState(
                 purchaseCursor,
@@ -443,6 +500,8 @@ public class GameDayStateService {
                 cumulativeSales,
                 stockNow,
                 currentPopulationPerStore,
+                currentPopulationSnapshot,
+                currentCustomerScore,
                 currentEffect,
                 currentEmergency
         );
@@ -468,25 +527,38 @@ public class GameDayStateService {
         return captureRatePolicy.normalizeCaptureRate(BigDecimal.ZERO);
     }
 
-    private int resolvePopulationPerStore(
+    private PopulationPolicy.PopulationSnapshot resolvePopulationSnapshot(
             GameDayLiveState state,
             DayWindow currentTimeline,
             BigDecimal populationEventMultiplier,
-            LocalDateTime effectiveNow,
-            long regionStoreCount
+            LocalDateTime effectiveNow
     ) {
-        int totalPopulation = populationPolicy.calculateCurrentPopulation(
+        return populationPolicy.resolvePopulationSnapshot(
                 state.startResponse(),
                 currentTimeline,
                 populationEventMultiplier,
                 effectiveNow
         );
-        if (totalPopulation <= 0) {
-            return 0;
+    }
+
+    private CustomerScorePolicy.CustomerScoreResult resolveCustomerScore(
+            Store store,
+            int day,
+            int tick,
+            PopulationPolicy.PopulationSnapshot populationSnapshot,
+            int regionStoreCount
+    ) {
+        if (regionStoreCount <= 0) {
+            log.warn(
+                    "state-customer-score-invalid-region-store-count storeId={} day={} tick={} regionStoreCount={}",
+                    store.getId(),
+                    day,
+                    tick,
+                    regionStoreCount
+            );
+            return CustomerScorePolicy.CustomerScoreResult.empty();
         }
-        return BigDecimal.valueOf(totalPopulation)
-                .divide(BigDecimal.valueOf(Math.max(1L, regionStoreCount)), 0, RoundingMode.HALF_UP)
-                .intValue();
+        return customerScorePolicy.calculate(populationSnapshot, regionStoreCount);
     }
 
     private int applyStockEventDelta(
@@ -560,6 +632,12 @@ public class GameDayStateService {
             long cash,
             int totalStock,
             int populationPerStore,
+            int tickCustomerCount,
+            int baseFloatingPopulation,
+            BigDecimal populationGrowthRate,
+            int currentFloatingPopulation,
+            int regionStoreCount,
+            BigDecimal rValue,
             EmergencyOrderState emergencyOrderState,
             List<GameStateResponse.AppliedEvent> appliedEvents,
             GameDayLiveState liveState
@@ -576,9 +654,10 @@ public class GameDayStateService {
             long cumulativeSales,
             int stock,
             int populationPerStore,
+            PopulationPolicy.PopulationSnapshot currentPopulationSnapshot,
+            CustomerScorePolicy.CustomerScoreResult currentCustomerScore,
             EventEffectResolver.EventEffect currentEventEffect,
             EmergencyOrderState currentEmergencyOrderState
     ) {
     }
 }
-
