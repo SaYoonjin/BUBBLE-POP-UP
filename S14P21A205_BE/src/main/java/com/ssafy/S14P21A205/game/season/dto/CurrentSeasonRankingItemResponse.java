@@ -11,6 +11,7 @@ public record CurrentSeasonRankingItemResponse(
         String menuName,
         BigDecimal roi,
         Long totalRevenue,
-        Integer rewardPoints
+        Integer rewardPoints,
+        Boolean isBankrupt
 ) {
 }

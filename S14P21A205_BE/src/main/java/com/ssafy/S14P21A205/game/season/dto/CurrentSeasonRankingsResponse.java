@@ -6,6 +6,6 @@ import java.util.List;
 public record CurrentSeasonRankingsResponse(
         Long seasonId,
         List<CurrentSeasonRankingItemResponse> rankings,
-        CurrentSeasonMyRankingResponse myRanking
+        List<CurrentSeasonRankingItemResponse> myRankings
 ) {
 }

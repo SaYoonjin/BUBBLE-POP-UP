@@ -7,6 +7,7 @@ import com.ssafy.S14P21A205.game.day.state.GameDayLiveState;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -15,6 +16,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Repository;
 import org.springframework.util.StringUtils;
+import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
 
 @Repository
@@ -23,12 +25,13 @@ public class GameDayStoreStateRedisRepository {
 
     private static final String STATE_KEY_PATTERN = "game:store:%d:day:%d:state";
     private static final String TICK_LOG_KEY_PATTERN = "game:store:%d:day:%d:tick_log";
+    private static final String ACTIONS_KEY_PATTERN = "game:store:%d:day:%d:actions";
     private static final String FIELD_STARTED_AT = "started_at";
     private static final String FIELD_PURCHASE_LIST = "purchase_list";
     private static final String FIELD_PURCHASE_CURSOR = "purchase_cursor";
     private static final String FIELD_START_RESPONSE = "start_response";
     private static final String FIELD_POPULATION_PER_STORE = "population_per_store";
-    private static final String FIELD_INFLOW_RATE = "inflow_rate";
+    private static final String FIELD_CAPTURE_RATE = "capture_rate";
     private static final String FIELD_SALE_PRICE = "sale_price";
     private static final String FIELD_TICK_CUSTOMER_COUNT = "tick_customer_count";
     private static final String FIELD_TICK_PURCHASE_COUNT = "tick_purchase_count";
@@ -59,7 +62,7 @@ public class GameDayStoreStateRedisRepository {
                     parseStartResponse(entries.get(FIELD_START_RESPONSE)),
                     parseInteger(entries.get(FIELD_TICK)),
                     parseInteger(entries.get(FIELD_POPULATION_PER_STORE)),
-                    parseBigDecimal(entries.get(FIELD_INFLOW_RATE)),
+                    parseCaptureRate(entries),
                     parseInteger(entries.get(FIELD_SALE_PRICE)),
                     parseInteger(entries.get(FIELD_TICK_CUSTOMER_COUNT)),
                     parseInteger(entries.get(FIELD_TICK_PURCHASE_COUNT)),
@@ -125,12 +128,42 @@ public class GameDayStoreStateRedisRepository {
         }
     }
 
+    public Map<String, Boolean> getActions(Long storeId, int day) {
+        String json = stringRedisTemplate.opsForValue().get(buildActionsKey(storeId, day));
+        if (json == null) {
+            return new HashMap<>();
+        }
+        try {
+            return objectMapper.readValue(json, new TypeReference<>() {});
+        } catch (Exception e) {
+            return new HashMap<>();
+        }
+    }
+
+    public boolean isActionUsed(Long storeId, int day, String actionField) {
+        return Boolean.TRUE.equals(getActions(storeId, day).get(actionField));
+    }
+
+    public void markActionUsed(Long storeId, int day, String actionField) {
+        Map<String, Boolean> actions = getActions(storeId, day);
+        actions.put(actionField, true);
+        try {
+            stringRedisTemplate.opsForValue().set(buildActionsKey(storeId, day), objectMapper.writeValueAsString(actions));
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to serialize actions", e);
+        }
+    }
+
     String buildStateKey(Long storeId, Integer day) {
         return STATE_KEY_PATTERN.formatted(storeId, day);
     }
 
     String buildTickLogKey(Long storeId, Integer day) {
         return TICK_LOG_KEY_PATTERN.formatted(storeId, day);
+    }
+
+    String buildActionsKey(Long storeId, Integer day) {
+        return ACTIONS_KEY_PATTERN.formatted(storeId, day);
     }
 
     private void saveTickLog(Long storeId, Integer day, GameDayLiveState state) {
@@ -159,7 +192,7 @@ public class GameDayStoreStateRedisRepository {
         put(entries, FIELD_PURCHASE_CURSOR, state.purchaseCursor());
         put(entries, FIELD_TICK, state.tick());
         put(entries, FIELD_POPULATION_PER_STORE, state.populationPerStore());
-        put(entries, FIELD_INFLOW_RATE, state.inflowRate());
+        put(entries, FIELD_CAPTURE_RATE, state.captureRate());
         put(entries, FIELD_SALE_PRICE, state.salePrice());
         put(entries, FIELD_TICK_CUSTOMER_COUNT, state.tickCustomerCount());
         put(entries, FIELD_TICK_PURCHASE_COUNT, state.tickPurchaseCount());
@@ -178,11 +211,11 @@ public class GameDayStoreStateRedisRepository {
         String prefix = "tick:%d:".formatted(state.tick());
         Map<String, String> entries = new LinkedHashMap<>();
         put(entries, prefix + "population_per_store", state.populationPerStore());
-        put(entries, prefix + "inflow_rate", state.inflowRate());
+        put(entries, prefix + "capture_rate", state.captureRate());
         put(entries, prefix + "sale_price", state.salePrice());
-        put(entries, prefix + "customer_count", state.tickCustomerCount());
-        put(entries, prefix + "purchase_count", state.tickPurchaseCount());
-        put(entries, prefix + "sales", state.tickSales());
+        put(entries, prefix + "tick_customer_count", state.tickCustomerCount());
+        put(entries, prefix + "tick_purchase_count", state.tickPurchaseCount());
+        put(entries, prefix + "tick_sales", state.tickSales());
         put(entries, prefix + "cumulative_customer_count", state.cumulativeCustomerCount());
         put(entries, prefix + "cumulative_purchase_count", state.cumulativePurchaseCount());
         put(entries, prefix + "cumulative_sales", state.cumulativeSales());
@@ -244,6 +277,10 @@ public class GameDayStoreStateRedisRepository {
             return null;
         }
         return new BigDecimal(text);
+    }
+
+    private BigDecimal parseCaptureRate(Map<Object, Object> entries) {
+        return parseBigDecimal(entries.get(FIELD_CAPTURE_RATE));
     }
 
     private List<Integer> parsePurchaseList(Object value) throws Exception {

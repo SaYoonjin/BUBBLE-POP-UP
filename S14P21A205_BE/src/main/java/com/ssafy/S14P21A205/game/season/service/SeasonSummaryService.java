@@ -55,7 +55,7 @@ public class SeasonSummaryService {
 
         return new SeasonSummaryResponse(
                 store.getSeason().getId(),
-                record.getFinalRank(),
+                Boolean.TRUE.equals(record.getIsBankruptcy()) ? null : record.getFinalRank(),
                 new SeasonSummaryResponse.StoreInfo(
                         store.getStoreName(),
                         store.getLocation().getLocationName(),

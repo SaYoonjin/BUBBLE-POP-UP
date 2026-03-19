@@ -28,7 +28,6 @@ public class GameDayStoreStateTickTask implements GameTickTask {
     private final SeasonRepository seasonRepository;
     private final StoreRepository storeRepository;
     private final GameDayStateService gameDayStateService;
-    private final GameDayReportService gameDayReportService;
     private final NewsService newsService;
 
     /** 영업 중 뉴스가 이미 생성 요청된 day를 추적 (시즌 내 중복 방지) */
@@ -52,7 +51,6 @@ public class GameDayStoreStateTickTask implements GameTickTask {
         for (Store store : stores) {
             try {
                 gameDayStateService.refreshGameState(store);
-                gameDayReportService.recordClosedDayReport(store);
             } catch (Exception e) {
                 log.error(
                         "Failed to refresh game day store state. seasonId={} storeId={}",

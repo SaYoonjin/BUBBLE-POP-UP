@@ -12,7 +12,7 @@ public record GameDayLiveState(
         GameDayStartResponse startResponse,
         Integer tick,
         Integer populationPerStore,
-        BigDecimal inflowRate,
+        BigDecimal captureRate,
         Integer salePrice,
         Integer tickCustomerCount,
         Integer tickPurchaseCount,

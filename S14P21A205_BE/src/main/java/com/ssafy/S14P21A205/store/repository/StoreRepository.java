@@ -43,6 +43,8 @@ public interface StoreRepository extends JpaRepository<Store, Long> {
     @EntityGraph(attributePaths = {"user", "location", "menu", "season"})
     List<Store> findBySeason_IdOrderByIdAsc(Long seasonId);
 
+    long countBySeason_IdAndLocation_Id(Long seasonId, Long locationId);
+
     Optional<Store> findByUserId(Integer userId);
 
     @Query("""
