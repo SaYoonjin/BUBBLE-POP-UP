@@ -5,6 +5,7 @@ import DistrictDetailPanel from "../components/game/DistrictDetailPanel";
 import SeoulMap3D from "../components/game/SeoulMap3D";
 import { seoulDistricts } from "../components/game/seoulDistricts";
 import { LOCATION_SELECTION_DEADLINE_STORAGE_KEY } from "../constants";
+import { setStoredBrandName } from "../hooks/useBrandName";
 import type { WaitingRouteState } from "../types/waiting";
 
 const LOCATION_SELECTION_SECONDS = 120;
@@ -68,6 +69,8 @@ export default function LocationSelectPage() {
     if (!selectedDistrict) {
       return;
     }
+
+    setStoredBrandName(brandName);
 
     const remainingSelectionSeconds = Math.max(
       0,

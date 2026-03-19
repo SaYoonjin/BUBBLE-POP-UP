@@ -28,15 +28,34 @@ export default function CountdownTimer({
   variant = "pill",
   showIcon = true,
 }: CountdownTimerProps) {
+  const timerIdentity =
+    typeof endTimestampMs === "number" ? `end-${endTimestampMs}` : `initial-${initialSeconds ?? 0}`;
+
+  return (
+    <CountdownTimerInstance
+      key={timerIdentity}
+      initialSeconds={initialSeconds}
+      endTimestampMs={endTimestampMs}
+      onComplete={onComplete}
+      label={label}
+      variant={variant}
+      showIcon={showIcon}
+    />
+  );
+}
+
+function CountdownTimerInstance({
+  initialSeconds,
+  endTimestampMs,
+  onComplete,
+  label = "남은 시간",
+  variant = "pill",
+  showIcon = true,
+}: CountdownTimerProps) {
   const [seconds, setSeconds] = useState(() =>
     resolveRemainingSeconds(initialSeconds, endTimestampMs),
   );
   const hasCompletedRef = useRef(false);
-
-  useEffect(() => {
-    setSeconds(resolveRemainingSeconds(initialSeconds, endTimestampMs));
-    hasCompletedRef.current = false;
-  }, [initialSeconds, endTimestampMs]);
 
   useEffect(() => {
     if (seconds <= 0) {
