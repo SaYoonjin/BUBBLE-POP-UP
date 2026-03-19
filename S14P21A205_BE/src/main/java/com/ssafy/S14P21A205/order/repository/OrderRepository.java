@@ -43,6 +43,11 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
             OrderType orderType
     );
 
+    List<Order> findByStoreIdAndOrderTypeOrderByArrivedTimeAscIdAsc(
+            Long storeId,
+            OrderType orderType
+    );
+
     default Optional<Order> findDailyStartOrder(Long storeId, Integer orderedDay) {
         return findDailyStartOrders(storeId, orderedDay).stream().findFirst();
     }

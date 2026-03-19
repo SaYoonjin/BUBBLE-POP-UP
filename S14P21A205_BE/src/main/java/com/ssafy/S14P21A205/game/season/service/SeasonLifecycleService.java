@@ -587,20 +587,7 @@ public class SeasonLifecycleService {
             return null;
         }
 
-        String sourceBatchKey = populationBatchKey;
-        boolean alreadyConsumed = seasonRepository.findFirstBySourceBatchKeyIsNotNullOrderByIdDesc()
-                .map(Season::getSourceBatchKey)
-                .filter(sourceBatchKey::equals)
-                .isPresent();
-        if (alreadyConsumed) {
-            log.info(
-                    "Season {} is waiting for a new spark batch. reusedBatchKey={}",
-                    scheduledSeason.getId(),
-                    sourceBatchKey
-            );
-            return null;
-        }
-        return sourceBatchKey;
+        return populationBatchKey;
     }
 
     private Map<WeatherType, Weather> loadWeatherByType() {

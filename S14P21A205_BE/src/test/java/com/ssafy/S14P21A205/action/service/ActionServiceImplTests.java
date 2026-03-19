@@ -21,7 +21,9 @@ import com.ssafy.S14P21A205.exception.BaseException;
 import com.ssafy.S14P21A205.exception.ErrorCode;
 import com.ssafy.S14P21A205.game.day.dto.GameDayStartResponse;
 import com.ssafy.S14P21A205.game.day.policy.CaptureRatePolicy;
+import com.ssafy.S14P21A205.game.day.policy.StoreRankingPolicy;
 import com.ssafy.S14P21A205.game.day.resolver.EventEffectResolver;
+import com.ssafy.S14P21A205.game.day.resolver.NewsRankingResolver;
 import com.ssafy.S14P21A205.game.day.resolver.TrafficDelayResolver;
 import com.ssafy.S14P21A205.game.day.state.GameDayLiveState;
 import com.ssafy.S14P21A205.game.day.state.repository.GameDayStoreStateRedisRepository;
@@ -34,6 +36,7 @@ import com.ssafy.S14P21A205.shop.entity.ItemCategory;
 import com.ssafy.S14P21A205.shop.repository.ItemUserRepository;
 import com.ssafy.S14P21A205.store.entity.Location;
 import com.ssafy.S14P21A205.store.entity.Store;
+import com.ssafy.S14P21A205.store.repository.MenuRepository;
 import com.ssafy.S14P21A205.store.repository.StoreRepository;
 import com.ssafy.S14P21A205.support.GameDayTestFixtures;
 import com.ssafy.S14P21A205.user.entity.User;
@@ -70,6 +73,9 @@ class ActionServiceImplTests {
     private StoreRepository storeRepository;
 
     @Mock
+    private MenuRepository menuRepository;
+
+    @Mock
     private OrderRepository orderRepository;
 
     @Mock
@@ -80,6 +86,9 @@ class ActionServiceImplTests {
 
     @Mock
     private TrafficDelayResolver trafficDelayResolver;
+
+    @Mock
+    private NewsRankingResolver newsRankingResolver;
 
     private ActionServiceImpl actionService;
     private Clock fixedClock;
@@ -92,10 +101,13 @@ class ActionServiceImplTests {
                 actionRepository,
                 actionLogRepository,
                 storeRepository,
+                menuRepository,
                 orderRepository,
                 itemUserRepository,
                 eventEffectResolver,
                 trafficDelayResolver,
+                new StoreRankingPolicy(),
+                newsRankingResolver,
                 new CaptureRatePolicy(),
                 fixedClock
         );
@@ -251,8 +263,9 @@ class ActionServiceImplTests {
     }
 
     @Test
-    void executeEmergencyOrderAppliesIngredientDiscountAndCostMultiplierFromActiveEvent() {
+    void executeEmergencyOrderAppliesIngredientDiscountTrendMultiplierAndCostMultiplierFromActiveEvent() {
         Store store = store(15L, 1, 3L, 7L, 2, 7, 2_000);
+        com.ssafy.S14P21A205.shop.entity.Menu emergencyMenu = menu(8L, 3_000, "emergency-cookie");
         Season season = store.getSeason();
         Action emergencyAction = action(ActionCategory.EMERGENCY_ORDER, 500);
         GameDayLiveState state = state(500_000L);
@@ -260,9 +273,15 @@ class ActionServiceImplTests {
 
         when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
                 .thenReturn(Optional.of(store));
+        when(menuRepository.findById(8L)).thenReturn(Optional.of(emergencyMenu));
         when(gameDayStoreStateRedisRepository.isActionUsed(15L, 2, "emergency")).thenReturn(false);
         when(actionRepository.findByCategory(ActionCategory.EMERGENCY_ORDER)).thenReturn(List.of(emergencyAction));
         when(gameDayStoreStateRedisRepository.find(15L, 2)).thenReturn(Optional.of(state));
+        when(storeRepository.findBySeason_IdOrderByIdAsc(9L)).thenReturn(List.of(
+                store,
+                store(16L, 2, 3L, 8L, 2, 7, 3_000),
+                store(17L, 3, 3L, 8L, 2, 7, 3_000)
+        ));
         when(itemUserRepository.findPurchasedDiscountRateByUserIdAndCategory(1, ItemCategory.INGREDIENT))
                 .thenReturn(Optional.of(new BigDecimal("0.80")));
         when(eventEffectResolver.resolve(
@@ -270,7 +289,7 @@ class ActionServiceImplTests {
                 eq(2),
                 eq(now),
                 eq(3L),
-                eq(7L)
+                eq(8L)
         )).thenReturn(new EventEffectResolver.EventEffect(
                 0L,
                 0,
@@ -289,16 +308,18 @@ class ActionServiceImplTests {
         )).thenReturn(resolvedTraffic(2, 10, TrafficStatus.NORMAL, 20));
         when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        EmergencyOrderResponse response = actionService.executeEmergencyOrder(1, new EmergencyOrderRequest(10));
+        EmergencyOrderResponse response = actionService.executeEmergencyOrder(1, new EmergencyOrderRequest(8, 10, 4_300));
 
         ArgumentCaptor<Order> orderCaptor = ArgumentCaptor.forClass(Order.class);
         verify(orderRepository).save(orderCaptor.capture());
-        assertThat(orderCaptor.getValue().getTotalCost()).isEqualTo(25_200);
+        assertThat(orderCaptor.getValue().getMenu().getId()).isEqualTo(8L);
+        assertThat(orderCaptor.getValue().getTotalCost()).isEqualTo(45_360);
+        assertThat(orderCaptor.getValue().getSalePrice()).isEqualTo(4_300);
         assertThat(orderCaptor.getValue().getArrivedTime()).isEqualTo(LocalDateTime.of(2026, 3, 17, 10, 0, 20));
-        assertThat(response.totalCost()).isEqualTo(25_200);
+        assertThat(response.totalCost()).isEqualTo(45_360);
         assertThat(response.quantity()).isEqualTo(10);
         verify(gameDayStoreStateRedisRepository).markActionUsed(15L, 2, "emergency");
-        verify(gameDayStoreStateRedisRepository).saveBalance(15L, 2, 474_300L);
+        verify(gameDayStoreStateRedisRepository).saveBalance(15L, 2, 454_140L);
     }
 
     @Test
@@ -308,14 +329,43 @@ class ActionServiceImplTests {
 
         when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
                 .thenReturn(Optional.of(store));
+        when(menuRepository.findById(7L)).thenReturn(Optional.of(store.getMenu()));
         when(gameDayStoreStateRedisRepository.isActionUsed(15L, 2, "emergency")).thenReturn(false);
         when(actionRepository.findByCategory(ActionCategory.EMERGENCY_ORDER)).thenReturn(List.of(emergencyAction));
         when(gameDayStoreStateRedisRepository.find(15L, 2)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> actionService.executeEmergencyOrder(1, new EmergencyOrderRequest(10)))
+        assertThatThrownBy(() -> actionService.executeEmergencyOrder(1, new EmergencyOrderRequest(7, 10, 4_000)))
                 .isInstanceOf(BaseException.class)
                 .satisfies(exception -> assertThat(((BaseException) exception).getErrorCode())
                         .isEqualTo(ErrorCode.GAME_STATE_NOT_FOUND));
+    }
+
+    @Test
+    void executeEmergencyOrderThrowsWhenSalePriceFallsBelowOriginPrice() {
+        Store store = store(15L, 1, 3L, 7L, 2, 7, 2_000);
+
+        when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
+                .thenReturn(Optional.of(store));
+        when(menuRepository.findById(7L)).thenReturn(Optional.of(store.getMenu()));
+
+        assertThatThrownBy(() -> actionService.executeEmergencyOrder(1, new EmergencyOrderRequest(7, 10, 1_900)))
+                .isInstanceOf(BaseException.class)
+                .satisfies(exception -> assertThat(((BaseException) exception).getErrorCode())
+                        .isEqualTo(ErrorCode.INVALID_INPUT_VALUE));
+    }
+
+    @Test
+    void executeEmergencyOrderThrowsWhenMenuDoesNotExist() {
+        Store store = store(15L, 1, 3L, 7L, 2, 7, 2_000);
+
+        when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
+                .thenReturn(Optional.of(store));
+        when(menuRepository.findById(8L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> actionService.executeEmergencyOrder(1, new EmergencyOrderRequest(8, 10, 4_300)))
+                .isInstanceOf(BaseException.class)
+                .satisfies(exception -> assertThat(((BaseException) exception).getErrorCode())
+                        .isEqualTo(ErrorCode.MENU_NOT_FOUND));
     }
 
     @Test
@@ -326,10 +376,13 @@ class ActionServiceImplTests {
                 actionRepository,
                 actionLogRepository,
                 storeRepository,
+                menuRepository,
                 orderRepository,
                 itemUserRepository,
                 eventEffectResolver,
                 trafficDelayResolver,
+                new StoreRankingPolicy(),
+                newsRankingResolver,
                 new CaptureRatePolicy(),
                 fixedClock
         );
@@ -350,6 +403,7 @@ class ActionServiceImplTests {
                 GameDayTestFixtures.USER_ID,
                 SeasonStatus.IN_PROGRESS
         )).thenReturn(Optional.of(store));
+        when(menuRepository.findById(GameDayTestFixtures.MENU_ID)).thenReturn(Optional.of(menu));
         when(gameDayStoreStateRedisRepository.isActionUsed(
                 GameDayTestFixtures.STORE_ID,
                 GameDayTestFixtures.CURRENT_DAY,
@@ -388,10 +442,10 @@ class ActionServiceImplTests {
 
         EmergencyOrderResponse response = actionService.executeEmergencyOrder(
                 GameDayTestFixtures.USER_ID,
-                new EmergencyOrderRequest(20)
+                new EmergencyOrderRequest(Math.toIntExact(GameDayTestFixtures.MENU_ID), 20, 3_300)
         );
 
-        assertThat(response.totalCost()).isEqualTo(63_000);
+        assertThat(response.totalCost()).isEqualTo(75_600);
         assertThat(response.arrivedTime()).isEqualTo(LocalDateTime.of(2026, 3, 17, 10, 0, 20));
         verify(gameDayStoreStateRedisRepository).markActionUsed(
                 GameDayTestFixtures.STORE_ID,
@@ -401,7 +455,7 @@ class ActionServiceImplTests {
         verify(gameDayStoreStateRedisRepository).saveBalance(
                 GameDayTestFixtures.STORE_ID,
                 GameDayTestFixtures.CURRENT_DAY,
-                9_337_000L
+                9_324_400L
         );
     }
 
@@ -509,6 +563,14 @@ class ActionServiceImplTests {
         ReflectionTestUtils.setField(store, "season", season);
         ReflectionTestUtils.setField(store, "price", currentPrice);
         return store;
+    }
+
+    private com.ssafy.S14P21A205.shop.entity.Menu menu(Long menuId, int originPrice, String menuName) {
+        com.ssafy.S14P21A205.shop.entity.Menu menu = instantiate(com.ssafy.S14P21A205.shop.entity.Menu.class);
+        ReflectionTestUtils.setField(menu, "id", menuId);
+        ReflectionTestUtils.setField(menu, "originPrice", originPrice);
+        ReflectionTestUtils.setField(menu, "menuName", menuName);
+        return menu;
     }
 
     private <T> T instantiate(Class<T> type) {

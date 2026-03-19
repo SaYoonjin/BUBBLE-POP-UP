@@ -4,35 +4,37 @@ import com.ssafy.S14P21A205.exception.BaseException;
 import com.ssafy.S14P21A205.exception.ErrorCode;
 import com.ssafy.S14P21A205.game.day.dto.GameDayStartResponse;
 import com.ssafy.S14P21A205.game.day.model.OpeningState;
+import com.ssafy.S14P21A205.game.day.state.GameDayLiveState;
+import com.ssafy.S14P21A205.game.day.state.repository.GameDayStoreStateRedisRepository;
 import com.ssafy.S14P21A205.game.event.entity.DailyEvent;
 import com.ssafy.S14P21A205.game.event.entity.EventEndTime;
 import com.ssafy.S14P21A205.game.event.entity.EventStartTime;
 import com.ssafy.S14P21A205.game.event.entity.RandomEvent;
 import com.ssafy.S14P21A205.game.event.repository.DailyEventRepository;
+import com.ssafy.S14P21A205.game.support.StoreStateCarryOverSupport;
 import com.ssafy.S14P21A205.game.season.entity.DailyReport;
 import com.ssafy.S14P21A205.game.season.repository.DailyReportRepository;
 import com.ssafy.S14P21A205.order.entity.Order;
 import com.ssafy.S14P21A205.shop.entity.ItemCategory;
+import com.ssafy.S14P21A205.shop.entity.Menu;
 import com.ssafy.S14P21A205.shop.repository.ItemUserRepository;
 import com.ssafy.S14P21A205.store.entity.Store;
+import com.ssafy.S14P21A205.store.service.StoreLocationTransitionSupport;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
 public class RentPolicy {
 
-    private static final int INITIAL_CAPITAL = 10_000_000;
-    private static final String BALANCE_KEY_PREFIX = "balance:";
-    private static final String STOCK_KEY_PREFIX = "stock:";
     private static final BigDecimal DECIMAL_ONE = new BigDecimal("1.00");
+    private static final StoreLocationTransitionSupport STORE_LOCATION_TRANSITION_SUPPORT = new StoreLocationTransitionSupport();
     private final DailyReportRepository dailyReportRepository;
     private final DailyEventRepository dailyEventRepository;
-    private final StringRedisTemplate stringRedisTemplate;
+    private final GameDayStoreStateRedisRepository gameDayStoreStateRedisRepository;
     private final ItemUserRepository itemUserRepository;
     private final StoreRankingPolicy marketRankingPolicy;
 
@@ -42,33 +44,11 @@ public class RentPolicy {
             List<Order> regularOrders,
             GameDayStartResponse.MarketSnapshot marketSnapshot
     ) {
-        int carriedBalance;
-        int carriedStock;
-        String previousMenuName = null;
-        String previousLocationName = null;
-        DailyReport previousDayReport = null;
-
-        if (day == 1) {
-            Integer persistedBalance = getPersistedBalance(store.getId());
-            carriedBalance = persistedBalance == null ? INITIAL_CAPITAL : persistedBalance;
-            Integer persistedStock = getPersistedStock(store.getId());
-            carriedStock = persistedStock == null ? 0 : persistedStock;
-        } else {
-            previousDayReport = dailyReportRepository.findByStoreIdAndDay(store.getId(), day - 1)
-                    .orElse(null);
-
-            if (previousDayReport != null) {
-                carriedBalance = previousDayReport.getBalance();
-                carriedStock = previousDayReport.getStockRemaining();
-                previousMenuName = previousDayReport.getMenuName();
-                previousLocationName = previousDayReport.getLocationName();
-            } else {
-                Integer persistedBalance = getPersistedBalance(store.getId());
-                Integer persistedStock = getPersistedStock(store.getId());
-                carriedBalance = persistedBalance == null ? INITIAL_CAPITAL : persistedBalance;
-                carriedStock = persistedStock == null ? 0 : persistedStock;
-            }
-        }
+        CarryOverState carryOverState = resolveCarryOverState(store, day);
+        int carriedBalance = carryOverState.balance();
+        int carriedStock = carryOverState.stock();
+        String previousMenuName = carryOverState.previousMenuName();
+        String previousLocationName = carryOverState.previousLocationName();
 
         BigDecimal rentMultiplier = marketRankingPolicy.resolveRentMultiplier(
                 marketSnapshot == null ? null : marketSnapshot.locationPopularityRank()
@@ -86,20 +66,28 @@ public class RentPolicy {
 
         int dailyRentApplied = marketRankingPolicy.apply(store.getLocation().getRent(), rentMultiplier, rentCouponMultiplier);
         int interiorCost = resolveInteriorCost(store, day, previousLocationName);
-        int appliedUnitCost = marketRankingPolicy.apply(
-                store.getMenu().getOriginPrice(),
-                trendCostMultiplier,
-                ingredientDiscountMultiplier,
-                openingEventAdjustment.persistentCostMultiplier(),
-                openingEventAdjustment.todayCostMultiplier()
-        );
-
         int regularOrderQuantity = regularOrders.stream()
                 .map(Order::getQuantity)
                 .filter(quantity -> quantity != null && quantity > 0)
                 .mapToInt(Integer::intValue)
                 .sum();
-        int regularOrderCost = Math.multiplyExact(appliedUnitCost, regularOrderQuantity);
+        int appliedUnitCost = resolveAppliedUnitCost(
+                regularOrders.stream().findFirst().map(Order::getMenu).orElse(store.getMenu()),
+                trendCostMultiplier,
+                ingredientDiscountMultiplier,
+                openingEventAdjustment
+        );
+        int regularOrderCost = regularOrders.stream()
+                .mapToInt(order -> Math.multiplyExact(
+                        resolveAppliedUnitCost(
+                                order.getMenu(),
+                                trendCostMultiplier,
+                                ingredientDiscountMultiplier,
+                                openingEventAdjustment
+                        ),
+                        order.getQuantity() == null ? 0 : order.getQuantity()
+                ))
+                .sum();
 
         boolean menuChanged = previousMenuName != null
                 && !previousMenuName.isBlank()
@@ -163,28 +151,44 @@ public class RentPolicy {
         );
     }
 
-    private Integer getPersistedBalance(Long storeId) {
-        String value = stringRedisTemplate.opsForValue().get(balanceKey(storeId));
-        if (value == null || value.isBlank()) {
-            return null;
+    private CarryOverState resolveCarryOverState(Store store, int day) {
+        if (day <= 1) {
+            return new CarryOverState(
+                    StoreStateCarryOverSupport.resolveInitialBalance(store),
+                    StoreStateCarryOverSupport.resolveInitialStock(),
+                    null,
+                    null
+            );
         }
-        return Integer.valueOf(value);
-    }
 
-    private String balanceKey(Long storeId) {
-        return BALANCE_KEY_PREFIX + storeId;
-    }
-
-    private Integer getPersistedStock(Long storeId) {
-        String value = stringRedisTemplate.opsForValue().get(stockKey(storeId));
-        if (value == null || value.isBlank()) {
-            return null;
+        DailyReport previousDayReport = dailyReportRepository.findByStoreIdAndDay(store.getId(), day - 1)
+                .orElse(null);
+        if (previousDayReport != null) {
+            return new CarryOverState(
+                    previousDayReport.getBalance(),
+                    previousDayReport.getStockRemaining(),
+                    previousDayReport.getMenuName(),
+                    previousDayReport.getLocationName()
+            );
         }
-        return Integer.valueOf(value);
-    }
 
-    private String stockKey(Long storeId) {
-        return STOCK_KEY_PREFIX + storeId;
+        GameDayLiveState previousDayState = gameDayStoreStateRedisRepository.find(store.getId(), day - 1)
+                .orElse(null);
+        if (previousDayState != null) {
+            return new CarryOverState(
+                    safeInt(previousDayState.balance()),
+                    previousDayState.stock() == null ? 0 : previousDayState.stock(),
+                    null,
+                    null
+            );
+        }
+
+        return new CarryOverState(
+                StoreStateCarryOverSupport.resolveInitialBalance(store),
+                StoreStateCarryOverSupport.resolveInitialStock(),
+                null,
+                null
+        );
     }
 
     private int resolveInteriorCost(Store store, int day, String previousLocationName) {
@@ -194,12 +198,33 @@ public class RentPolicy {
         if (day == 1) {
             return store.getLocation().getInteriorCost();
         }
+        if (STORE_LOCATION_TRANSITION_SUPPORT.isLocationChangeApplyingToday(store, day)) {
+            return 0;
+        }
         if (previousLocationName == null || previousLocationName.isBlank()) {
             return 0;
         }
         return previousLocationName.equals(store.getLocation().getLocationName())
                 ? 0
                 : store.getLocation().getInteriorCost();
+    }
+
+    private int resolveAppliedUnitCost(
+            Menu menu,
+            BigDecimal trendCostMultiplier,
+            BigDecimal ingredientDiscountMultiplier,
+            OpeningEventAdjustment openingEventAdjustment
+    ) {
+        if (menu == null || menu.getOriginPrice() == null) {
+            return 0;
+        }
+        return marketRankingPolicy.apply(
+                menu.getOriginPrice(),
+                trendCostMultiplier,
+                ingredientDiscountMultiplier,
+                openingEventAdjustment.persistentCostMultiplier(),
+                openingEventAdjustment.todayCostMultiplier()
+        );
     }
 
     private OpeningEventAdjustment resolveOpeningEventAdjustment(Store store, int day) {
@@ -274,10 +299,22 @@ public class RentPolicy {
         return value.setScale(2, RoundingMode.HALF_UP);
     }
 
+    private int safeInt(Long value) {
+        return value == null ? 0 : Math.toIntExact(value);
+    }
+
     private record OpeningEventAdjustment(
             BigDecimal persistentCostMultiplier,
             BigDecimal todayCostMultiplier,
             int governmentSupportCash
+    ) {
+    }
+
+    private record CarryOverState(
+            int balance,
+            int stock,
+            String previousMenuName,
+            String previousLocationName
     ) {
     }
 }

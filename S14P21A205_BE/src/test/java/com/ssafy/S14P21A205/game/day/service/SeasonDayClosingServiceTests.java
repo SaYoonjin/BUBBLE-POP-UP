@@ -7,6 +7,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.ssafy.S14P21A205.game.news.service.NewsService;
 import com.ssafy.S14P21A205.game.season.entity.Season;
 import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
 import com.ssafy.S14P21A205.game.season.repository.SeasonRepository;
@@ -39,6 +40,9 @@ class SeasonDayClosingServiceTests {
     @Mock
     private SeasonFinalRankingService seasonFinalRankingService;
 
+    @Mock
+    private NewsService newsService;
+
     private SeasonDayClosingService seasonDayClosingService;
 
     @BeforeEach
@@ -47,7 +51,8 @@ class SeasonDayClosingServiceTests {
                 seasonRepository,
                 storeRepository,
                 gameDayReportService,
-                seasonFinalRankingService
+                seasonFinalRankingService,
+                newsService
         );
     }
 

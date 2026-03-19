@@ -13,7 +13,7 @@ import ShareModal from "../components/play/modals/ShareModal";
 import MoveModal from "../components/play/modals/MoveModal";
 import { PLAY_SESSION_DEADLINE_STORAGE_KEY_PREFIX } from "../constants";
 import useBrandName from "../hooks/useBrandName";
-import useNickname from "../hooks/useNickname";
+import { useUserStore } from "../stores/useUserStore";
 
 const MOCK = {
   location: "성수",
@@ -137,7 +137,7 @@ export default function PlayPage() {
 }
 
 function PlayPageSession({ dayNumber }: { dayNumber: number }) {
-  const { nickname } = useNickname();
+  const nickname = useUserStore((s) => s.nickname) ?? "버블킹";
   const { brandName } = useBrandName();
   const [activeModal, setActiveModal] = useState<ActionType | null>(null);
   const [usedActions, setUsedActions] = useState<Set<ActionType>>(new Set());
