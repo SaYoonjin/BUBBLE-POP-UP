@@ -3,6 +3,8 @@ package com.ssafy.S14P21A205.game.season.service;
 import com.ssafy.S14P21A205.exception.BaseException;
 import com.ssafy.S14P21A205.exception.ErrorCode;
 import com.ssafy.S14P21A205.game.day.scheduler.SeasonDayClosingScheduler;
+import com.ssafy.S14P21A205.game.news.service.NewsService;
+import com.ssafy.S14P21A205.game.news.service.SparkNewsDataService;
 import com.ssafy.S14P21A205.game.environment.entity.Festival;
 import com.ssafy.S14P21A205.game.environment.entity.Population;
 import com.ssafy.S14P21A205.game.environment.entity.Traffic;
@@ -79,6 +81,8 @@ public class SeasonLifecycleService {
     private final LocationRepository locationRepository;
     private final MenuRepository menuRepository;
     private final FestivalRepository festivalRepository;
+    private final NewsService newsService;
+    private final SparkNewsDataService sparkNewsDataService;
 
     private final SeasonTimelineService seasonTimelineService = new SeasonTimelineService();
 
@@ -94,7 +98,13 @@ public class SeasonLifecycleService {
         }
 
         Season scheduledSeason = seasonRepository.findFirstByStatusOrderByStartTimeAscIdAsc(SeasonStatus.SCHEDULED).orElse(null);
-        if (scheduledSeason == null || scheduledSeason.getStartTime() == null || scheduledSeason.getStartTime().isAfter(now)) {
+        if (scheduledSeason == null || scheduledSeason.getStartTime() == null) {
+            return;
+        }
+
+        // 시즌 준비 시간: startTime 전이면 이벤트 빌드 + ETL + 뉴스 미리 생성
+        if (scheduledSeason.getStartTime().isAfter(now)) {
+            prepareScheduledSeason(scheduledSeason);
             return;
         }
 
@@ -115,7 +125,32 @@ public class SeasonLifecycleService {
         preloadWeatherDay(scheduledSeason.getId(), weatherSchedule, 1);
         preloadTrafficDay(scheduledSeason, trafficSchedule, 1);
         scheduledSeason.updateEndTime(resolveSeasonEndAt(scheduledSeason));
+
+        // 시즌 준비 시간에 트렌드 뉴스가 이미 생성됐으면 축제 예고만 보충
+        // 아직 뉴스가 없으면 전체 생성 (트렌드 + 축제 예고)
+        try {
+            newsService.generateSeasonNews(scheduledSeason.getId());
+            newsService.generateEventPreviewNewsIfMissing(scheduledSeason.getId());
+        } catch (Exception e) {
+            log.error("Failed to generate season news. seasonId={}", scheduledSeason.getId(), e);
+        }
+
         synchronizeInProgressSeason(scheduledSeason, now);
+    }
+
+    /**
+     * 시즌 준비 시간 (SCHEDULED, startTime 전): ETL + 뉴스 미리 생성.
+     * 이벤트는 아직 없으므로 축제 예고는 건너뛰고, IN_PROGRESS 전환 후 보충.
+     */
+    private void prepareScheduledSeason(Season scheduledSeason) {
+        try {
+            // ETL: 유동인구·교통량 미리 준비
+            sparkNewsDataService.runNewsEtl();
+            // 트렌드 뉴스 미리 생성 (이벤트 없으므로 축제 예고는 건너뜀)
+            newsService.generateSeasonNews(scheduledSeason.getId());
+        } catch (Exception e) {
+            log.error("Failed to prepare scheduled season. seasonId={}", scheduledSeason.getId(), e);
+        }
     }
 
     private void synchronizeInProgressSeason(Season season, LocalDateTime now) {
