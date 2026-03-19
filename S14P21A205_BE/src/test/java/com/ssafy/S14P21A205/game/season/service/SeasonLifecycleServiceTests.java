@@ -40,6 +40,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
+import org.mockito.ArgumentCaptor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -93,21 +94,7 @@ class SeasonLifecycleServiceTests {
 
     @BeforeEach
     void setUp() {
-        seasonLifecycleService = new SeasonLifecycleService(
-                seasonRepository,
-                seasonDayClosingScheduler,
-                weatherRepository,
-                weatherLocationRepository,
-                weatherDayRedisRepository,
-                populationRepository,
-                trafficRepository,
-                trafficDayRedisRepository,
-                dailyEventRepository,
-                randomEventRepository,
-                locationRepository,
-                menuRepository,
-                festivalRepository
-        );
+        seasonLifecycleService = createService(Clock.system(ZoneId.of("Asia/Seoul")));
         org.mockito.Mockito.lenient()
                 .when(weatherLocationRepository.saveAll(any()))
                 .thenAnswer(invocation -> invocation.getArgument(0));
@@ -133,11 +120,7 @@ class SeasonLifecycleServiceTests {
         Menu menu = menu(5L, "bread");
         String batchKey = "spark-20260318-01";
 
-        ReflectionTestUtils.setField(
-                seasonLifecycleService,
-                "clock",
-                Clock.fixed(now.atZone(ZoneId.of("Asia/Seoul")).toInstant(), ZoneId.of("Asia/Seoul"))
-        );
+        seasonLifecycleService = createService(Clock.fixed(now.atZone(ZoneId.of("Asia/Seoul")).toInstant(), ZoneId.of("Asia/Seoul")));
 
         when(seasonRepository.findFirstByStatusOrderByIdDesc(SeasonStatus.IN_PROGRESS)).thenReturn(Optional.empty());
         when(seasonRepository.findFirstByStatusOrderByStartTimeAscIdAsc(SeasonStatus.SCHEDULED))
@@ -178,11 +161,7 @@ class SeasonLifecycleServiceTests {
         when(trafficRepository.findByLocation_IdAndDateBetweenOrderByDateAsc(eq(3L), any(), any()))
                 .thenReturn(List.of(traffic(location, seasonStartAt.toLocalDate().plusDays(1), 10, "spark-20260318-02")));
 
-        ReflectionTestUtils.setField(
-                seasonLifecycleService,
-                "clock",
-                Clock.fixed(Instant.from(now.atZone(ZoneId.of("Asia/Seoul"))), ZoneId.of("Asia/Seoul"))
-        );
+        seasonLifecycleService = createService(Clock.fixed(Instant.from(now.atZone(ZoneId.of("Asia/Seoul"))), ZoneId.of("Asia/Seoul")));
 
         seasonLifecycleService.synchronize();
 
@@ -190,6 +169,55 @@ class SeasonLifecycleServiceTests {
         verify(weatherDayRedisRepository).saveDay(eq(21L), eq(2), any());
         verify(trafficDayRedisRepository).saveDay(eq(21L), eq(3L), eq(2), any());
         verify(seasonDayClosingScheduler).synchronize(inProgressSeason);
+    }
+
+    @Test
+    void synchronizeFinishesSeasonAndSchedulesNextSeasonAfterSeasonSummaryEnds() {
+        LocalDateTime seasonStartAt = LocalDateTime.of(2026, 3, 18, 10, 0, 0);
+        LocalDateTime now = seasonStartAt.plusSeconds(120 + 7L * 180L + 120L);
+        LocalDateTime expectedNextSeasonStartAt = now.plusMinutes(5);
+
+        Season inProgressSeason = Season.createScheduled(7, seasonStartAt, seasonStartAt.plusMinutes(30));
+        ReflectionTestUtils.setField(inProgressSeason, "id", 31L);
+        inProgressSeason.start("spark-20260318-03");
+
+        seasonLifecycleService = createService(Clock.fixed(now.atZone(ZoneId.of("Asia/Seoul")).toInstant(), ZoneId.of("Asia/Seoul")));
+
+        when(seasonRepository.findFirstByStatusOrderByIdDesc(SeasonStatus.IN_PROGRESS)).thenReturn(Optional.of(inProgressSeason));
+        when(seasonRepository.existsByStatusAndStartTime(SeasonStatus.SCHEDULED, expectedNextSeasonStartAt)).thenReturn(false);
+        when(seasonRepository.save(any(Season.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        seasonLifecycleService.synchronize();
+
+        assertThat(inProgressSeason.getStatus()).isEqualTo(SeasonStatus.FINISHED);
+        assertThat(inProgressSeason.getCurrentDay()).isEqualTo(7);
+
+        ArgumentCaptor<Season> nextSeasonCaptor = ArgumentCaptor.forClass(Season.class);
+        verify(seasonRepository).save(nextSeasonCaptor.capture());
+        Season nextSeason = nextSeasonCaptor.getValue();
+        assertThat(nextSeason.getStatus()).isEqualTo(SeasonStatus.SCHEDULED);
+        assertThat(nextSeason.getStartTime()).isEqualTo(expectedNextSeasonStartAt);
+        assertThat(nextSeason.getEndTime()).isEqualTo(expectedNextSeasonStartAt.plusMinutes(30));
+        verify(seasonDayClosingScheduler).clear(31L);
+    }
+
+    private SeasonLifecycleService createService(Clock clock) {
+        return new SeasonLifecycleService(
+                seasonRepository,
+                seasonDayClosingScheduler,
+                weatherRepository,
+                weatherLocationRepository,
+                weatherDayRedisRepository,
+                populationRepository,
+                trafficRepository,
+                trafficDayRedisRepository,
+                dailyEventRepository,
+                randomEventRepository,
+                locationRepository,
+                menuRepository,
+                festivalRepository,
+                clock
+        );
     }
 
     private List<Weather> allWeatherMasters() {

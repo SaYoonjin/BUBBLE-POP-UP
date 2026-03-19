@@ -205,6 +205,18 @@ class GameDayStateServiceTests {
     }
 
     @Test
+    void refreshGameStateReturnsEmptyOutsidePlayableDayPhase() {
+        gameDayStateService = createService(Clock.fixed(Instant.parse("2026-03-09T05:55:00Z"), ZoneId.of("Asia/Seoul")));
+
+        User user = user(1);
+        Store store = store(user, 15L, 3L, 1L, 9L, 1, 7, 500);
+
+        Optional<GameStateResponse> response = gameDayStateService.refreshGameState(store);
+
+        assertThat(response).isEmpty();
+    }
+
+    @Test
     void getGameStateAppliesSharedDayFourFixtureBeforeLocationFestival() {
         gameDayStateService = createService(GameDayTestFixtures.fixedClockAt(LocalDateTime.of(2026, 3, 17, 10, 0, 55)));
 

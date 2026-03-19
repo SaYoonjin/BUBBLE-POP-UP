@@ -17,18 +17,14 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
-import org.springframework.test.util.ReflectionTestUtils;
 
 class SeasonWaitingServiceTests {
 
     private final SeasonRepository seasonRepository = mock(SeasonRepository.class);
-    private final SeasonWaitingService seasonWaitingService = new SeasonWaitingService(seasonRepository);
 
     @Test
     void getWaitingStatusReturnsInProgressWhenSeasonIsActive() {
-        ReflectionTestUtils.setField(
-                seasonWaitingService,
-                "clock",
+        SeasonWaitingService seasonWaitingService = createService(
                 Clock.fixed(Instant.parse("2026-03-16T01:05:00Z"), ZoneId.of("Asia/Seoul"))
         );
         Season inProgressSeason = season(3L, SeasonStatus.IN_PROGRESS, 3, 7, LocalDateTime.of(2026, 3, 16, 9, 58, 10));
@@ -50,9 +46,7 @@ class SeasonWaitingServiceTests {
 
     @Test
     void getWaitingStatusReturnsWaitingWhenNextSeasonIsScheduled() {
-        ReflectionTestUtils.setField(
-                seasonWaitingService,
-                "clock",
+        SeasonWaitingService seasonWaitingService = createService(
                 Clock.fixed(Instant.parse("2026-03-15T23:00:00Z"), ZoneId.of("Asia/Seoul"))
         );
 
@@ -74,6 +68,7 @@ class SeasonWaitingServiceTests {
 
     @Test
     void getWaitingStatusReturnsFallbackWaitingWhenNoSeasonExists() {
+        SeasonWaitingService seasonWaitingService = createService(Clock.system(ZoneId.of("Asia/Seoul")));
         when(seasonRepository.findFirstByStatusOrderByIdDesc(SeasonStatus.IN_PROGRESS))
                 .thenReturn(Optional.empty());
         when(seasonRepository.findFirstByStatusOrderByStartTimeAscIdAsc(SeasonStatus.SCHEDULED))
@@ -87,6 +82,10 @@ class SeasonWaitingServiceTests {
         assertEquals(1, response.nextSeasonNumber());
         assertNull(response.currentDay());
         assertNull(response.nextSeasonStartTime());
+    }
+
+    private SeasonWaitingService createService(Clock clock) {
+        return new SeasonWaitingService(seasonRepository, clock);
     }
 
     private Season season(

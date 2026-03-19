@@ -72,6 +72,16 @@ public class GameDayStateService {
     public Optional<GameStateResponse> refreshGameState(Store store) {
         LocalDateTime serverTime = LocalDateTime.now(clock);
         SeasonTimePoint seasonTimePoint = SEASON_TIMELINE_SERVICE.resolve(store.getSeason(), serverTime);
+        if (!seasonTimePoint.isPlayableDayPhase()) {
+            log.debug(
+                    "state-skip storeId={} seasonId={} now={} phase={}",
+                    store.getId(),
+                    store.getSeason().getId(),
+                    serverTime,
+                    seasonTimePoint.phase()
+            );
+            return Optional.empty();
+        }
         int day = resolveCurrentDay(store.getSeason(), seasonTimePoint);
         int totalDays = store.getSeason().getTotalDays();
 

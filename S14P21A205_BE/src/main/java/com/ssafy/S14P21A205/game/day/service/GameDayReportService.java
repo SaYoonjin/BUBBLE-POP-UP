@@ -56,8 +56,7 @@ public class GameDayReportService {
     private final BankruptcyPolicy bankruptcyPolicy;
     private final GameDayStateService gameDayStateService;
     private final PurchaseListGenerator purchaseListGenerator;
-
-    private Clock clock = Clock.systemDefaultZone();
+    private final Clock clock;
 
     @Transactional
     public void recordClosedDayReport(Store store) {

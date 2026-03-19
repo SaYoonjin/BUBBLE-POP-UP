@@ -28,6 +28,7 @@ import com.ssafy.S14P21A205.game.event.repository.RandomEventRepository;
 import com.ssafy.S14P21A205.game.season.entity.Season;
 import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
 import com.ssafy.S14P21A205.game.season.repository.SeasonRepository;
+import com.ssafy.S14P21A205.game.time.model.SeasonPhase;
 import com.ssafy.S14P21A205.game.time.model.SeasonTimePoint;
 import com.ssafy.S14P21A205.game.time.service.SeasonTimelineService;
 import com.ssafy.S14P21A205.shop.entity.Menu;
@@ -36,6 +37,7 @@ import com.ssafy.S14P21A205.store.repository.LocationRepository;
 import com.ssafy.S14P21A205.store.repository.MenuRepository;
 import java.math.BigDecimal;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -85,8 +87,7 @@ public class SeasonLifecycleService {
     private final SparkNewsDataService sparkNewsDataService;
 
     private final SeasonTimelineService seasonTimelineService = new SeasonTimelineService();
-
-    private Clock clock = Clock.systemDefaultZone();
+    private final Clock clock;
 
     public void synchronize() {
         LocalDateTime now = LocalDateTime.now(clock);
@@ -98,12 +99,30 @@ public class SeasonLifecycleService {
         }
 
         Season scheduledSeason = seasonRepository.findFirstByStatusOrderByStartTimeAscIdAsc(SeasonStatus.SCHEDULED).orElse(null);
-        if (scheduledSeason == null || scheduledSeason.getStartTime() == null) {
+        if (scheduledSeason == null) {
+            logNoActiveSeason(now);
+            return;
+        }
+        if (scheduledSeason.getStartTime() == null) {
+            logScheduledSeasonState(
+                    now,
+                    scheduledSeason,
+                    "SEASON_WAITING_TO_START",
+                    "BEFORE_START",
+                    null
+            );
             return;
         }
 
-        // 시즌 준비 시간: startTime 전이면 이벤트 빌드 + ETL + 뉴스 미리 생성
+        // Keep develop's pre-start preparation flow for scheduled seasons.
         if (scheduledSeason.getStartTime().isAfter(now)) {
+            logScheduledSeasonState(
+                    now,
+                    scheduledSeason,
+                    "SEASON_WAITING_TO_START",
+                    "BEFORE_START",
+                    null
+            );
             prepareScheduledSeason(scheduledSeason);
             return;
         }
@@ -111,6 +130,13 @@ public class SeasonLifecycleService {
         List<Location> locations = requireLocations();
         String sourceBatchKey = resolveStartableSourceBatchKey(scheduledSeason, locations);
         if (sourceBatchKey == null) {
+            logScheduledSeasonState(
+                    now,
+                    scheduledSeason,
+                    "SEASON_START_PENDING_DATA",
+                    "WAITING_SOURCE_BATCH",
+                    0L
+            );
             return;
         }
 
@@ -126,8 +152,6 @@ public class SeasonLifecycleService {
         preloadTrafficDay(scheduledSeason, trafficSchedule, 1);
         scheduledSeason.updateEndTime(resolveSeasonEndAt(scheduledSeason));
 
-        // 시즌 준비 시간에 트렌드 뉴스가 이미 생성됐으면 축제 예고만 보충
-        // 아직 뉴스가 없으면 전체 생성 (트렌드 + 축제 예고)
         try {
             newsService.generateSeasonNews(scheduledSeason.getId());
             newsService.generateEventPreviewNewsIfMissing(scheduledSeason.getId());
@@ -139,8 +163,7 @@ public class SeasonLifecycleService {
     }
 
     /**
-     * 시즌 준비 시간 (SCHEDULED, startTime 전): ETL + 뉴스 미리 생성.
-     * 이벤트는 아직 없으므로 축제 예고는 건너뛰고, IN_PROGRESS 전환 후 보충.
+     * Prepares a scheduled season before its start time by warming source data and news.
      */
     private void prepareScheduledSeason(Season scheduledSeason) {
         try {
@@ -154,25 +177,13 @@ public class SeasonLifecycleService {
     }
 
     private void synchronizeInProgressSeason(Season season, LocalDateTime now) {
-        LocalDateTime seasonEndAt = resolveSeasonEndAt(season);
-        season.updateEndTime(seasonEndAt);
+        LocalDateTime nextSeasonStartAt = resolveSeasonEndAt(season);
+        LocalDateTime seasonFinishAt = resolveSeasonFinishAt(season);
+        season.updateEndTime(nextSeasonStartAt);
         seasonDayClosingScheduler.synchronize(season);
 
         SeasonTimePoint timePoint = seasonTimelineService.resolve(season, now);
-        log.info(
-                "season-timeline seasonId={} now={} phase={} day={} gameTime={} tick={} remaining={} joinEnabled={} playableFromDay={} seasonEndAt={} batchKey={}",
-                season.getId(),
-                now,
-                timePoint.phase(),
-                timePoint.currentDay(),
-                timePoint.gameTime(),
-                timePoint.tick(),
-                timePoint.remainingPhaseSeconds(),
-                timePoint.joinEnabled(),
-                timePoint.joinPlayableFromDay(),
-                seasonEndAt,
-                season.getSourceBatchKey()
-        );
+        logInProgressSeasonState(now, season, timePoint, nextSeasonStartAt);
         Integer targetDay = timePoint.currentDay();
         if (targetDay != null) {
             int previousDay = normalizeCurrentDay(season);
@@ -182,11 +193,143 @@ public class SeasonLifecycleService {
             season.syncCurrentDay(targetDay);
         }
 
-        if (!now.isBefore(seasonEndAt)) {
+        if (!now.isBefore(seasonFinishAt)) {
             season.finish();
             seasonDayClosingScheduler.clear(season.getId());
-            scheduleNextSeasonIfNeeded(season, seasonEndAt);
+            scheduleNextSeasonIfNeeded(season, nextSeasonStartAt);
         }
+    }
+
+    private void logInProgressSeasonState(
+            LocalDateTime now,
+            Season season,
+            SeasonTimePoint timePoint,
+            LocalDateTime seasonEndAt
+    ) {
+        log.info(
+                "\n================ SEASON LIFECYCLE ================\n"
+                        + "now={} seasonId={} status={}\n"
+                        + "stage={} detailPhase={} day={}\n"
+                        + "phaseRemaining={}s seasonRemaining={}s gameTime={} tick={}\n"
+                        + "joinEnabled={} joinPlayableFromDay={}\n"
+                        + "startTime={} endTime={} batchKey={}\n"
+                        + "==================================================",
+                now,
+                season.getId(),
+                season.getStatus(),
+                describeLifecycleStage(timePoint.phase()),
+                describeDetailPhase(timePoint.phase()),
+                formatDay(timePoint.currentDay()),
+                timePoint.remainingPhaseSeconds(),
+                Math.max(0L, Duration.between(now, seasonEndAt).toSeconds()),
+                formatValue(timePoint.gameTime()),
+                formatValue(timePoint.tick()),
+                timePoint.joinEnabled(),
+                formatValue(timePoint.joinPlayableFromDay()),
+                season.getStartTime(),
+                seasonEndAt,
+                formatValue(season.getSourceBatchKey())
+        );
+    }
+
+    private void logScheduledSeasonState(
+            LocalDateTime now,
+            Season season,
+            String stage,
+            String detailPhase,
+            Long remainingOverrideSeconds
+    ) {
+        Long remainingUntilStart = remainingOverrideSeconds != null
+                ? remainingOverrideSeconds
+                : resolveRemainingSeconds(now, season.getStartTime());
+        log.info(
+                "\n================ SEASON LIFECYCLE ================\n"
+                        + "now={} seasonId={} status={}\n"
+                        + "stage={} detailPhase={} day={}\n"
+                        + "phaseRemaining={}s seasonRemaining={}s gameTime={} tick={}\n"
+                        + "joinEnabled={} joinPlayableFromDay={}\n"
+                        + "startTime={} endTime={} batchKey={}\n"
+                        + "==================================================",
+                now,
+                season.getId(),
+                season.getStatus(),
+                stage,
+                detailPhase,
+                formatDay(season.getCurrentDay()),
+                remainingUntilStart,
+                remainingUntilStart,
+                "-",
+                "-",
+                false,
+                "-",
+                season.getStartTime(),
+                season.getEndTime(),
+                formatValue(season.getSourceBatchKey())
+        );
+    }
+
+    private void logNoActiveSeason(LocalDateTime now) {
+        log.info(
+                "[SEASON-LIFECYCLE] now={} seasonId={} status={} stage={} detailPhase={} day={} phaseRemaining={} seasonRemaining={} gameTime={} tick={} joinEnabled={} joinPlayableFromDay={} startTime={} endTime={} batchKey={}",
+                now,
+                "-",
+                "-",
+                "NO_ACTIVE_SEASON(활성 시즌 없음)",
+                "-",
+                "-",
+                "-",
+                "-",
+                "-",
+                "-",
+                false,
+                "-",
+                "-",
+                "-",
+                "-"
+        );
+    }
+
+    private String describeLifecycleStage(SeasonPhase phase) {
+        if (phase == null) {
+            return "UNKNOWN(알 수 없음)";
+        }
+        return switch (phase) {
+            case LOCATION_SELECTION -> "SEASON_PREPARING(시즌 준비)";
+            case DAY_PREPARING, DAY_BUSINESS, DAY_REPORT -> "SEASON_IN_PROGRESS(시즌 진행 중)";
+            case SEASON_SUMMARY -> "SEASON_CLOSING(시즌 마감)";
+            case NEXT_SEASON_WAITING -> "NEXT_SEASON_WAITING(다음 시즌 대기)";
+            case CLOSED -> "SEASON_CLOSED(시즌 종료)";
+        };
+    }
+
+    private String describeDetailPhase(SeasonPhase phase) {
+        if (phase == null) {
+            return "UNKNOWN(알 수 없음)";
+        }
+        return switch (phase) {
+            case LOCATION_SELECTION -> "LOCATION_SELECTION(입지 선정)";
+            case DAY_PREPARING -> "DAY_PREPARING(영업 준비)";
+            case DAY_BUSINESS -> "DAY_BUSINESS(영업 중)";
+            case DAY_REPORT -> "DAY_REPORT(영업 마감)";
+            case SEASON_SUMMARY -> "SEASON_SUMMARY(시즌 요약)";
+            case NEXT_SEASON_WAITING -> "NEXT_SEASON_WAITING(다음 시즌 대기)";
+            case CLOSED -> "CLOSED(종료)";
+        };
+    }
+
+    private long resolveRemainingSeconds(LocalDateTime now, LocalDateTime targetTime) {
+        if (targetTime == null) {
+            return 0L;
+        }
+        return Math.max(0L, Duration.between(now, targetTime).toSeconds());
+    }
+
+    private String formatDay(Integer day) {
+        return day == null ? "-" : "DAY " + day;
+    }
+
+    private String formatValue(Object value) {
+        return value == null ? "-" : String.valueOf(value);
     }
 
     private void preloadReachedDays(Season season, int startDay, int endDay) {
@@ -931,6 +1074,10 @@ public class SeasonLifecycleService {
 
     private LocalDateTime resolveSeasonEndAt(Season season) {
         return seasonTimelineService.resolveNextSeasonStartAt(season);
+    }
+
+    private LocalDateTime resolveSeasonFinishAt(Season season) {
+        return seasonTimelineService.resolveSeasonSummaryEndAt(season);
     }
 
     private void scheduleNextSeasonIfNeeded(Season finishedSeason, LocalDateTime nextSeasonStartAt) {
