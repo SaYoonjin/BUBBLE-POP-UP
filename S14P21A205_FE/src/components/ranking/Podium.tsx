@@ -34,7 +34,7 @@ const config: Record<number, {
     badgeBg: "bg-[#EBC86E]",
     avatarBorder: "border-[#EBC86E]/30",
     order: "md:order-2",
-    minH: 500,
+    minH: 400,
     badgeSize: "size-12 text-xl",
     delay: "400ms",
     shimmerDelay: "0s",
@@ -44,7 +44,7 @@ const config: Record<number, {
     badgeBg: "bg-[#C0C0C0]",
     avatarBorder: "border-[#C0C0C0]/30",
     order: "md:order-1",
-    minH: 410,
+    minH: 360,
     badgeSize: "size-8",
     delay: "200ms",
     shimmerDelay: "1s",
@@ -81,7 +81,7 @@ export default function Podium({ entries }: PodiumProps) {
 
         return (
           <div key={entry.rank} className={`${c.order} flex-1 max-w-[280px] w-full relative z-20`}>
-            {/* Badge - 카드 바깥, 가운데 정렬 */}
+            {/* Badge */}
             <div
               className="flex justify-center mb-[-1rem] relative z-30"
               style={{ animation: `fadeUp 0.5s ease-out ${c.delay} both` }}
@@ -95,7 +95,7 @@ export default function Podium({ entries }: PodiumProps) {
 
             {/* Card */}
             <div
-              className="bg-primary/5 rounded-2xl shadow-soft relative flex flex-col items-center pt-8 pb-8 overflow-hidden"
+              className="bg-primary/5 rounded-2xl shadow-soft relative flex flex-col items-center justify-end pt-8 pb-8 overflow-hidden"
               style={{
                 border: `2px solid ${c.color}`,
                 animation: `fadeUp 0.5s ease-out ${c.delay} both`,
@@ -135,8 +135,8 @@ export default function Podium({ entries }: PodiumProps) {
                 {entry.locationName} · {entry.menuName}
               </p>
 
-              {/* Stats - 하단 고정 */}
-              <div className="flex flex-col items-center gap-1 relative z-10 mt-auto">
+              {/* Stats */}
+              <div className="flex flex-col items-center gap-1 relative z-10">
                 <span className={`text-xs font-bold px-2.5 py-0.5 rounded-md ${
                   isFirst ? "bg-yellow-50 text-yellow-700 border border-yellow-100" : "bg-slate-100 text-slate-600"
                 }`}>
