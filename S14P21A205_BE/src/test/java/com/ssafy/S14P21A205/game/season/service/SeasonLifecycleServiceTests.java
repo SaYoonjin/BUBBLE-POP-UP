@@ -8,6 +8,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.ssafy.S14P21A205.game.day.scheduler.SeasonDayClosingScheduler;
+import com.ssafy.S14P21A205.game.news.service.NewsService;
+import com.ssafy.S14P21A205.game.news.service.SparkNewsDataService;
 import com.ssafy.S14P21A205.game.environment.entity.Festival;
 import com.ssafy.S14P21A205.game.environment.entity.Population;
 import com.ssafy.S14P21A205.game.environment.entity.Traffic;
@@ -89,6 +91,12 @@ class SeasonLifecycleServiceTests {
 
     @Mock
     private FestivalRepository festivalRepository;
+
+    @Mock
+    private NewsService newsService;
+
+    @Mock
+    private SparkNewsDataService sparkNewsDataService;
 
     private SeasonLifecycleService seasonLifecycleService;
 
@@ -216,6 +224,8 @@ class SeasonLifecycleServiceTests {
                 locationRepository,
                 menuRepository,
                 festivalRepository,
+                newsService,
+                sparkNewsDataService,
                 clock
         );
     }
