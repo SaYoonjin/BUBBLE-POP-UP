@@ -12,11 +12,6 @@ import RankingPage from "../pages/RankingPage";
 import ComponentTestPage from "../pages/ComponentTestPage";
 import NewsPage from "../pages/NewsPage";
 import CozyPrepPage from "../pages/CozyPrepPage";
-import DashboardPage from "../pages/DashboardPage";
-import CozyLobbyPage from "../pages/CozyLobbyPage";
-import CozyLoginPage from "../pages/CozyLoginPage";
-import CozyDashboardPage from "../pages/CozyDashboardPage";
-import CozyMyPage from "../pages/CozyMyPage";
 import AuthCallbackPage from "../pages/AuthCallbackPage";
 
 const router = createBrowserRouter([
