@@ -20,16 +20,12 @@ export default function ProfileDropdown({ nickname = "Owner" }: ProfileDropdownP
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  const handleLogout = () => {
-    clearAuthSession();
-    navigate("/login");
   const handleLogout = async () => {
     try {
       await client.post("/auth/logout", {}, { withCredentials: true });
     } finally {
-      localStorage.removeItem("accessToken");
-      localStorage.removeItem("tokenType");
-      sessionStorage.removeItem("auth_callback_processed");
+      setOpen(false);
+      clearAuthSession();
       navigate("/login");
     }
   };
