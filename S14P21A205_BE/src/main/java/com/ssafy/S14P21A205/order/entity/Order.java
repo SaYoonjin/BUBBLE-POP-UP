@@ -44,6 +44,9 @@ public class Order {
     @Column(name = "total_cost", nullable = false)
     private Integer totalCost;
 
+    @Column(name = "sale_price")
+    private Integer salePrice;
+
     @Column(name = "ordered_day", nullable = false)
     private Integer orderedDay;
 
@@ -66,6 +69,7 @@ public class Order {
             Store store,
             Integer quantity,
             Integer totalCost,
+            Integer salePrice,
             Integer orderedDay,
             OrderType orderType,
             LocalDateTime arrivedTime,
@@ -75,6 +79,7 @@ public class Order {
         this.store = store;
         this.quantity = quantity;
         this.totalCost = totalCost;
+        this.salePrice = salePrice;
         this.orderedDay = orderedDay;
         this.orderType = orderType;
         this.arrivedTime = arrivedTime;
@@ -82,12 +87,35 @@ public class Order {
     }
 
     public static Order create(Menu menu, Store store, Integer quantity, Integer totalCost, Integer orderedDay) {
-        return new Order(menu, store, quantity, totalCost, orderedDay, OrderType.NORMAL, null, true);
+        return create(menu, store, quantity, totalCost, null, orderedDay);
+    }
+
+    public static Order create(
+            Menu menu,
+            Store store,
+            Integer quantity,
+            Integer totalCost,
+            Integer salePrice,
+            Integer orderedDay
+    ) {
+        return new Order(menu, store, quantity, totalCost, salePrice, orderedDay, OrderType.NORMAL, null, true);
     }
 
     public static Order createEmergency(Menu menu, Store store, Integer quantity, Integer totalCost,
                                          Integer orderedDay, LocalDateTime arrivedTime) {
-        return new Order(menu, store, quantity, totalCost, orderedDay, OrderType.EMERGENCY, arrivedTime, false);
+        return createEmergency(menu, store, quantity, totalCost, null, orderedDay, arrivedTime);
+    }
+
+    public static Order createEmergency(
+            Menu menu,
+            Store store,
+            Integer quantity,
+            Integer totalCost,
+            Integer salePrice,
+            Integer orderedDay,
+            LocalDateTime arrivedTime
+    ) {
+        return new Order(menu, store, quantity, totalCost, salePrice, orderedDay, OrderType.EMERGENCY, arrivedTime, false);
     }
 
     public void markArrived() {

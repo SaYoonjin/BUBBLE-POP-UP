@@ -3,6 +3,7 @@ package com.ssafy.S14P21A205.game.day.service;
 import com.ssafy.S14P21A205.exception.BaseException;
 import com.ssafy.S14P21A205.exception.ErrorCode;
 import com.ssafy.S14P21A205.game.day.dto.GameDayStartResponse;
+import com.ssafy.S14P21A205.game.day.engine.EmergencyOrderEngine;
 import com.ssafy.S14P21A205.game.day.generator.PurchaseListGenerator;
 import com.ssafy.S14P21A205.game.day.model.DaySchedule;
 import com.ssafy.S14P21A205.game.day.model.OpeningState;
@@ -22,9 +23,12 @@ import com.ssafy.S14P21A205.game.time.model.SeasonTimePoint;
 import com.ssafy.S14P21A205.game.time.policy.GameTimePolicy;
 import com.ssafy.S14P21A205.game.time.service.SeasonTimelineService;
 import com.ssafy.S14P21A205.order.entity.Order;
+import com.ssafy.S14P21A205.order.entity.OrderType;
 import com.ssafy.S14P21A205.order.repository.OrderRepository;
+import com.ssafy.S14P21A205.shop.entity.Menu;
 import com.ssafy.S14P21A205.store.entity.Store;
 import com.ssafy.S14P21A205.store.repository.StoreRepository;
+import com.ssafy.S14P21A205.store.service.StoreLocationTransitionSupport;
 import com.ssafy.S14P21A205.user.entity.User;
 import com.ssafy.S14P21A205.user.service.UserService;
 import java.math.BigDecimal;
@@ -48,6 +52,8 @@ public class GameDayStartService {
     private static final int BUSINESS_OPEN_HOUR = GameTimePolicy.BUSINESS_OPEN_HOUR;
     private static final int BUSINESS_CLOSE_HOUR = GameTimePolicy.BUSINESS_CLOSE_HOUR;
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
+    private static final EmergencyOrderEngine EMERGENCY_ORDER_ENGINE = new EmergencyOrderEngine();
+    private static final StoreLocationTransitionSupport STORE_LOCATION_TRANSITION_SUPPORT = new StoreLocationTransitionSupport();
 
     private final UserService userService;
     private final StoreRepository storeRepository;
@@ -71,6 +77,7 @@ public class GameDayStartService {
         ensurePurchaseQueueInitialized(store);
 
         LocalDateTime now = LocalDateTime.now(clock);
+        STORE_LOCATION_TRANSITION_SUPPORT.applyPendingLocationIfDue(store, now);
         SeasonTimePoint seasonTimePoint = seasonTimelineService.resolve(store.getSeason(), now);
         int day = resolveCurrentDay(store.getSeason(), seasonTimePoint);
         log.info(
@@ -101,6 +108,14 @@ public class GameDayStartService {
         );
         DaySchedule daySchedule = resolvedEnvironment.daySchedule();
         List<Store> seasonStores = storeRepository.findBySeason_IdOrderByIdAsc(store.getSeason().getId());
+        STORE_LOCATION_TRANSITION_SUPPORT.applyPendingLocationIfDue(seasonStores, now);
+        Menu plannedMenu = store.getMenu();
+        Integer plannedPrice = store.getPrice();
+        List<Order> emergencyOrders = orderRepository.findByStoreIdAndOrderTypeOrderByArrivedTimeAscIdAsc(
+                store.getId(),
+                OrderType.EMERGENCY
+        );
+        applyArrivedEmergencyMenuAndPrice(store, emergencyOrders, now);
         NewsRankingResolver.PreviousDayRanking previousDayRanking = newsRankingResolver.resolve(store, day);
         List<GameDayStartResponse.EventSchedule> eventSchedule = eventScheduleResolver.resolve(
                 store.getSeason().getId(),
@@ -120,6 +135,22 @@ public class GameDayStartService {
         );
         List<Order> existingOrders = orderRepository.findDailyStartOrders(store.getId(), day);
         OpeningState openingState = rentPolicy.resolveStartingState(store, day, existingOrders, marketSnapshot);
+        EmergencyOrderEngine.InventoryState openingInventory = resolveOpeningInventory(
+                store,
+                day,
+                openingState,
+                emergencyOrders,
+                now,
+                plannedMenu,
+                plannedPrice
+        );
+        if (openingInventory.menu() != null && !openingInventory.menu().equals(store.getMenu())) {
+            store.changeMenu(openingInventory.menu());
+        }
+        int openingSalePrice = openingInventory.salePrice() == null ? store.getPrice() : openingInventory.salePrice();
+        if (!Integer.valueOf(openingSalePrice).equals(store.getPrice())) {
+            store.changePrice(openingSalePrice);
+        }
         BigDecimal captureRate = captureRatePolicy.resolveStartingCaptureRate(
                 marketSnapshot.priceBandMultiplier(),
                 marketRankingPolicy.resolveTrendKeywordCaptureMultiplier(previousDayRanking.trendKeywordRank())
@@ -135,7 +166,7 @@ public class GameDayStartService {
                 captureRate,
                 eventSchedule,
                 openingState.initialBalance(),
-                openingState.initialStock(),
+                openingInventory.stock(),
                 openingState.openingSummary(),
                 marketSnapshot
         );
@@ -150,7 +181,7 @@ public class GameDayStartService {
                 response.initialBalance(),
                 response.initialStock()
         );
-        writeInitialState(store, day, openingState, response, seasonTimePoint);
+        writeInitialState(store, day, openingState, response, seasonTimePoint, now, openingSalePrice, openingInventory.stock());
         return response;
     }
 
@@ -188,7 +219,10 @@ public class GameDayStartService {
             int day,
             OpeningState openingState,
             GameDayStartResponse response,
-            SeasonTimePoint seasonTimePoint
+            SeasonTimePoint seasonTimePoint,
+            LocalDateTime now,
+            int openingSalePrice,
+            int openingStock
     ) {
         List<Integer> purchaseList = purchaseListGenerator.generate(
                 response.hourlySchedule(),
@@ -210,7 +244,7 @@ public class GameDayStartService {
                         response.marketSnapshot() == null ? null : response.marketSnapshot().regionStoreCount(),
                         0,
                         captureRatePolicy.normalizeCaptureRate(response.captureRate()),
-                        store.getPrice(),
+                        openingSalePrice,
                         0,
                         0,
                         0L,
@@ -220,10 +254,50 @@ public class GameDayStartService {
                         response.openingSummary() == null || response.openingSummary().fixedCostTotal() == null
                                 ? 0L
                                 : response.openingSummary().fixedCostTotal().longValue(),
+                        0L,
                         (long) openingState.initialBalance(),
-                        openingState.initialStock(),
-                        startedAt
+                        openingStock,
+                        now
                 )
+        );
+    }
+
+    private void applyArrivedEmergencyMenuAndPrice(Store store, List<Order> emergencyOrders, LocalDateTime now) {
+        Order latestArrivedEmergency = EMERGENCY_ORDER_ENGINE.resolveLatestArrivedOrderAt(emergencyOrders, now);
+        if (latestArrivedEmergency == null) {
+            return;
+        }
+        if (latestArrivedEmergency.getMenu() != null && !latestArrivedEmergency.getMenu().equals(store.getMenu())) {
+            store.changeMenu(latestArrivedEmergency.getMenu());
+        }
+        if (latestArrivedEmergency.getSalePrice() != null && !latestArrivedEmergency.getSalePrice().equals(store.getPrice())) {
+            store.changePrice(latestArrivedEmergency.getSalePrice());
+        }
+    }
+
+    private EmergencyOrderEngine.InventoryState resolveOpeningInventory(
+            Store store,
+            int day,
+            OpeningState openingState,
+            List<Order> emergencyOrders,
+            LocalDateTime now,
+            Menu plannedMenu,
+            Integer plannedPrice
+    ) {
+        if (emergencyOrders.isEmpty() || day <= 1) {
+            return new EmergencyOrderEngine.InventoryState(
+                    store.getMenu(),
+                    openingState.initialStock(),
+                    store.getPrice()
+            );
+        }
+
+        LocalDateTime previousBusinessEnd = seasonTimelineService.day(store.getSeason(), day - 1).businessEnd();
+        return EMERGENCY_ORDER_ENGINE.applyArrivalsBetween(
+                new EmergencyOrderEngine.InventoryState(plannedMenu, openingState.initialStock(), plannedPrice),
+                emergencyOrders,
+                previousBusinessEnd,
+                now
         );
     }
 

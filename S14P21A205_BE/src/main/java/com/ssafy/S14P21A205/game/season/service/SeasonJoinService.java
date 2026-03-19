@@ -3,6 +3,7 @@ package com.ssafy.S14P21A205.game.season.service;
 import com.ssafy.S14P21A205.exception.BaseException;
 import com.ssafy.S14P21A205.exception.ErrorCode;
 import com.ssafy.S14P21A205.game.day.generator.PurchaseListGenerator;
+import com.ssafy.S14P21A205.game.support.StoreStateCarryOverSupport;
 import com.ssafy.S14P21A205.game.season.dto.SeasonJoinRequest;
 import com.ssafy.S14P21A205.game.season.dto.SeasonJoinResponse;
 import com.ssafy.S14P21A205.game.season.entity.Season;
@@ -19,13 +20,10 @@ import com.ssafy.S14P21A205.store.repository.MenuRepository;
 import com.ssafy.S14P21A205.store.repository.StoreRepository;
 import com.ssafy.S14P21A205.user.entity.User;
 import com.ssafy.S14P21A205.user.service.UserService;
-import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.regex.Pattern;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,14 +33,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class SeasonJoinService {
 
-    private static final int INITIAL_CAPITAL = 10_000_000;
-    private static final BigDecimal INTERIOR_RATE = new BigDecimal("0.10");
-    private static final BigDecimal INITIAL_CAPTURE_RATE = new BigDecimal("0.10");
     private static final int STORE_NAME_MIN_LENGTH = 2;
     private static final int STORE_NAME_MAX_LENGTH = 20;
-    private static final String BALANCE_KEY_PREFIX = "balance:";
-    private static final String STOCK_KEY_PREFIX = "stock:";
-    private static final String CAPTURE_RATE_KEY_PREFIX = "captureRate:";
     private static final Pattern STORE_NAME_PATTERN = Pattern.compile("^[\\p{IsHangul}A-Za-z0-9 ]+$");
 
     private final UserService userService;
@@ -52,7 +44,6 @@ public class SeasonJoinService {
     private final StoreRepository storeRepository;
     private final LocationRepository locationRepository;
     private final MenuRepository menuRepository;
-    private final StringRedisTemplate stringRedisTemplate;
     private final PurchaseListGenerator purchaseListGenerator;
 
     private final SeasonTimelineService seasonTimelineService = new SeasonTimelineService();
@@ -95,13 +86,7 @@ public class SeasonJoinService {
         ));
         savedStore.initializePurchaseQueue(purchaseListGenerator.issueSeed());
 
-        int interior = calculateInterior(location.getRent());
-        int remainingBalance = INITIAL_CAPITAL - interior;
-
-        var valueOperations = stringRedisTemplate.opsForValue();
-        valueOperations.set(balanceKey(savedStore.getId()), String.valueOf(remainingBalance));
-        valueOperations.set(stockKey(savedStore.getId()), "0");
-        valueOperations.set(captureRateKey(savedStore.getId()), INITIAL_CAPTURE_RATE.toPlainString());
+        int remainingBalance = StoreStateCarryOverSupport.resolveInitialBalance(savedStore);
 
         return new SeasonJoinResponse(
                 savedStore.getId(),
@@ -162,24 +147,5 @@ public class SeasonJoinService {
             return previousStore.getPrice();
         }
         return menu.getOriginPrice();
-    }
-
-    private int calculateInterior(int rent) {
-        return BigDecimal.valueOf(rent)
-                .multiply(INTERIOR_RATE)
-                .setScale(0, RoundingMode.HALF_UP)
-                .intValue();
-    }
-
-    private String balanceKey(Long storeId) {
-        return BALANCE_KEY_PREFIX + storeId;
-    }
-
-    private String stockKey(Long storeId) {
-        return STOCK_KEY_PREFIX + storeId;
-    }
-
-    private String captureRateKey(Long storeId) {
-        return CAPTURE_RATE_KEY_PREFIX + storeId;
     }
 }

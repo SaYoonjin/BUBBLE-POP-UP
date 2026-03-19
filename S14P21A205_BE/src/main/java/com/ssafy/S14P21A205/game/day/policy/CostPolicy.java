@@ -14,6 +14,7 @@ public class CostPolicy {
             GameDayStartResponse startResponse,
             long actionTotalCost,
             long emergencyOrderTotalCost,
+            long locationChangeCost,
             long capitalChange,
             long cumulativeSales,
             int initialBalance
@@ -21,12 +22,14 @@ public class CostPolicy {
         // TODO: Apply event-driven cost multipliers here if RandomEvent.costRate becomes part of live cost rules.
         long cumulativeTotalCost = resolveOpeningFixedCost(store, dailyStartOrder, startResponse)
                 + actionTotalCost
-                + emergencyOrderTotalCost;
+                + emergencyOrderTotalCost
+                + locationChangeCost;
         long cash = initialBalance
                 + cumulativeSales
                 + capitalChange
                 - actionTotalCost
-                - emergencyOrderTotalCost;
+                - emergencyOrderTotalCost
+                - locationChangeCost;
         return new CostResult(cumulativeSales, cumulativeTotalCost, cash);
     }
 

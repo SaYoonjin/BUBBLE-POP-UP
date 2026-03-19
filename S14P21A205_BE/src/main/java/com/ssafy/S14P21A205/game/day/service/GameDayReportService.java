@@ -22,6 +22,7 @@ import com.ssafy.S14P21A205.game.time.model.SeasonTimePoint;
 import com.ssafy.S14P21A205.game.time.service.SeasonTimelineService;
 import com.ssafy.S14P21A205.store.entity.Store;
 import com.ssafy.S14P21A205.store.repository.StoreRepository;
+import com.ssafy.S14P21A205.store.service.StoreLocationTransitionSupport;
 import com.ssafy.S14P21A205.user.entity.User;
 import com.ssafy.S14P21A205.user.service.UserService;
 import java.math.BigDecimal;
@@ -44,6 +45,7 @@ public class GameDayReportService {
     private static final BigDecimal ZERO_CAPTURE_RATE = new BigDecimal("0.00");
     private static final Set<Integer> REGULAR_ORDER_DAYS = Set.of(1, 3, 5, 7);
     private static final SeasonTimelineService SEASON_TIMELINE_SERVICE = new SeasonTimelineService();
+    private static final StoreLocationTransitionSupport STORE_LOCATION_TRANSITION_SUPPORT = new StoreLocationTransitionSupport();
 
     private final UserService userService;
     private final StoreRepository storeRepository;
@@ -169,7 +171,7 @@ public class GameDayReportService {
                 reputationPolicy.toReputationChange(captureRate.subtract(previousCaptureRate)),
                 resolveTomorrowWeather(
                         store.getSeason().getId(),
-                        store.getLocation().getId(),
+                        resolveTomorrowLocationId(store, report.getDay()),
                         report.getDay(),
                         store.getSeason().getTotalDays()
                 ),
@@ -185,6 +187,7 @@ public class GameDayReportService {
                 SeasonStatus.IN_PROGRESS
         );
         if (activeStore.isPresent()) {
+            STORE_LOCATION_TRANSITION_SUPPORT.applyPendingLocationIfDue(activeStore.get(), LocalDateTime.now(clock));
             return activeStore.get();
         }
 
@@ -260,6 +263,16 @@ public class GameDayReportService {
             return null;
         }
         return REGULAR_ORDER_DAYS.contains(day + 1);
+    }
+
+    private Long resolveTomorrowLocationId(Store store, int day) {
+        if (store == null || store.getLocation() == null) {
+            return null;
+        }
+        if (day >= (store.getSeason() == null || store.getSeason().getTotalDays() == null ? MAX_SUPPORTED_DAY : store.getSeason().getTotalDays())) {
+            return store.getLocation().getId();
+        }
+        return STORE_LOCATION_TRANSITION_SUPPORT.resolveLocationForDay(store, day + 1).getId();
     }
 
     private String resolveLocationName(DailyReport report) {

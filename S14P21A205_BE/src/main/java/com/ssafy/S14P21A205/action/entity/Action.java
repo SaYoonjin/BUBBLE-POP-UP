@@ -37,4 +37,25 @@ public class Action {
 
     @Column(name = "capture_rate", nullable = false, precision = 5, scale = 2)
     private BigDecimal captureRate;
+
+    private Action(
+            ActionCategory category,
+            PromotionType promotionType,
+            Integer cost,
+            BigDecimal captureRate
+    ) {
+        this.category = category;
+        this.promotionType = promotionType;
+        this.cost = cost;
+        this.captureRate = captureRate;
+    }
+
+    public static Action create(
+            ActionCategory category,
+            PromotionType promotionType,
+            Integer cost,
+            BigDecimal captureRate
+    ) {
+        return new Action(category, promotionType, cost, captureRate);
+    }
 }
