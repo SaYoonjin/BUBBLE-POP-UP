@@ -16,6 +16,7 @@ import {
   getStoredSelectedDashboardItems,
 } from "../utils/dashboardItems";
 
+const LOCATION_SELECTION_SECONDS = 120;
 const DEFAULT_PREP_DAY = 1;
 const INITIAL_CAPITAL = 10_000_000;
 const PREP_SECONDS = 50;
@@ -29,6 +30,7 @@ type SelectionMode = "opening_window" | "midseason";
 interface SelectionWindowState {
   mode: SelectionMode;
   endTimestampMs: number;
+  cutoffTimestampMs?: number;
   timerLabel: string;
   helperText: string;
 }
@@ -49,6 +51,10 @@ function persistLocationSelectionDeadline(deadlineMs: number) {
   }
 
   return deadlineMs;
+}
+
+function createLocationSelectionDeadline() {
+  return persistLocationSelectionDeadline(Date.now() + LOCATION_SELECTION_SECONDS * 1000);
 }
 
 function clearLocationSelectionDeadline() {
@@ -96,30 +102,32 @@ function getSecondsUntilDayStart(waitingStatus: GameWaitingResponse, targetDay: 
   }
 }
 
-function buildSelectionWindow(waitingStatus: GameWaitingResponse): SelectionWindowState | null {
+function buildSelectionWindow(
+  waitingStatus: GameWaitingResponse,
+  locationSelectionDeadlineMs: number,
+): SelectionWindowState | null {
   if (!isLocationSelectionAvailable(waitingStatus)) {
     return null;
   }
 
-  const remaining = Math.max(0, waitingStatus.phaseRemainingSeconds ?? 0);
+  const baseWindow = {
+    endTimestampMs: locationSelectionDeadlineMs,
+    timerLabel: "지역 선택 제한 시간",
+    helperText: "2분 안에 지역을 고르고 팝업 브랜드명을 입력해주세요.",
+  };
 
   if (waitingStatus.seasonPhase === "LOCATION_SELECTION") {
     return {
       mode: "opening_window",
-      endTimestampMs: persistLocationSelectionDeadline(Date.now() + remaining * 1000),
-      timerLabel: "지역 선택 제한 시간",
-      helperText: "영업 준비 오픈 전까지 지역과 팝업명을 설정해주세요.",
+      ...baseWindow,
     };
   }
 
   return {
     mode: "midseason",
-    endTimestampMs: persistLocationSelectionDeadline(
+    ...baseWindow,
+    cutoffTimestampMs:
       Date.now() + getSecondsUntilDayStart(waitingStatus, MIDSEASON_CUTOFF_DAY) * 1000,
-    ),
-    timerLabel: "DAY 6 시작까지",
-    helperText:
-      "DAY 6 시작 전까지 지역과 팝업명을 설정해야 이번 시즌에 참여할 수 있습니다.",
   };
 }
 
@@ -142,6 +150,7 @@ function resolveJoinErrorMessage(error: unknown) {
 }
 
 export default function LocationSelectPage() {
+  const [locationSelectionDeadlineMs] = useState(createLocationSelectionDeadline);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [selectionWindow, setSelectionWindow] = useState<SelectionWindowState | null>(null);
   const [isJoining, setIsJoining] = useState(false);
@@ -177,7 +186,10 @@ export default function LocationSelectPage() {
           return;
         }
 
-        const nextSelectionWindow = buildSelectionWindow(waitingStatus);
+        const nextSelectionWindow = buildSelectionWindow(
+          waitingStatus,
+          locationSelectionDeadlineMs,
+        );
 
         if (!nextSelectionWindow) {
           clearLocationSelectionDeadline();
@@ -200,7 +212,38 @@ export default function LocationSelectPage() {
     return () => {
       isCancelled = true;
     };
-  }, [navigate]);
+  }, [locationSelectionDeadlineMs, navigate]);
+
+  useEffect(() => {
+    if (selectionWindow?.mode !== "midseason" || !selectionWindow.cutoffTimestampMs) {
+      return;
+    }
+
+    const remainingMs = selectionWindow.cutoffTimestampMs - Date.now();
+
+    if (remainingMs <= 0) {
+      clearLocationSelectionDeadline();
+      clearStoredBrandName();
+      navigate("/", {
+        replace: true,
+        state: { showMidSeasonSetupExpiredModal: true },
+      });
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      clearLocationSelectionDeadline();
+      clearStoredBrandName();
+      navigate("/", {
+        replace: true,
+        state: { showMidSeasonSetupExpiredModal: true },
+      });
+    }, remainingMs);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [navigate, selectionWindow]);
 
   const handleComplete = async (brandName: string) => {
     if (!selectedDistrict || isJoining || !selectionWindow) {
@@ -265,17 +308,11 @@ export default function LocationSelectPage() {
       return;
     }
 
-    clearLocationSelectionDeadline();
-
     if (selectionWindow.mode === "midseason") {
-      clearStoredBrandName();
-      navigate("/", {
-        replace: true,
-        state: { showMidSeasonSetupExpiredModal: true },
-      });
       return;
     }
 
+    clearLocationSelectionDeadline();
     navigate(`/game/${DEFAULT_PREP_DAY}/prep`);
   };
 

@@ -528,7 +528,7 @@ export default function DashboardPage() {
                     <p className="text-sm font-bold text-amber-800">참여 유의사항</p>
                     <p className="mt-1 text-sm leading-6 text-amber-700">
                       중간 참여자는 DAY 6 시작 전까지 지역과 팝업명 설정을 모두 완료해야 합니다.
-                      시간을 넘기면 다음 시즌부터 다시 참여할 수 있습니다.
+                      DAY 6 이후에는 다음 시즌에 참여할 수 있습니다.
                     </p>
                   </div>
                 </div>
