@@ -18,10 +18,10 @@ interface PodiumProps {
   entries: PodiumEntry[];
 }
 
-const config: Record<number, { color: string; badgeBg: string; avatarBorder: string; order: string; mt: string; badgeSize: string }> = {
-  1: { color: "#EBC86E", badgeBg: "bg-[#EBC86E]", avatarBorder: "border-[#EBC86E]/30", order: "md:order-2", mt: "md:-mt-8", badgeSize: "size-12 -top-8 text-xl" },
-  2: { color: "#C0C0C0", badgeBg: "bg-[#C0C0C0]", avatarBorder: "border-[#C0C0C0]/30", order: "md:order-1", mt: "mt-0", badgeSize: "size-8 -top-6" },
-  3: { color: "#CD7F32", badgeBg: "bg-[#CD7F32]", avatarBorder: "border-[#CD7F32]/30", order: "md:order-3", mt: "mt-0", badgeSize: "size-8 -top-6" },
+const config: Record<number, { color: string; badgeBg: string; avatarBorder: string; order: string; mt: string; badgeSize: string; delay: string }> = {
+  1: { color: "#EBC86E", badgeBg: "bg-[#EBC86E]", avatarBorder: "border-[#EBC86E]/30", order: "md:order-2", mt: "md:-mt-8", badgeSize: "size-12 -top-8 text-xl", delay: "400ms" },
+  2: { color: "#C0C0C0", badgeBg: "bg-[#C0C0C0]", avatarBorder: "border-[#C0C0C0]/30", order: "md:order-1", mt: "mt-0", badgeSize: "size-8 -top-6", delay: "200ms" },
+  3: { color: "#CD7F32", badgeBg: "bg-[#CD7F32]", avatarBorder: "border-[#CD7F32]/30", order: "md:order-3", mt: "mt-0", badgeSize: "size-8 -top-6", delay: "300ms" },
 };
 
 export default function Podium({ entries }: PodiumProps) {
@@ -36,8 +36,8 @@ export default function Podium({ entries }: PodiumProps) {
         return (
           <div key={entry.rank} className={`${c.order} ${c.mt} flex-1 max-w-[280px] w-full ${
             entry.isMe ? "bg-primary/5 ring-1 ring-primary" : "bg-white"
-          } rounded-2xl shadow-soft relative flex flex-col items-center ${isFirst ? "pt-16 pb-12" : "pt-14 pb-8"}`}
-            style={{ borderTop: `4px solid ${c.color}` }}>
+          } rounded-2xl shadow-soft relative flex flex-col items-center ${isFirst ? "pt-16 pb-12" : "pt-14 pb-8"} animate-fade-up`}
+            style={{ borderTop: `4px solid ${c.color}`, animationDelay: c.delay }}>
 
             {/* Badge */}
             <div className={`absolute left-1/2 -translate-x-1/2 ${c.badgeSize} ${c.badgeBg} text-white rounded-full flex items-center justify-center font-bold shadow-md z-10`}>

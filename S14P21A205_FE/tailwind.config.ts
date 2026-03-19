@@ -53,6 +53,25 @@ const config: Config = {
         xl: "1.5rem",
         "2xl": "2rem",
       },
+      keyframes: {
+        fadeUp: {
+          "0%": { opacity: "0", transform: "translateY(24px)" },
+          "100%": { opacity: "1", transform: "translateY(0)" },
+        },
+        slideInLeft: {
+          "0%": { opacity: "0", transform: "translateX(-20px)" },
+          "100%": { opacity: "1", transform: "translateX(0)" },
+        },
+        scaleIn: {
+          "0%": { opacity: "0", transform: "scale(0.9)" },
+          "100%": { opacity: "1", transform: "scale(1)" },
+        },
+      },
+      animation: {
+        "fade-up": "fadeUp 0.5s ease-out both",
+        "slide-in-left": "slideInLeft 0.4s ease-out both",
+        "scale-in": "scaleIn 0.4s ease-out both",
+      },
     },
   },
   plugins: [],
