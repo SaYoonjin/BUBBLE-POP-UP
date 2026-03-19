@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import PlayHeader from "../components/play/PlayHeader";
 import EventSidebar, { type GameAlert } from "../components/play/EventSidebar";
@@ -11,6 +11,9 @@ import EmergencyOrderModal, {
 import PromotionModal from "../components/play/modals/PromotionModal";
 import ShareModal from "../components/play/modals/ShareModal";
 import MoveModal from "../components/play/modals/MoveModal";
+import { PLAY_SESSION_DEADLINE_STORAGE_KEY_PREFIX } from "../constants";
+import useBrandName from "../hooks/useBrandName";
+import useNickname from "../hooks/useNickname";
 
 const MOCK = {
   location: "성수",
@@ -21,7 +24,6 @@ const MOCK = {
   guests: 24,
   stock: 85,
   balance: 4_500_000,
-  gameTime: "14:30",
   currentPrice: 4_100,
   menuItems: [
     { name: "빵", price: 1_800, emoji: "🍞" },
@@ -66,45 +68,26 @@ const MOCK = {
   ],
 };
 
-const mockAlerts: GameAlert[] = [
-  {
-    id: 1,
-    type: "event",
-    title: "SNS에서 입소문 확산",
-    description: "손님 유입률이 15% 증가했습니다.",
-    time: "방금 전",
-  },
-  {
-    id: 2,
-    type: "deadline",
-    title: "마감 1분 전",
-    description: "영업 종료가 곧 다가옵니다.",
-    time: "1분 전",
-  },
-  {
-    id: 3,
-    type: "stock",
-    title: "재고 30개 이하",
-    description: "긴급 발주를 고려해보세요.",
-    time: "3분 전",
-  },
-  {
-    id: 4,
-    type: "event",
-    title: "주말 축제 개막",
-    description: "유동인구가 20% 증가할 예정입니다.",
-    time: "5분 전",
-  },
-  {
-    id: 5,
-    type: "action",
-    title: "할인 이벤트 적용됨",
-    description: "20% 할인이 적용되었습니다.",
-    time: "8분 전",
-  },
-];
+function getInitialAlerts(): GameAlert[] {
+  return [
+    {
+      id: 1,
+      type: "event",
+      title: "SNS에서 입소문 확산",
+      description: "손님 유입률이 15% 증가했습니다.",
+      time: "방금 전",
+    },
+    {
+      id: 2,
+      type: "event",
+      title: "주말 축제 개막",
+      description: "유동인구가 20% 증가할 예정입니다.",
+      time: "5분 전",
+    },
+  ];
+}
 
-const mockRankings: RankEntry[] = [
+const baseRankings: RankEntry[] = [
   { id: "kim-boss", name: "김사장", storeName: "쿠키팩토리", revenue: 12_400_000, roi: 42.8 },
   { id: "lee-ceo", name: "이대표", storeName: "버블티하우스", revenue: 11_800_000, roi: 38.4 },
   { id: "me", name: "나", storeName: "버블스토리", revenue: 10_200_000, roi: 34.2, isMe: true },
@@ -120,17 +103,104 @@ const promotionLabels: Record<string, string> = {
 };
 
 const persistentActionTypes = new Set<ActionType>(["discount", "promotion", "share"]);
+const PLAY_DURATION_SECONDS = 120;
+const PLAY_DURATION_MS = PLAY_DURATION_SECONDS * 1000;
+
+function getPlaySessionStorageKey(dayNumber: number) {
+  return `${PLAY_SESSION_DEADLINE_STORAGE_KEY_PREFIX}:${dayNumber}`;
+}
+
+function resolvePlaySessionEndTimestamp(dayNumber: number) {
+  if (typeof window === "undefined") {
+    return Date.now() + PLAY_DURATION_MS;
+  }
+
+  const storageKey = getPlaySessionStorageKey(dayNumber);
+  const storedValue = window.sessionStorage.getItem(storageKey);
+  const parsedTimestamp = Number(storedValue);
+
+  if (Number.isFinite(parsedTimestamp) && parsedTimestamp > 0) {
+    return parsedTimestamp;
+  }
+
+  const nextTimestamp = Date.now() + PLAY_DURATION_MS;
+  window.sessionStorage.setItem(storageKey, String(nextTimestamp));
+
+  return nextTimestamp;
+}
 
 export default function PlayPage() {
   const { day } = useParams<{ day: string }>();
+  const dayNumber = useMemo(() => Number(day) || 1, [day]);
+
+  return <PlayPageSession key={dayNumber} dayNumber={dayNumber} />;
+}
+
+function PlayPageSession({ dayNumber }: { dayNumber: number }) {
+  const { nickname } = useNickname();
+  const { brandName } = useBrandName();
   const [activeModal, setActiveModal] = useState<ActionType | null>(null);
   const [usedActions, setUsedActions] = useState<Set<ActionType>>(new Set());
   const [activeEffects, setActiveEffects] = useState<Set<ActionType>>(new Set());
-  const [alerts, setAlerts] = useState<GameAlert[]>(mockAlerts);
+  const [alerts, setAlerts] = useState<GameAlert[]>(() => getInitialAlerts());
   const [balance, setBalance] = useState(MOCK.balance);
   const [stock, setStock] = useState(MOCK.stock);
+  const [playEndTimestampMs] = useState(() =>
+    resolvePlaySessionEndTimestamp(dayNumber),
+  );
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  const hasDeadlineAlertRef = useRef(false);
+  const hasLowStockAlertRef = useRef(false);
+  const remainingMilliseconds = Math.max(0, playEndTimestampMs - nowMs);
+  const remainingSeconds = Math.max(0, Math.ceil(remainingMilliseconds / 1000));
+  const playStoreName = brandName || MOCK.storeName;
+  const rankings = useMemo(
+    () =>
+      baseRankings.map((entry) =>
+        entry.id === "me"
+          ? {
+              ...entry,
+              name: nickname,
+              storeName: playStoreName,
+            }
+          : entry,
+      ),
+    [nickname, playStoreName],
+  );
 
-  const dayNumber = useMemo(() => Number(day) || 1, [day]);
+  useEffect(() => {
+    if (Date.now() >= playEndTimestampMs) {
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      const nextNowMs = Date.now();
+      const nextRemainingMilliseconds = Math.max(0, playEndTimestampMs - nextNowMs);
+      const nextRemainingSeconds = Math.max(0, Math.ceil(nextRemainingMilliseconds / 1000));
+
+      if (nextRemainingSeconds <= 60 && nextRemainingSeconds > 0 && !hasDeadlineAlertRef.current) {
+        hasDeadlineAlertRef.current = true;
+        setAlerts((prev) => [
+          {
+            id: Date.now() + Math.floor(Math.random() * 1000),
+            type: "deadline",
+            title: "마감 1분 전",
+            description: "영업 종료가 곧 다가옵니다.",
+            time: "방금 전",
+          },
+          ...prev,
+        ]);
+      }
+
+      setNowMs(nextNowMs);
+
+      if (nextRemainingMilliseconds <= 0) {
+        window.clearInterval(timer);
+      }
+    }, 100);
+
+    return () => window.clearInterval(timer);
+  }, [playEndTimestampMs]);
 
   const handleAction = (action: ActionType) => {
     setActiveModal(action);
@@ -138,17 +208,26 @@ export default function PlayPage() {
 
   const closeModal = () => setActiveModal(null);
 
-  const pushActionAlert = (title: string, description: string) => {
+  const pushAlert = (
+    type: GameAlert["type"],
+    title: string,
+    description: string,
+    time = "방금 전",
+  ) => {
     setAlerts((prev) => [
       {
-        id: Date.now(),
-        type: "action",
+        id: Date.now() + Math.floor(Math.random() * 1000),
+        type,
         title,
         description,
-        time: "방금 전",
+        time,
       },
       ...prev,
     ]);
+  };
+
+  const pushActionAlert = (title: string, description: string) => {
+    pushAlert("action", title, description);
   };
 
   const completeAction = (
@@ -170,13 +249,22 @@ export default function PlayPage() {
 
     const cost = options?.cost;
     const stockDelta = options?.stockDelta;
+    const nextStock =
+      typeof stockDelta === "number" && stockDelta !== 0 ? Math.max(0, stock + stockDelta) : stock;
 
     if (typeof cost === "number" && cost > 0) {
       setBalance((prev) => prev - cost);
     }
 
     if (typeof stockDelta === "number" && stockDelta !== 0) {
-      setStock((prev) => Math.max(0, prev + stockDelta));
+      setStock(nextStock);
+
+      if (nextStock > 30) {
+        hasLowStockAlertRef.current = false;
+      } else if (stock > 30 && !hasLowStockAlertRef.current) {
+        hasLowStockAlertRef.current = true;
+        pushAlert("stock", "재고 30개 이하", "긴급 발주를 고려해보세요.");
+      }
     }
 
     if (options?.alert) {
@@ -190,11 +278,11 @@ export default function PlayPage() {
     <div className="flex h-screen w-full flex-col overflow-hidden font-display text-slate-900 selection:bg-primary selection:text-white">
       <PlayHeader
         location={MOCK.location}
-        storeName={MOCK.storeName}
+        storeName={playStoreName}
         menuName={MOCK.menuName}
         day={dayNumber}
-        remainingSeconds={153}
-        gameTime={MOCK.gameTime}
+        remainingSeconds={remainingSeconds}
+        remainingMilliseconds={remainingMilliseconds}
         congestion={MOCK.congestion}
         guests={MOCK.guests}
         stock={stock}
@@ -205,7 +293,7 @@ export default function PlayPage() {
         <div className="absolute inset-0 z-0 bg-transparent" />
         <div className="relative z-0 flex-1" />
 
-        <RankingSidebar rankings={mockRankings} />
+        <RankingSidebar rankings={rankings} />
         <EventSidebar alerts={alerts} />
         <ActionBar onAction={handleAction} usedActions={usedActions} activeEffects={activeEffects} />
       </main>
