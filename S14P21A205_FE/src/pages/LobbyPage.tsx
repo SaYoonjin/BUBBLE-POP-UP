@@ -1,6 +1,8 @@
+import { useEffect, useState } from "react";
 import GuestHeader from "../components/common/GuestHeader";
 import FloatingBubbles from "../components/common/FloatingBubbles";
 import HeroCarousel, { HeroCTA, AnimatedParticipants } from "../components/common/HeroCarousel";
+import { getGameWaitingStatus, type GameWaitingStatus } from "../api/game";
 
 const landingBubbles = [
   { size: "w-96 h-96", position: "top-[-10%] left-[-10%]", opacity: "opacity-40", delay: "0s", variant: "glass" as const },
@@ -10,6 +12,18 @@ const landingBubbles = [
 ];
 
 export default function LobbyPage() {
+  const [seasonNumber, setSeasonNumber] = useState<number | null>(null);
+  const [seasonStatus, setSeasonStatus] = useState<GameWaitingStatus | null>(null);
+
+  useEffect(() => {
+    getGameWaitingStatus()
+      .then((data) => {
+        setSeasonNumber(data.nextSeasonNumber);
+        setSeasonStatus(data.status);
+      })
+      .catch(() => {});
+  }, []);
+
   return (
     <div className="relative min-h-screen w-full flex flex-col bg-gradient-to-br from-[#F4F7F4] to-[#FFFBF2] text-slate-900 overflow-hidden font-display">
       <FloatingBubbles bubbles={landingBubbles} />
@@ -21,8 +35,9 @@ export default function LobbyPage() {
             <HeroCarousel />
           </div>
           <div className="lg:col-span-5 flex flex-col justify-center order-1 lg:order-2 mb-8 lg:mb-0">
-            <HeroCTA />
+            <HeroCTA seasonNumber={seasonNumber} status={seasonStatus} />
             <div className="mt-8">
+              {/* TODO: 참여자 수 API 연동 (BE 추가 필요) */}
               <AnimatedParticipants count={1203} />
             </div>
           </div>
