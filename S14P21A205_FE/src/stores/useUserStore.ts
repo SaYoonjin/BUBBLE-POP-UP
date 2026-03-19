@@ -22,20 +22,24 @@ export const useUserStore = create<UserState>((set) => ({
 
   fetchUser: async () => {
     try {
-      const [userRes, pointsData] = await Promise.all([
-        getUser(),
-        getUserPoints(),
-      ]);
+      // 유저 정보는 필수, 포인트는 실패해도 OK
+      const userRes = await getUser();
+      let points: number | null = null;
+      try {
+        const pointsData = await getUserPoints();
+        points = pointsData.currentPoints;
+      } catch { /* 포인트 조회 실패는 무시 */ }
+
       set({
         nickname: userRes.data.nickname,
         email: userRes.data.email,
         role: userRes.data.role,
-        currentPoints: pointsData.currentPoints,
+        currentPoints: points,
         isLoaded: true,
       });
     } catch {
-      // 401은 client interceptor가 처리
-      set({ isLoaded: true });
+      // getUser 자체 실패 → 기존 데이터 유지하고 로드 완료 표시
+      set((prev) => ({ ...prev, isLoaded: true }));
     }
   },
 

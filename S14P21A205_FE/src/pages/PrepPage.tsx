@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useOutletContext, useParams } from "react-router-dom";
+import type { GameGuardContext } from "../router/GameGuard";
 import AppHeader from "../components/common/AppHeader";
 import CountdownTimer from "../components/common/CountdownTimer";
 import MenuSelector from "../components/game/MenuSelector";
@@ -74,6 +75,7 @@ function isRegularOrderDay(day: number) {
 
 export default function PrepPage() {
   const { day: dayParam } = useParams<{ day: string }>();
+  const guardContext = useOutletContext<GameGuardContext>();
   const parsedDay = Number(dayParam);
   const day = Number.isNaN(parsedDay) ? 0 : parsedDay;
   const canPrepareToday = isRegularOrderDay(day);
@@ -132,7 +134,7 @@ export default function PrepPage() {
                     <span className="material-symbols-outlined text-[1.25rem]">calendar_today</span>
                     <span>DAY {day}</span>
                   </div>
-                  <CountdownTimer initialSeconds={50} label="준비 시간" />
+                  <CountdownTimer endTimestampMs={guardContext.phaseEndTimestamp} label="준비 시간" />
                 </div>
                 <h1 className="text-slate-900 text-3xl md:text-[2rem] font-black leading-tight tracking-tight">
                   {tab === "prep" ? "영업 준비" : "버블 뉴스"}
