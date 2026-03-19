@@ -12,7 +12,7 @@ export interface UserInfo {
   role: string;
 }
 
-export interface UserPoints {
+export interface UserPointsResponse {
   currentPoints: number;
 }
 
@@ -33,20 +33,21 @@ export interface UserRecordsResponse {
 
 /** 현재 로그인 유저 정보 조회 */
 export function getUser() {
-  return client.get<UserInfo>("/users");
+  return client.get<UserInfo>("/api/users");
 }
 
-/** 보유 포인트 조회 */
-export function getUserPoints() {
-  return client.get<UserPoints>("/users/points");
+/** 보유 포인트 조회 (data unwrap) */
+export async function getUserPoints() {
+  const { data } = await client.get<UserPointsResponse>("/api/users/points");
+  return data;
 }
 
 /** 닉네임 수정 */
 export function patchNickname(nickname: string) {
-  return client.patch<UserInfo>("/users/nickname", { nickname });
+  return client.patch<UserInfo>("/api/users/nickname", { nickname });
 }
 
 /** 시즌별 기록 조회 */
 export function getUserRecords() {
-  return client.get<UserRecordsResponse>("/users/records");
+  return client.get<UserRecordsResponse>("/api/users/records");
 }

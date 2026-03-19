@@ -1,3 +1,34 @@
-// import client from "./client";
+import client from "./client";
 
-export default {};
+export type ShopItemCategory = "INGREDIENT" | "RENT";
+
+export interface ShopItemResponse {
+  itemId: number;
+  itemName: string;
+  category: ShopItemCategory;
+  point: number;
+  discountRate: number;
+}
+
+export interface ShopItemListResponse {
+  items: ShopItemResponse[];
+}
+
+export interface PurchasedItemResponse {
+  itemId: number;
+  discountRate: number;
+}
+
+export interface PurchasedItemListResponse {
+  items: PurchasedItemResponse[];
+}
+
+export async function getShopItems() {
+  const { data } = await client.get<ShopItemListResponse>("/api/shop/items");
+  return data;
+}
+
+export async function getPurchasedItems() {
+  const { data } = await client.get<PurchasedItemListResponse>("/api/shop/purchased");
+  return data;
+}

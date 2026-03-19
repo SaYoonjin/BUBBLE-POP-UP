@@ -143,7 +143,13 @@ export default function ReportPage() {
       <AppHeader />
 
       {showBankruptModal && (
-        <BankruptModal onClose={() => { setShowBankruptModal(false); navigate("/"); }} isLastDay={data.day === 7} />
+        <BankruptModal
+          onClose={() => {
+            setShowBankruptModal(false);
+            navigate("/", { state: { showBankruptWarning: true } });
+          }}
+          isLastDay={data.day === 7}
+        />
       )}
 
       <main className={`flex-1 flex justify-center py-8 px-4 sm:px-10 pt-24 ${showBankruptModal ? "blur-[2px] pointer-events-none" : ""}`}>
