@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { clearAuthSession } from "../../hooks/useAuth";
+import { logout } from "../../api/auth";
+import { useUserStore } from "../../stores/useUserStore";
 
 interface ProfileDropdownProps {
   nickname?: string;
@@ -19,7 +21,13 @@ export default function ProfileDropdown({ nickname = "Owner" }: ProfileDropdownP
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await logout();
+    } catch {
+      // BE 실패해도 로컬 세션은 정리
+    }
+    useUserStore.getState().clearUser();
     clearAuthSession();
     navigate("/login");
   };
