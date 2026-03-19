@@ -41,18 +41,21 @@ export interface CurrentSeasonTopRankingsResponse {
 }
 
 export async function getGameWaitingStatus() {
-  const { data } = await client.get<GameWaitingResponse>("/game/waiting");
+  const { data } = await client.get<GameWaitingResponse>("/api/game/waiting");
   return data;
 }
 
 export async function joinCurrentSeason(payload: SeasonJoinRequest) {
-  const { data } = await client.post<SeasonJoinResponse>("/game/seasons/current/join", payload);
+  const { data } = await client.post<SeasonJoinResponse>(
+    "/api/game/seasons/current/join",
+    payload,
+  );
   return data;
 }
 
 export async function getCurrentSeasonTopRankings() {
   const { data } = await client.get<CurrentSeasonTopRankingsResponse>(
-    "/game/seasons/current/rankings/top",
+    "/api/game/seasons/current/rankings/top",
   );
   return data;
 }

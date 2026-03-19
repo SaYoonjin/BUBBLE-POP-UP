@@ -24,11 +24,11 @@ export interface PurchasedItemListResponse {
 }
 
 export async function getShopItems() {
-  const { data } = await client.get<ShopItemListResponse>("/shop/items");
+  const { data } = await client.get<ShopItemListResponse>("/api/shop/items");
   return data;
 }
 
 export async function getPurchasedItems() {
-  const { data } = await client.get<PurchasedItemListResponse>("/shop/purchased");
+  const { data } = await client.get<PurchasedItemListResponse>("/api/shop/purchased");
   return data;
 }

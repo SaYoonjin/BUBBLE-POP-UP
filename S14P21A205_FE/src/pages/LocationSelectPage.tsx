@@ -1,7 +1,7 @@
 import axios from "axios";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { joinCurrentSeason } from "../api/game";
+import { getGameWaitingStatus, joinCurrentSeason } from "../api/game";
 import CountdownTimer from "../components/common/CountdownTimer";
 import DistrictDetailPanel from "../components/game/DistrictDetailPanel";
 import SeoulMap3D from "../components/game/SeoulMap3D";
@@ -19,6 +19,10 @@ import {
 const LOCATION_SELECTION_SECONDS = 120;
 const DEFAULT_PREP_DAY = 1;
 const INITIAL_CAPITAL = 10_000_000;
+
+function isLocationSelectionAvailable(currentDay: number | null, status: "WAITING" | "IN_PROGRESS") {
+  return status === "IN_PROGRESS" && typeof currentDay === "number" && currentDay >= 1 && currentDay <= 5;
+}
 
 function parseCurrency(value: string) {
   return Number(value.replace(/[^\d]/g, ""));
@@ -77,6 +81,7 @@ export default function LocationSelectPage() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [selectionDeadlineMs] = useState(getOrCreateLocationSelectionDeadline);
   const [isJoining, setIsJoining] = useState(false);
+  const [isAccessChecking, setIsAccessChecking] = useState(true);
   const [joinError, setJoinError] = useState<string | null>(null);
   const [selectedDashboardItems] = useState(getStoredSelectedDashboardItems);
   const navigate = useNavigate();
@@ -96,6 +101,39 @@ export default function LocationSelectPage() {
   const discountedRent = selectedDistrict
     ? applyDiscount(parseCurrency(selectedDistrict.rent), rentDiscountMultiplier)
     : null;
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    async function verifySeasonAccess() {
+      try {
+        const waitingStatus = await getGameWaitingStatus();
+
+        if (isCancelled) {
+          return;
+        }
+
+        if (!isLocationSelectionAvailable(waitingStatus.currentDay, waitingStatus.status)) {
+          clearLocationSelectionDeadline();
+          navigate("/", { replace: true });
+          return;
+        }
+
+        setIsAccessChecking(false);
+      } catch {
+        if (!isCancelled) {
+          clearLocationSelectionDeadline();
+          navigate("/", { replace: true });
+        }
+      }
+    }
+
+    void verifySeasonAccess();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [navigate]);
 
   const handleComplete = async (brandName: string) => {
     if (!selectedDistrict || isJoining) {
@@ -163,6 +201,14 @@ export default function LocationSelectPage() {
     clearLocationSelectionDeadline();
     navigate(`/game/${DEFAULT_PREP_DAY}/prep`);
   };
+
+  if (isAccessChecking) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#FDFDFB] font-display text-slate-400">
+        참여 가능 상태를 확인하는 중입니다.
+      </div>
+    );
+  }
 
   return (
     <div className="relative h-screen w-full overflow-hidden bg-[#FDFDFB] font-display text-slate-800">
