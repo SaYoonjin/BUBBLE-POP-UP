@@ -1,21 +1,60 @@
 import { useEffect, useRef, useState } from "react";
 
 interface CountdownTimerProps {
-  initialSeconds: number;
+  initialSeconds?: number;
+  endTimestampMs?: number;
   onComplete?: () => void;
   label?: string;
   variant?: "pill" | "display" | "inline";
   showIcon?: boolean;
 }
 
+function resolveRemainingSeconds(
+  initialSeconds: number | undefined,
+  endTimestampMs: number | undefined,
+) {
+  if (typeof endTimestampMs === "number") {
+    return Math.max(0, Math.ceil((endTimestampMs - Date.now()) / 1000));
+  }
+
+  return Math.max(0, initialSeconds ?? 0);
+}
+
 export default function CountdownTimer({
   initialSeconds,
+  endTimestampMs,
   onComplete,
   label = "남은 시간",
   variant = "pill",
   showIcon = true,
 }: CountdownTimerProps) {
-  const [seconds, setSeconds] = useState(() => initialSeconds);
+  const timerIdentity =
+    typeof endTimestampMs === "number" ? `end-${endTimestampMs}` : `initial-${initialSeconds ?? 0}`;
+
+  return (
+    <CountdownTimerInstance
+      key={timerIdentity}
+      initialSeconds={initialSeconds}
+      endTimestampMs={endTimestampMs}
+      onComplete={onComplete}
+      label={label}
+      variant={variant}
+      showIcon={showIcon}
+    />
+  );
+}
+
+function CountdownTimerInstance({
+  initialSeconds,
+  endTimestampMs,
+  onComplete,
+  label = "남은 시간",
+  variant = "pill",
+  showIcon = true,
+}: CountdownTimerProps) {
+  const [seconds, setSeconds] = useState(() =>
+    resolveRemainingSeconds(initialSeconds, endTimestampMs),
+  );
   const hasCompletedRef = useRef(false);
 
   useEffect(() => {
@@ -24,15 +63,22 @@ export default function CountdownTimer({
         hasCompletedRef.current = true;
         onComplete?.();
       }
+
       return;
     }
 
     const timer = window.setInterval(() => {
-      setSeconds((currentSeconds) => currentSeconds - 1);
+      setSeconds((currentSeconds) => {
+        if (typeof endTimestampMs === "number") {
+          return resolveRemainingSeconds(undefined, endTimestampMs);
+        }
+
+        return Math.max(0, currentSeconds - 1);
+      });
     }, 1000);
 
     return () => window.clearInterval(timer);
-  }, [seconds, onComplete]);
+  }, [seconds, endTimestampMs, onComplete]);
 
   const minutes = Math.floor(seconds / 60);
   const remainingSeconds = seconds % 60;

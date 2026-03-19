@@ -95,7 +95,8 @@ class GameDayReportServiceTests {
                 reputationPolicy,
                 bankruptcyPolicy,
                 gameDayStateService,
-                purchaseListGenerator
+                purchaseListGenerator,
+                Clock.fixed(Instant.parse("2026-03-09T05:33:00Z"), ZoneId.of("Asia/Seoul"))
         );
         org.mockito.Mockito.lenient()
                 .when(weatherDayRedisRepository.findLocation(anyLong(), anyLong(), anyInt()))
@@ -106,11 +107,6 @@ class GameDayReportServiceTests {
         org.mockito.Mockito.lenient()
                 .when(purchaseListGenerator.advanceCursor(any(), anyInt()))
                 .thenReturn(12);
-        ReflectionTestUtils.setField(
-                gameDayReportService,
-                "clock",
-                Clock.fixed(Instant.parse("2026-03-09T05:33:00Z"), ZoneId.of("Asia/Seoul"))
-        );
     }
 
     @Test

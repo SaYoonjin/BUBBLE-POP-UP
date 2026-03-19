@@ -48,19 +48,17 @@ export default function DistrictMesh({
   district, isSelected, isHovered, onPointerOver, onPointerOut, onClick,
 }: DistrictMeshProps) {
   const meshRef = useRef<Mesh>(null);
-  const targetY = useRef(0);
 
   const geometry = useMemo(() => makeGeo(district.polygon, 0.35, true), [district.polygon]);
 
   const baseColor = isSelected ? selectedColor : gradeColors[district.grade] || "#94a3b8";
   const hoverColor = isSelected ? "#8DA98E" : gradeHoverColors[district.grade] || "#64748b";
   const color = isHovered ? hoverColor : baseColor;
-
-  targetY.current = isSelected ? 0.5 : isHovered ? 0.25 : 0;
+  const targetY = isSelected ? 0.5 : isHovered ? 0.25 : 0;
 
   useFrame(() => {
     if (meshRef.current) {
-      meshRef.current.position.y += (targetY.current - meshRef.current.position.y) * 0.12;
+      meshRef.current.position.y += (targetY - meshRef.current.position.y) * 0.12;
     }
   });
 
