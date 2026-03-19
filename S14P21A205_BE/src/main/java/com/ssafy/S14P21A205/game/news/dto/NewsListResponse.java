@@ -1,4 +1,4 @@
-package com.ssafy.S14P21A205.news.dto;
+package com.ssafy.S14P21A205.game.news.dto;
 
 import java.util.List;
 

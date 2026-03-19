@@ -1,8 +1,8 @@
-package com.ssafy.S14P21A205.news.service;
+package com.ssafy.S14P21A205.game.news.service;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.ssafy.S14P21A205.news.dto.MenuMentionCount;
+import com.ssafy.S14P21A205.game.news.dto.MenuMentionCount;
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.List;

@@ -1,6 +1,6 @@
-package com.ssafy.S14P21A205.news.controller;
+package com.ssafy.S14P21A205.game.news.controller;
 
-import com.ssafy.S14P21A205.news.service.NewsService;
+import com.ssafy.S14P21A205.game.news.service.NewsService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import lombok.RequiredArgsConstructor;
@@ -24,14 +24,14 @@ public class NewsController {
         return ResponseEntity.ok().build();
     }
 
-    @Operation(summary = "[테스트] 마감 뉴스 생성 (랭킹 갱신 + 마감 뉴스 1건)")
+    @Operation(summary = "[테스트] 마감 뉴스 생성 (랭킹 갱신 + 마감 뉴스 1건)", security = @SecurityRequirement(name = "bearerAuth"))
     @PostMapping("/test/closing/{seasonId}/{day}")
     public ResponseEntity<String> testClosingNews(@PathVariable Long seasonId, @PathVariable int day) {
         newsService.updateDayRankings(seasonId, day);
         return ResponseEntity.ok("마감 뉴스 생성 요청 완료 (비동기). seasonId=" + seasonId + ", day=" + day);
     }
 
-    @Operation(summary = "[테스트] 영업 중 뉴스 생성 (메뉴 입점수 + 지역 입점수)")
+    @Operation(summary = "[테스트] 영업 중 뉴스 생성 (메뉴 입점수 + 지역 입점수)", security = @SecurityRequirement(name = "bearerAuth"))
     @PostMapping("/test/opening/{seasonId}/{day}")
     public ResponseEntity<String> testOpeningNews(@PathVariable Long seasonId, @PathVariable int day) {
         newsService.generateOpeningNews(seasonId, day);

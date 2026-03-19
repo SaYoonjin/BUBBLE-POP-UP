@@ -1,11 +1,11 @@
-package com.ssafy.S14P21A205.news.service;
+package com.ssafy.S14P21A205.game.news.service;
 
 import com.ssafy.S14P21A205.exception.BaseException;
 import com.ssafy.S14P21A205.exception.ErrorCode;
 import com.ssafy.S14P21A205.game.season.entity.Season;
 import com.ssafy.S14P21A205.game.season.repository.SeasonRepository;
-import com.ssafy.S14P21A205.news.dto.MenuMentionCount;
-import com.ssafy.S14P21A205.news.repository.NewsReportRepository;
+import com.ssafy.S14P21A205.game.news.dto.MenuMentionCount;
+import com.ssafy.S14P21A205.game.news.repository.NewsReportRepository;
 import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
@@ -56,14 +56,24 @@ public class NewsService {
     }
 
     /**
-     * 영업 마감 시 당일 순위 업데이트 + 마감 뉴스 1건 비동기 생성.
+     * 시즌 준비 시간에 뉴스를 미리 만들면 이벤트가 없어서 축제 예고가 빠짐.
+     * IN_PROGRESS 전환 후 이벤트 빌드 완료되면 이 메서드로 축제 예고만 보충.
+     */
+    public void generateEventPreviewNewsIfMissing(Long seasonId) {
+        Season season = seasonRepository.findById(seasonId).orElse(null);
+        if (season == null) return;
+        newsDataSaver.generateMissingEventPreviewNews(seasonId, season.getTotalDays());
+    }
+
+    /**
+     * 영업 마감 시 당일 순위 업데이트 + 마감 뉴스 1건 생성.
      */
     public void updateDayRankings(Long seasonId, int day) {
         newsDataSaver.updateDayRankings(seasonId, day);
     }
 
     /**
-     * 영업 중 뉴스 생성 (메뉴 입점수 + 지역 입점수). 비동기로 실행.
+     * 영업 중 뉴스 생성 (메뉴 입점수 + 지역 입점수).
      */
     public void generateOpeningNews(Long seasonId, int day) {
         newsDataSaver.generateOpeningNews(seasonId, day);

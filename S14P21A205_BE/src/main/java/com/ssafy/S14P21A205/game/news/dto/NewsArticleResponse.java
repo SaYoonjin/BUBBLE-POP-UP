@@ -1,6 +1,6 @@
-package com.ssafy.S14P21A205.news.dto;
+package com.ssafy.S14P21A205.game.news.dto;
 
-import com.ssafy.S14P21A205.news.entity.NewsArticle;
+import com.ssafy.S14P21A205.game.news.entity.NewsArticle;
 
 public record NewsArticleResponse(
         Long id,
