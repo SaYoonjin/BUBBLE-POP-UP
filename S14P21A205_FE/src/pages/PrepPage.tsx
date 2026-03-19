@@ -6,7 +6,12 @@ import MenuSelector from "../components/game/MenuSelector";
 import PriceSlider from "../components/game/PriceSlider";
 import QuantityCounter from "../components/game/QuantityCounter";
 import CozyNewspaper from "../components/game/CozyNewspaper";
-import { DASHBOARD_SELECTED_ITEMS_STORAGE_KEY } from "../constants";
+import {
+  applyDiscount,
+  getSelectedDiscountMultiplier,
+  getSelectedDiscountPercent,
+  getStoredSelectedDashboardItems,
+} from "../utils/dashboardItems";
 
 const mockMenus = [
   { id: 1, emoji: "🍞", name: "빵", costPrice: 1800, previousSalePrice: 3200 },
@@ -42,7 +47,6 @@ const mockNews = [
 ];
 
 type Tab = "prep" | "news";
-const ITEM_DISCOUNT_RATE = 10;
 
 function roundToHundreds(value: number) {
   return Math.round(value / 100) * 100;
@@ -64,17 +68,6 @@ function getSellingPriceDefault(
   return getRecommendedPrice(costPrice);
 }
 
-function getSelectedDashboardItemIds() {
-  try {
-    const stored = localStorage.getItem(DASHBOARD_SELECTED_ITEMS_STORAGE_KEY);
-    if (!stored) return [];
-    const parsed = JSON.parse(stored);
-    return Array.isArray(parsed) ? parsed.filter((value): value is number => typeof value === "number") : [];
-  } catch {
-    return [];
-  }
-}
-
 function isRegularOrderDay(day: number) {
   return day >= 1 && day <= 7 && day % 2 === 1;
 }
@@ -86,16 +79,24 @@ export default function PrepPage() {
   const canPrepareToday = isRegularOrderDay(day);
   const [tab, setTab] = useState<Tab>("prep");
   const [selectedMenu, setSelectedMenu] = useState<number | null>(1);
-  const [selectedDashboardItemIds] = useState<number[]>(getSelectedDashboardItemIds);
+  const [selectedDashboardItems] = useState(getStoredSelectedDashboardItems);
   const [quantity, setQuantity] = useState(120);
   const [expandedNewsId, setExpandedNewsId] = useState<number | null>(1);
   const selectedMenuData = mockMenus.find((menu) => menu.id === selectedMenu) ?? mockMenus[0];
   const originalCostPrice = selectedMenuData.costPrice;
-  const hasItemDiscount = selectedDashboardItemIds.length > 0;
-  const discountRate = hasItemDiscount ? ITEM_DISCOUNT_RATE : 0;
-  const discountedCostPrice = hasItemDiscount
-    ? Math.round(originalCostPrice * (1 - ITEM_DISCOUNT_RATE / 100))
-    : originalCostPrice;
+  const ingredientDiscountMultiplier = getSelectedDiscountMultiplier(
+    selectedDashboardItems,
+    "INGREDIENT",
+  );
+  const hasItemDiscount = ingredientDiscountMultiplier < 1;
+  const discountRate = getSelectedDiscountPercent(
+    selectedDashboardItems,
+    "INGREDIENT",
+  );
+  const discountedCostPrice = applyDiscount(
+    originalCostPrice,
+    ingredientDiscountMultiplier,
+  );
   const recommendedPrice = getRecommendedPrice(originalCostPrice);
   const maxSellingPrice = roundToHundreds(recommendedPrice * 2);
   const defaultSellingPrice = getSellingPriceDefault(

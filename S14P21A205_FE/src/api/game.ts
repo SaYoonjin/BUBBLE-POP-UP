@@ -1,3 +1,58 @@
-// import client from "./client";
+import client from "./client";
 
-export default {};
+export type GameWaitingStatus = "WAITING" | "IN_PROGRESS";
+
+export interface GameWaitingResponse {
+  status: GameWaitingStatus;
+  nextSeasonNumber: number | null;
+  currentDay: number | null;
+  nextSeasonStartTime: number | null;
+  seasonPhase: string | null;
+  phaseRemainingSeconds: number | null;
+  gameTime: string | null;
+  tick: number | null;
+  joinEnabled: boolean | null;
+  joinPlayableFromDay: number | null;
+}
+
+export interface SeasonJoinRequest {
+  locationId: number;
+  storeName: string;
+}
+
+export interface SeasonJoinResponse {
+  storeId: number;
+  storeName: string;
+  balance: number;
+  playableFromDay: number;
+  waitingForPlayableDay: boolean;
+}
+
+export interface CurrentSeasonTopRankingsResponse {
+  seasonId: number;
+  rankings: Array<{
+    ranking: number;
+    userName: string;
+    storeName: string;
+    roi: number;
+    revenue: number;
+  }>;
+  refreshedAt: string;
+}
+
+export async function getGameWaitingStatus() {
+  const { data } = await client.get<GameWaitingResponse>("/game/waiting");
+  return data;
+}
+
+export async function joinCurrentSeason(payload: SeasonJoinRequest) {
+  const { data } = await client.post<SeasonJoinResponse>("/game/seasons/current/join", payload);
+  return data;
+}
+
+export async function getCurrentSeasonTopRankings() {
+  const { data } = await client.get<CurrentSeasonTopRankingsResponse>(
+    "/game/seasons/current/rankings/top",
+  );
+  return data;
+}

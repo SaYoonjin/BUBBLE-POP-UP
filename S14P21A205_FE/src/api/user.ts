@@ -1,3 +1,10 @@
-// import client from "./client";
+import client from "./client";
 
-export default {};
+export interface UserPointsResponse {
+  currentPoints: number;
+}
+
+export async function getUserPoints() {
+  const { data } = await client.get<UserPointsResponse>("/api/users/points");
+  return data;
+}

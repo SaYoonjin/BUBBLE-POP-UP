@@ -9,6 +9,15 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:8080',
       },
+      '/game': {
+        target: 'http://localhost:8080',
+      },
+      '/shop': {
+        target: 'http://localhost:8080',
+      },
+      '/stores': {
+        target: 'http://localhost:8080',
+      },
       '/oauth2': {
         target: 'http://localhost:8080',
       },
