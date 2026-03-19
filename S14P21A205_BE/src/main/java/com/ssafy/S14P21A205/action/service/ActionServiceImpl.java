@@ -38,10 +38,12 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
+@Slf4j
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class ActionServiceImpl implements ActionService {
@@ -115,7 +117,7 @@ public class ActionServiceImpl implements ActionService {
         Action action = actionRepository
                 .findByCategoryAndPromotionType(ActionCategory.PROMOTION, request.promotionType())
                 .orElseThrow(() -> new BaseException(ErrorCode.RESOURCE_NOT_FOUND));
-        long updatedBalance = resolveUpdatedBalance(store.getId(), day, valueOf(action.getCost()));
+        long updatedBalance = resolveUpdatedBalance("PROMOTION", userId, store, day, valueOf(action.getCost()));
 
         BigDecimal multiplier = BigDecimal.ONE.add(action.getCaptureRate());
         applyCaptureRateMultiplier(store.getId(), day, multiplier);
@@ -124,6 +126,15 @@ public class ActionServiceImpl implements ActionService {
         gameDayStoreStateRedisRepository.markActionUsed(store.getId(), day, field);
         gameDayStoreStateRedisRepository.saveBalance(store.getId(), day, updatedBalance);
 
+        logActionExecution(
+                "PROMOTION",
+                userId,
+                store,
+                day,
+                "promotionType=%s actionCost=%s captureRateMultiplier=%s"
+                        .formatted(request.promotionType(), action.getCost(), multiplier.toPlainString()),
+                updatedBalance
+        );
         return new ActionResponse(
                 "PROMOTION_" + request.promotionType().name(),
                 action.getCost(),
@@ -147,7 +158,7 @@ public class ActionServiceImpl implements ActionService {
             throw new BaseException(ErrorCode.INVALID_INPUT_VALUE);
         }
 
-        long updatedBalance = resolveUpdatedBalance(store.getId(), day, valueOf(action.getCost()));
+        long updatedBalance = resolveUpdatedBalance("DISCOUNT", userId, store, day, valueOf(action.getCost()));
         store.changePrice(newPrice);
 
         int averagePrice = storeRepository.findAveragePriceBySeasonIdAndMenuId(
@@ -166,6 +177,21 @@ public class ActionServiceImpl implements ActionService {
         gameDayStoreStateRedisRepository.markActionUsed(store.getId(), day, "discount");
         gameDayStoreStateRedisRepository.saveBalance(store.getId(), day, updatedBalance);
 
+        logActionExecution(
+                "DISCOUNT",
+                userId,
+                store,
+                day,
+                "discountValue=%s previousPrice=%s newPrice=%s priceRange=%s priceRangeMultiplier=%s"
+                        .formatted(
+                                request.discountValue(),
+                                previousPrice,
+                                newPrice,
+                                priceRange.label(),
+                                priceRange.multiplier().toPlainString()
+                        ),
+                updatedBalance
+        );
         return new DiscountResponse(
                 previousPrice,
                 newPrice,
@@ -191,7 +217,7 @@ public class ActionServiceImpl implements ActionService {
             throw new BaseException(ErrorCode.INSUFFICIENT_STOCK);
         }
 
-        long updatedBalance = resolveUpdatedBalance(store.getId(), day, valueOf(action.getCost()));
+        long updatedBalance = resolveUpdatedBalance("DONATION", userId, store, day, valueOf(action.getCost()));
         BigDecimal captureRateBonus = DONATION_CAPTURE_RATE_BONUS.setScale(2, RoundingMode.HALF_UP);
 
         int newStock = currentStock - request.quantity();
@@ -204,6 +230,15 @@ public class ActionServiceImpl implements ActionService {
         gameDayStoreStateRedisRepository.markActionUsed(store.getId(), day, "donation");
         gameDayStoreStateRedisRepository.saveBalance(store.getId(), day, updatedBalance);
 
+        logActionExecution(
+                "DONATION",
+                userId,
+                store,
+                day,
+                "quantity=%s stockAfter=%s captureRateBonus=%s"
+                        .formatted(request.quantity(), newStock, captureRateBonus.toPlainString()),
+                updatedBalance
+        );
         return new DonationResponse(
                 request.quantity(),
                 captureRateBonus,
@@ -236,7 +271,9 @@ public class ActionServiceImpl implements ActionService {
                 .intValue();
 
         long updatedBalance = resolveUpdatedBalance(
-                store.getId(),
+                "EMERGENCY_ORDER",
+                userId,
+                store,
                 day,
                 valueOf(action.getCost()) + totalCost
         );
@@ -258,6 +295,15 @@ public class ActionServiceImpl implements ActionService {
         gameDayStoreStateRedisRepository.markActionUsed(store.getId(), day, "emergency");
         gameDayStoreStateRedisRepository.saveBalance(store.getId(), day, updatedBalance);
 
+        logActionExecution(
+                "EMERGENCY_ORDER",
+                userId,
+                store,
+                day,
+                "orderId=%s quantity=%s totalCost=%s deliverySeconds=%s arrivedTime=%s"
+                        .formatted(order.getId(), request.quantity(), totalCost, deliverySeconds, arrivedTime),
+                updatedBalance
+        );
         return new EmergencyOrderResponse(
                 order.getId(),
                 request.quantity(),
@@ -294,12 +340,19 @@ public class ActionServiceImpl implements ActionService {
         }
     }
 
-    private long resolveUpdatedBalance(Long storeId, int day, long requiredAmount) {
-        GameDayLiveState state = gameDayStoreStateRedisRepository.find(storeId, day)
+    private long resolveUpdatedBalance(
+            String actionType,
+            Integer userId,
+            Store store,
+            int day,
+            long requiredAmount
+    ) {
+        GameDayLiveState state = gameDayStoreStateRedisRepository.find(store.getId(), day)
                 .orElseThrow(() -> new BaseException(ErrorCode.GAME_STATE_NOT_FOUND));
         long currentBalance = state.balance() == null ? 0L : state.balance();
         long normalizedRequiredAmount = Math.max(requiredAmount, 0L);
         if (currentBalance < normalizedRequiredAmount) {
+            logActionInsufficientBalance(actionType, userId, store, day, currentBalance, normalizedRequiredAmount);
             throw new BaseException(ErrorCode.INSUFFICIENT_BALANCE);
         }
         return currentBalance - normalizedRequiredAmount;
@@ -394,6 +447,75 @@ public class ActionServiceImpl implements ActionService {
         return itemUserRepository.findPurchasedDiscountRateByUserIdAndCategory(userId, ItemCategory.INGREDIENT)
                 .filter(rate -> rate.signum() > 0)
                 .orElse(BigDecimal.ONE);
+    }
+
+    private void logActionInsufficientBalance(
+            String actionType,
+            Integer userId,
+            Store store,
+            int day,
+            long currentBalance,
+            long requiredAmount
+    ) {
+        LocalDateTime now = LocalDateTime.now(clock);
+        SeasonTimePoint timePoint = seasonTimelineService.resolve(store.getSeason(), now);
+        log.info(
+                "\n================ ACTION EXECUTION ================\n"
+                        + "now={} userId={} storeId={} seasonId={}\n"
+                        + "actionType={} result=BLOCKED reason=INSUFFICIENT_BALANCE\n"
+                        + "phase={} day={} gameTime={} tick={}\n"
+                        + "currentBalance={} requiredAmount={}\n"
+                        + "==================================================",
+                now,
+                userId,
+                store.getId(),
+                store.getSeason().getId(),
+                actionType,
+                timePoint.phase(),
+                formatDay(day),
+                formatValue(timePoint.gameTime()),
+                formatValue(timePoint.tick()),
+                currentBalance,
+                requiredAmount
+        );
+    }
+
+    private void logActionExecution(
+            String actionType,
+            Integer userId,
+            Store store,
+            int day,
+            String detail,
+            Long balanceAfter
+    ) {
+        LocalDateTime now = LocalDateTime.now(clock);
+        SeasonTimePoint timePoint = seasonTimelineService.resolve(store.getSeason(), now);
+        log.info(
+                "\n================ ACTION EXECUTION ================\n"
+                        + "now={} userId={} storeId={} seasonId={}\n"
+                        + "actionType={} phase={} day={} gameTime={} tick={}\n"
+                        + "balanceAfter={} detail={}\n"
+                        + "==================================================",
+                now,
+                userId,
+                store.getId(),
+                store.getSeason().getId(),
+                actionType,
+                timePoint.phase(),
+                formatDay(day),
+                formatValue(timePoint.gameTime()),
+                formatValue(timePoint.tick()),
+                formatValue(balanceAfter),
+                detail
+        );
+    }
+
+    private String formatDay(Integer day) {
+        return day <= 0 ? "-" : "DAY " + day;
+    }
+
+    private String formatValue(Object value) {
+        return value == null ? "-" : value.toString();
     }
 
     private long valueOf(Integer amount) {
