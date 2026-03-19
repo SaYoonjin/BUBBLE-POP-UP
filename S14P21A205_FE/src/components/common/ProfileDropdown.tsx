@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import client from "../../api/client";
+import { clearAuthSession } from "../../hooks/useAuth";
 
 interface ProfileDropdownProps {
   nickname?: string;
@@ -19,6 +20,9 @@ export default function ProfileDropdown({ nickname = "Owner" }: ProfileDropdownP
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
+  const handleLogout = () => {
+    clearAuthSession();
+    navigate("/login");
   const handleLogout = async () => {
     try {
       await client.post("/auth/logout", {}, { withCredentials: true });

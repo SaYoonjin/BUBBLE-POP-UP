@@ -48,7 +48,7 @@ public class RealtimeSeasonRankingTickTask implements GameTickTask {
     private final ProfitPolicy profitPolicy;
 
     private final SeasonTimelineService seasonTimelineService = new SeasonTimelineService();
-    private Clock clock = Clock.systemDefaultZone();
+    private final Clock clock;
 
     @Override
     public String taskName() {

@@ -1,8 +1,6 @@
 import { Navigate, Outlet } from "react-router-dom";
+import { isAuthenticated } from "../hooks/useAuth";
 
 export default function PrivateRoute() {
-  const token = localStorage.getItem("accessToken");
-  const shouldBypassAuth = import.meta.env.DEV;
-
-  return token || shouldBypassAuth ? <Outlet /> : <Navigate to="/login" replace />;
+  return isAuthenticated() ? <Outlet /> : <Navigate to="/login" replace />;
 }

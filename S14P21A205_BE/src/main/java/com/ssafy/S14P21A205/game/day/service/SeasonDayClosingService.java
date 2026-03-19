@@ -3,6 +3,7 @@ package com.ssafy.S14P21A205.game.day.service;
 import com.ssafy.S14P21A205.game.season.entity.Season;
 import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
 import com.ssafy.S14P21A205.game.season.repository.SeasonRepository;
+import com.ssafy.S14P21A205.game.news.service.NewsService;
 import com.ssafy.S14P21A205.game.season.service.SeasonFinalRankingService;
 import com.ssafy.S14P21A205.store.entity.Store;
 import com.ssafy.S14P21A205.store.repository.StoreRepository;
@@ -22,6 +23,7 @@ public class SeasonDayClosingService {
     private final StoreRepository storeRepository;
     private final GameDayReportService gameDayReportService;
     private final SeasonFinalRankingService seasonFinalRankingService;
+    private final NewsService newsService;
 
     public void handleBusinessEnd(Long seasonId, int day) {
         if (seasonId == null || day < 1) {
@@ -41,6 +43,13 @@ public class SeasonDayClosingService {
 
         for (Store store : stores) {
             gameDayReportService.recordClosedDayReport(store, day);
+        }
+
+        // 마감 뉴스: 랭킹 갱신 + 마감 뉴스 1건 생성
+        try {
+            newsService.updateDayRankings(seasonId, day);
+        } catch (Exception e) {
+            log.error("Failed to generate closing news. seasonId={} day={}", seasonId, day, e);
         }
 
         if (day == season.getTotalDays()) {

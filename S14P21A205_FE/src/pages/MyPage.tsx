@@ -6,6 +6,7 @@ import ProfileSummaryCard from "../components/mypage/ProfileSummaryCard";
 import SeasonHistoryCard from "../components/mypage/SeasonHistoryCard";
 import SeasonHistoryEmptyState from "../components/mypage/SeasonHistoryEmptyState";
 import SeasonSortDropdown from "../components/mypage/SeasonSortDropdown";
+import useNickname from "../hooks/useNickname";
 import { matchesHangulSearch } from "../utils/hangulSearch";
 
 type RankVariant = "gold" | "gray" | "rose";
@@ -128,9 +129,9 @@ function parseRevenue(value: string) {
 }
 
 export default function MyPage() {
-  const [nickname, setNickname] = useState("버블킹");
+  const { nickname, setNickname } = useNickname();
   const [isNicknameModalOpen, setIsNicknameModalOpen] = useState(false);
-  const [draftNickname, setDraftNickname] = useState("버블킹");
+  const [draftNickname, setDraftNickname] = useState(nickname);
   const [nicknameError, setNicknameError] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [sortOption, setSortOption] = useState<SeasonSortOption>("latest");
@@ -230,15 +231,15 @@ export default function MyPage() {
       return;
     }
 
-    setNickname(nextNickname);
-    setDraftNickname(nextNickname);
+    const savedNickname = setNickname(nextNickname);
+    setDraftNickname(savedNickname);
     setNicknameError("");
     setIsNicknameModalOpen(false);
   };
 
   return (
     <div className="flex min-h-screen flex-col bg-[#FDFDFB] font-display text-slate-900">
-      <AppHeader nickname={nickname} />
+      <AppHeader />
 
       <main className="flex-grow w-full max-w-6xl mx-auto px-4 py-10 pt-24 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-[320px_minmax(0,1fr)] lg:items-start">

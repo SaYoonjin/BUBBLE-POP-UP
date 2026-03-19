@@ -84,7 +84,7 @@ export default function DashboardPage() {
   return (
     <div className="relative min-h-screen w-full flex flex-col bg-[#FDFDFB] text-slate-900 overflow-x-hidden font-display">
       <FloatingBubbles bubbles={dashBubbles} />
-      <AppHeader nickname="솔희" />
+      <AppHeader />
 
       <main className="flex-1 flex flex-col items-center w-full px-6 md:px-12 pt-24 pb-12 z-10 max-w-[1100px] mx-auto">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full items-start">
