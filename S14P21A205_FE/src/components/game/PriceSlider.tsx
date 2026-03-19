@@ -6,7 +6,9 @@ interface PriceSliderProps {
   min: number;
   max: number;
   step: number;
-  costPrice: number;
+  originalCostPrice: number;
+  discountedCostPrice: number;
+  hasItemDiscount: boolean;
   defaultPrice: number;
   defaultPriceLabel: string;
   onChange: (price: number) => void;
@@ -18,13 +20,15 @@ export default function PriceSlider({
   min,
   max,
   step,
-  costPrice,
+  originalCostPrice,
+  discountedCostPrice,
+  hasItemDiscount,
   defaultPrice,
   defaultPriceLabel,
   onChange,
 }: PriceSliderProps) {
   const [showTooltip, setShowTooltip] = useState(false);
-  const margin = price - costPrice;
+  const margin = price - discountedCostPrice;
   const isProfit = margin > 0;
 
   return (
@@ -81,13 +85,31 @@ export default function PriceSlider({
         <div className="grid grid-cols-2 gap-3 mt-auto pt-3">
           <div className="bg-slate-50 rounded-2xl p-3 text-center">
             <p className="text-xs text-slate-400 font-medium mb-1">원가</p>
-            <p className="font-bold text-slate-700 text-base md:text-lg">₩{costPrice.toLocaleString()}</p>
+            {hasItemDiscount ? (
+              <div className="space-y-1">
+                <p className="text-xs font-bold text-rose-300 line-through decoration-2">
+                  ₩{originalCostPrice.toLocaleString()}
+                </p>
+                <p className="font-bold text-rose-500 text-base md:text-lg">
+                  ₩{discountedCostPrice.toLocaleString()}
+                </p>
+              </div>
+            ) : (
+              <p className="font-bold text-slate-700 text-base md:text-lg">
+                ₩{originalCostPrice.toLocaleString()}
+              </p>
+            )}
           </div>
           <div className={`rounded-2xl p-3 text-center border ${isProfit ? "bg-primary/5 border-primary/10" : "bg-red-50 border-red-100"}`}>
             <p className={`text-xs font-medium mb-1 ${isProfit ? "text-primary-dark" : "text-red-400"}`}>마진</p>
             <p className={`font-bold text-base md:text-lg ${isProfit ? "text-primary" : "text-red-500"}`}>
               {isProfit ? "+" : ""}₩{margin.toLocaleString()}
             </p>
+            {hasItemDiscount && (
+              <p className={`mt-1 text-[11px] font-medium ${isProfit ? "text-primary-dark/70" : "text-red-400"}`}>
+                할인 원가 기준
+              </p>
+            )}
           </div>
         </div>
       </div>

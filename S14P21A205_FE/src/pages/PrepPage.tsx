@@ -85,19 +85,23 @@ export default function PrepPage() {
   const parsedDay = Number(dayParam);
   const day = Number.isNaN(parsedDay) ? 0 : parsedDay;
   const selectedMenuData = mockMenus.find((menu) => menu.id === selectedMenu) ?? mockMenus[0];
-  const recommendedPrice = getRecommendedPrice(selectedMenuData.costPrice);
+  const originalCostPrice = selectedMenuData.costPrice;
+  const hasItemDiscount = selectedDashboardItemIds.length > 0;
+  const discountRate = hasItemDiscount ? ITEM_DISCOUNT_RATE : 0;
+  const discountedCostPrice = hasItemDiscount
+    ? Math.round(originalCostPrice * (1 - ITEM_DISCOUNT_RATE / 100))
+    : originalCostPrice;
+  const recommendedPrice = getRecommendedPrice(originalCostPrice);
   const maxSellingPrice = roundToHundreds(recommendedPrice * 2);
   const defaultSellingPrice = getSellingPriceDefault(
-    selectedMenuData.costPrice,
+    originalCostPrice,
     selectedMenuData.previousSalePrice,
     day,
   );
   const [price, setPrice] = useState(defaultSellingPrice);
-  const totalCost = selectedMenuData.costPrice * quantity;
-  const hasItemDiscount = selectedDashboardItemIds.length > 0;
-  const discountRate = hasItemDiscount ? ITEM_DISCOUNT_RATE : 0;
-  const discountAmount = Math.round(totalCost * (discountRate / 100));
-  const discountedTotalCost = totalCost - discountAmount;
+  const totalCost = originalCostPrice * quantity;
+  const discountedTotalCost = discountedCostPrice * quantity;
+  const discountAmount = totalCost - discountedTotalCost;
 
   useEffect(() => {
     setPrice(defaultSellingPrice);
@@ -159,10 +163,12 @@ export default function PrepPage() {
                 <PriceSlider
                   menuName={selectedMenuData.name}
                   price={price}
-                  min={selectedMenuData.costPrice}
+                  min={originalCostPrice}
                   max={maxSellingPrice}
                   step={100}
-                  costPrice={selectedMenuData.costPrice}
+                  originalCostPrice={originalCostPrice}
+                  discountedCostPrice={discountedCostPrice}
+                  hasItemDiscount={hasItemDiscount}
                   defaultPrice={defaultSellingPrice}
                   defaultPriceLabel={day >= 2 ? "이전 판매가" : "권장가"}
                   onChange={setPrice}
