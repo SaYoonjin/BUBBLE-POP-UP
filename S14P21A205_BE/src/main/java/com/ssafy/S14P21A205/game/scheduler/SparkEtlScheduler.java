@@ -1,10 +1,5 @@
 package com.ssafy.S14P21A205.game.scheduler;
 
-import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
-import com.ssafy.S14P21A205.game.season.repository.SeasonRepository;
-import com.ssafy.S14P21A205.news.repository.NewsReportRepository;
-import com.ssafy.S14P21A205.news.service.NewsService;
-
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -25,10 +20,6 @@ public class SparkEtlScheduler {
 
     private static final Logger log = LoggerFactory.getLogger(SparkEtlScheduler.class);
 
-    private final SeasonRepository seasonRepository;
-    private final NewsReportRepository newsReportRepository;
-    private final NewsService newsService;
-
     private static final LocalDate START_BOUND = LocalDate.of(2023, 1, 1);
     private static final LocalDate END_BOUND = LocalDate.of(2024, 12, 25);
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("yyyyMMdd");
@@ -39,22 +30,6 @@ public class SparkEtlScheduler {
     @Scheduled(fixedRate = 1800000)
     public void runEtl() {
         String randomDate = pickRandomDate();
-        log.info("Spark ETL started. date={}", randomDate);
-        submitSparkJob("etl_population_score.py", randomDate);
-        submitSparkJob("etl_traffic_score.py", randomDate);
-
-        // TODO: 수동 호출과 중복 방지 후 활성화
-        // generateNewsIfNeeded();
-    }
-
-    private void generateNewsIfNeeded() {
-        seasonRepository.findFirstByStatusOrderByIdDesc(SeasonStatus.IN_PROGRESS)
-                .ifPresent(season -> {
-                    if (!newsReportRepository.existsBySeasonId(season.getId())) {
-                        log.info("Generating news for season {}", season.getId());
-                        newsService.generateSeasonNews(season.getId());
-                    }
-                });
         String batchKey = "spark-" + randomDate + "-" + LocalDateTime.now().format(BATCH_KEY_FMT);
         log.info("Spark ETL started. date={}, batchKey={}", randomDate, batchKey);
         submitSparkJob("etl_population_score.py", randomDate, batchKey);
