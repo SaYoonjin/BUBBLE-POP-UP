@@ -21,7 +21,7 @@ date_range = [(start_date + timedelta(days=i)).strftime("%Y%m%d") for i in range
 print(f"2차 정제 기간: {start_date_str} ~ {last_date.strftime('%Y%m%d')} (7일)")
 
 SPOT_TO_NAME = {
-    "D-06": "성수",
+    "D-06": "서울숲/성수",
     "D-23": "신도림",
     "D-44": "잠실",
     "D-43": "강남",

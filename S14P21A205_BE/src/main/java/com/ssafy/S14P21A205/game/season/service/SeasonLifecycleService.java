@@ -140,7 +140,7 @@ public class SeasonLifecycleService {
             return;
         }
 
-        scheduledSeason.start(sourceBatchKey);
+        scheduledSeason.startAt(now, sourceBatchKey);
         List<Menu> menus = requireMenus();
         Random random = new Random(resolveSeed(scheduledSeason));
 
@@ -923,7 +923,7 @@ public class SeasonLifecycleService {
         String normalized = menuName == null ? "" : menuName.trim().toLowerCase().replace(" ", "");
         return switch (normalized) {
             case "빵", "bread" -> down ? EventCategory.BREAD_PRICE_DOWN : EventCategory.BREAD_PRICE_UP;
-            case "말라스케워", "malaskewer", "mala_skewer" -> down ? EventCategory.MALA_SKEWER_PRICE_DOWN : EventCategory.MALA_SKEWER_PRICE_UP;
+            case "마라꼬치", "malaskewer", "mala_skewer" -> down ? EventCategory.MALA_SKEWER_PRICE_DOWN : EventCategory.MALA_SKEWER_PRICE_UP;
             case "젤리", "jelly" -> down ? EventCategory.JELLY_PRICE_DOWN : EventCategory.JELLY_PRICE_UP;
             case "떡볶이", "tteokbokki" -> down ? EventCategory.TTEOKBOKKI_PRICE_DOWN : EventCategory.TTEOKBOKKI_PRICE_UP;
             case "햄버거", "hamburger", "burger" -> down ? EventCategory.HAMBURGER_PRICE_DOWN : EventCategory.HAMBURGER_PRICE_UP;
