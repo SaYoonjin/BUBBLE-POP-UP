@@ -5,11 +5,21 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ssafy.S14P21A205.exception.BaseException;
 import com.ssafy.S14P21A205.exception.ErrorCode;
+import com.ssafy.S14P21A205.game.environment.repository.PopulationRepository;
+import com.ssafy.S14P21A205.game.news.dto.AreaRankingItemResponse;
+import com.ssafy.S14P21A205.game.news.dto.MenuMentionCount;
+import com.ssafy.S14P21A205.game.news.dto.NewsListResponse;
+import com.ssafy.S14P21A205.game.news.dto.NewsRankingResponse;
+import com.ssafy.S14P21A205.game.news.entity.NewsArticle;
+import com.ssafy.S14P21A205.game.news.entity.NewsReport;
+import com.ssafy.S14P21A205.game.news.repository.NewsArticleRepository;
+import com.ssafy.S14P21A205.game.news.repository.NewsReportRepository;
 import com.ssafy.S14P21A205.game.season.entity.Season;
 import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
 import com.ssafy.S14P21A205.game.season.repository.SeasonRepository;
-import com.ssafy.S14P21A205.game.news.dto.MenuMentionCount;
-import com.ssafy.S14P21A205.game.news.repository.NewsReportRepository;
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
@@ -105,13 +115,12 @@ public class NewsService {
      * 지역별 매출 순위 + 유동인구 순위 조회.
      */
     public NewsRankingResponse getAreaRankings() {
-        Season season = seasonRepository.findFirstByStatusOrderByIdDesc(SeasonStatus.IN_PROGRESS)
-                .orElseThrow(() -> new BaseException(ErrorCode.SEASON_NOT_FOUND));
+        Season season = findCurrentSeason();
 
         int currentDay = season.getCurrentDay();
 
-        List<AreaRankingItemResponse> revenueRanking = buildRevenueRanking(season.getId(), currentDay);
-        List<AreaRankingItemResponse> trafficRanking = buildTrafficRanking(currentDay);
+        List<AreaRankingItemResponse> revenueRanking = limitTop3(buildRevenueRanking(season.getId(), currentDay));
+        List<AreaRankingItemResponse> trafficRanking = limitTop3(buildTrafficRanking(currentDay));
 
         return new NewsRankingResponse(currentDay, revenueRanking, trafficRanking);
     }
@@ -148,7 +157,7 @@ public class NewsService {
         }
 
         LocalDate targetDate = dates.get(currentDay - 1);
-        List<Object[]> currentData = populationRepository.sumPopulationByLocationAndDate(targetDate);
+        List<Object[]> currentData = populationRepository.avgPopulationByLocationAndDate(targetDate);
         if (currentData.isEmpty()) {
             return List.of();
         }
@@ -165,7 +174,7 @@ public class NewsService {
         List<Map<String, Object>> previous = List.of();
         if (currentDay >= 2 && dates.size() >= currentDay) {
             LocalDate prevDate = dates.get(currentDay - 2);
-            List<Object[]> prevData = populationRepository.sumPopulationByLocationAndDate(prevDate);
+            List<Object[]> prevData = populationRepository.avgPopulationByLocationAndDate(prevDate);
             previous = prevData.stream()
                     .map(row -> {
                         Map<String, Object> item = new HashMap<>();
@@ -197,7 +206,7 @@ public class NewsService {
             double value = ((Number) current.get(i).get(valueKey)).doubleValue();
             Double prev = prevValues.get(name);
 
-            Double changeRate = null;
+            double changeRate = 0.0;
             if (prev != null && prev != 0) {
                 changeRate = Math.round(((value - prev) / prev) * 1000.0) / 10.0;
             }
@@ -205,6 +214,16 @@ public class NewsService {
             result.add(new AreaRankingItemResponse(i + 1, name, changeRate));
         }
         return result;
+    }
+
+    private List<AreaRankingItemResponse> limitTop3(List<AreaRankingItemResponse> list) {
+        return list.size() <= 3 ? list : list.subList(0, 3);
+    }
+
+    private Season findCurrentSeason() {
+        return seasonRepository.findFirstByStatusOrderByIdDesc(SeasonStatus.IN_PROGRESS)
+                .or(() -> seasonRepository.findFirstByStatusOrderByIdDesc(SeasonStatus.SCHEDULED))
+                .orElseThrow(() -> new BaseException(ErrorCode.SEASON_NOT_FOUND));
     }
 
     private List<Map<String, Object>> parseJsonArray(String json) {
