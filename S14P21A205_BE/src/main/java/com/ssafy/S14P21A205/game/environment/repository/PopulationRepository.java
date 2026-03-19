@@ -27,11 +27,11 @@ public interface PopulationRepository extends JpaRepository<Population, Long> {
     List<LocalDate> findDistinctDatesOrdered();
 
     @Query("""
-            SELECT p.location.locationName, SUM(p.floatingPopulation)
+            SELECT p.location.locationName, AVG(p.floatingPopulation)
             FROM Population p
             WHERE CAST(p.date AS LocalDate) = :targetDate
             GROUP BY p.location.locationName
-            ORDER BY SUM(p.floatingPopulation) DESC
+            ORDER BY AVG(p.floatingPopulation) DESC
             """)
-    List<Object[]> sumPopulationByLocationAndDate(@Param("targetDate") LocalDate targetDate);
+    List<Object[]> avgPopulationByLocationAndDate(@Param("targetDate") LocalDate targetDate);
 }
