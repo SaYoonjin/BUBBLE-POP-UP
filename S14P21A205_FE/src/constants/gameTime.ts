@@ -94,8 +94,8 @@ export function phaseToRoute(phase: SeasonPhase, day: number | null): string | n
     case "DAY_REPORT":
       return day ? `/game/${day}/report` : null;
     case "SEASON_SUMMARY":
-      return "/ranking";
     case "NEXT_SEASON_WAITING":
+      return "/ranking";
     case "CLOSED":
       return "/";
     default:

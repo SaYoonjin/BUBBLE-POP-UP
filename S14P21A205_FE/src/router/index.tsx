@@ -28,7 +28,6 @@ const router = createBrowserRouter([
     children: [
       // 가드 없는 페이지 (언제든 접근 가능)
       { path: "/mypage", element: <MyPage /> },
-      { path: "/ranking", element: <RankingPage /> },
 
       // 게임 페이즈 가드 적용
       {
@@ -40,6 +39,7 @@ const router = createBrowserRouter([
           { path: "/game/:day/prep", element: <PrepPage /> },
           { path: "/game/:day/play", element: <PlayPage /> },
           { path: "/game/:day/report", element: <ReportPage /> },
+          { path: "/ranking", element: <RankingPage /> },
         ],
       },
     ],
