@@ -6,6 +6,7 @@ import MenuSelector from "../components/game/MenuSelector";
 import PriceSlider from "../components/game/PriceSlider";
 import QuantityCounter from "../components/game/QuantityCounter";
 import CozyNewspaper from "../components/game/CozyNewspaper";
+import { getStoreMenus, type StoreMenuResponse } from "../api/store";
 import bubbleNewsImage from "../assets/Bubblenewsimg.png";
 import {
   applyDiscount,
@@ -14,7 +15,15 @@ import {
   getStoredSelectedDashboardItems,
 } from "../utils/dashboardItems";
 
-const mockMenus = [
+interface PrepMenu {
+  id: number;
+  emoji: string;
+  name: string;
+  costPrice: number;
+  previousSalePrice: number;
+}
+
+const fallbackMenus: PrepMenu[] = [
   { id: 1, emoji: "🍞", name: "빵", costPrice: 1800, previousSalePrice: 3200 },
   { id: 2, emoji: "🍢", name: "마라꼬치", costPrice: 2200, previousSalePrice: 3900 },
   { id: 3, emoji: "🍬", name: "젤리", costPrice: 900, previousSalePrice: 1800 },
@@ -73,17 +82,35 @@ function isRegularOrderDay(day: number) {
   return day >= 1 && day <= 7 && day % 2 === 1;
 }
 
+function mapStoreMenusToPrepMenus(menus: StoreMenuResponse[]) {
+  return menus.map((menu) => {
+    const fallbackMenu = fallbackMenus.find((entry) => entry.id === menu.menuId);
+
+    return {
+      id: menu.menuId,
+      emoji: fallbackMenu?.emoji ?? "🍽️",
+      name: menu.menuName,
+      costPrice: menu.ingredientPrice,
+      previousSalePrice:
+        fallbackMenu?.previousSalePrice ?? getRecommendedPrice(menu.ingredientPrice),
+    } satisfies PrepMenu;
+  });
+}
+
 export default function PrepPage() {
   const { day: dayParam } = useParams<{ day: string }>();
   const parsedDay = Number(dayParam);
   const day = Number.isNaN(parsedDay) ? 0 : parsedDay;
   const canPrepareToday = isRegularOrderDay(day);
   const [tab, setTab] = useState<Tab>("prep");
+  const [menus, setMenus] = useState<PrepMenu[]>(fallbackMenus);
+  const [isMenusLoading, setIsMenusLoading] = useState(true);
+  const [menuError, setMenuError] = useState<string | null>(null);
   const [selectedMenu, setSelectedMenu] = useState<number | null>(1);
   const [selectedDashboardItems] = useState(getStoredSelectedDashboardItems);
   const [quantity, setQuantity] = useState(120);
   const [expandedNewsId, setExpandedNewsId] = useState<number | null>(1);
-  const selectedMenuData = mockMenus.find((menu) => menu.id === selectedMenu) ?? mockMenus[0];
+  const selectedMenuData = menus.find((menu) => menu.id === selectedMenu) ?? menus[0] ?? fallbackMenus[0];
   const originalCostPrice = selectedMenuData.costPrice;
   const ingredientDiscountMultiplier = getSelectedDiscountMultiplier(
     selectedDashboardItems,
@@ -139,6 +166,48 @@ export default function PrepPage() {
             items: mockRevenueRanking,
           },
         ];
+
+  useEffect(() => {
+    let isActive = true;
+
+    const loadMenus = async () => {
+      try {
+        const { menus: fetchedMenus } = await getStoreMenus();
+
+        if (!isActive) {
+          return;
+        }
+
+        if (fetchedMenus.length === 0) {
+          setMenuError("메뉴 정보를 불러오지 못했습니다. 기본 메뉴 목록을 표시합니다.");
+          return;
+        }
+
+        const nextMenus = mapStoreMenusToPrepMenus(fetchedMenus);
+        setMenus(nextMenus);
+        setSelectedMenu((currentMenuId) =>
+          nextMenus.some((menu) => menu.id === currentMenuId) ? currentMenuId : nextMenus[0].id,
+        );
+        setMenuError(null);
+      } catch {
+        if (!isActive) {
+          return;
+        }
+
+        setMenuError("메뉴 정보를 불러오지 못했습니다. 기본 메뉴 목록을 표시합니다.");
+      } finally {
+        if (isActive) {
+          setIsMenusLoading(false);
+        }
+      }
+    };
+
+    void loadMenus();
+
+    return () => {
+      isActive = false;
+    };
+  }, []);
 
   useEffect(() => {
     setPrice(defaultSellingPrice);
@@ -217,7 +286,24 @@ export default function PrepPage() {
                 }`}
                 aria-disabled={!canPrepareToday}
               >
-                <MenuSelector menus={mockMenus} selectedId={selectedMenu} onSelect={setSelectedMenu} />
+                {(isMenusLoading || menuError) && (
+                  <div
+                    className={`flex items-start gap-3 rounded-2xl px-4 py-3 text-sm ${
+                      menuError
+                        ? "border border-amber-200 bg-amber-50/80 text-amber-700"
+                        : "border border-slate-200 bg-slate-50/80 text-slate-500"
+                    }`}
+                  >
+                    <span className="material-symbols-outlined mt-0.5 text-base">
+                      {menuError ? "error" : "hourglass_top"}
+                    </span>
+                    <p className="leading-6">
+                      {menuError ?? "메뉴 정보를 불러오는 중입니다."}
+                    </p>
+                  </div>
+                )}
+
+                <MenuSelector menus={menus} selectedId={selectedMenu} onSelect={setSelectedMenu} />
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <PriceSlider
