@@ -31,6 +31,7 @@ public class GameDayStoreStateRedisRepository {
     private static final String FIELD_PURCHASE_CURSOR = "purchase_cursor";
     private static final String FIELD_START_RESPONSE = "start_response";
     private static final String FIELD_POPULATION_PER_STORE = "population_per_store";
+    private static final String FIELD_REGION_STORE_COUNT = "region_store_count";
     private static final String FIELD_CAPTURE_RATE = "capture_rate";
     private static final String FIELD_SALE_PRICE = "sale_price";
     private static final String FIELD_TICK_CUSTOMER_COUNT = "tick_customer_count";
@@ -40,6 +41,7 @@ public class GameDayStoreStateRedisRepository {
     private static final String FIELD_CUMULATIVE_PURCHASE_COUNT = "cumulative_purchase_count";
     private static final String FIELD_CUMULATIVE_SALES = "cumulative_sales";
     private static final String FIELD_CUMULATIVE_TOTAL_COST = "cumulative_total_cost";
+    private static final String FIELD_LOCATION_CHANGE_COST = "location_change_cost";
     private static final String FIELD_BALANCE = "balance";
     private static final String FIELD_STOCK = "stock";
     private static final String FIELD_TICK = "tick";
@@ -61,6 +63,7 @@ public class GameDayStoreStateRedisRepository {
                     parseInteger(entries.get(FIELD_PURCHASE_CURSOR)),
                     parseStartResponse(entries.get(FIELD_START_RESPONSE)),
                     parseInteger(entries.get(FIELD_TICK)),
+                    parseInteger(entries.get(FIELD_REGION_STORE_COUNT)),
                     parseInteger(entries.get(FIELD_POPULATION_PER_STORE)),
                     parseCaptureRate(entries),
                     parseInteger(entries.get(FIELD_SALE_PRICE)),
@@ -71,6 +74,7 @@ public class GameDayStoreStateRedisRepository {
                     parseInteger(entries.get(FIELD_CUMULATIVE_PURCHASE_COUNT)),
                     parseLongObject(entries.get(FIELD_CUMULATIVE_SALES)),
                     parseLongObject(entries.get(FIELD_CUMULATIVE_TOTAL_COST)),
+                    parseLongObject(entries.get(FIELD_LOCATION_CHANGE_COST)),
                     parseLongObject(entries.get(FIELD_BALANCE)),
                     parseInteger(entries.get(FIELD_STOCK)),
                     parseLocalDateTime(entries.get(FIELD_LAST_CALCULATED_AT))
@@ -191,6 +195,7 @@ public class GameDayStoreStateRedisRepository {
         Map<String, String> entries = new LinkedHashMap<>();
         put(entries, FIELD_PURCHASE_CURSOR, state.purchaseCursor());
         put(entries, FIELD_TICK, state.tick());
+        put(entries, FIELD_REGION_STORE_COUNT, state.regionStoreCount());
         put(entries, FIELD_POPULATION_PER_STORE, state.populationPerStore());
         put(entries, FIELD_CAPTURE_RATE, state.captureRate());
         put(entries, FIELD_SALE_PRICE, state.salePrice());
@@ -201,6 +206,7 @@ public class GameDayStoreStateRedisRepository {
         put(entries, FIELD_CUMULATIVE_PURCHASE_COUNT, state.cumulativePurchaseCount());
         put(entries, FIELD_CUMULATIVE_SALES, state.cumulativeSales());
         put(entries, FIELD_CUMULATIVE_TOTAL_COST, state.cumulativeTotalCost());
+        put(entries, FIELD_LOCATION_CHANGE_COST, state.locationChangeCost());
         put(entries, FIELD_BALANCE, state.balance());
         put(entries, FIELD_STOCK, state.stock());
         put(entries, FIELD_LAST_CALCULATED_AT, state.lastCalculatedAt());
@@ -210,6 +216,7 @@ public class GameDayStoreStateRedisRepository {
     private Map<String, String> buildTickLogEntries(GameDayLiveState state) {
         String prefix = "tick:%d:".formatted(state.tick());
         Map<String, String> entries = new LinkedHashMap<>();
+        put(entries, prefix + "region_store_count", state.regionStoreCount());
         put(entries, prefix + "population_per_store", state.populationPerStore());
         put(entries, prefix + "capture_rate", state.captureRate());
         put(entries, prefix + "sale_price", state.salePrice());
@@ -220,6 +227,7 @@ public class GameDayStoreStateRedisRepository {
         put(entries, prefix + "cumulative_purchase_count", state.cumulativePurchaseCount());
         put(entries, prefix + "cumulative_sales", state.cumulativeSales());
         put(entries, prefix + "cumulative_total_cost", state.cumulativeTotalCost());
+        put(entries, prefix + "location_change_cost", state.locationChangeCost());
         put(entries, prefix + "balance", state.balance());
         put(entries, prefix + "stock", state.stock());
         return entries;

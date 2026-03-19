@@ -29,8 +29,6 @@ public interface SeasonRepository extends JpaRepository<Season, Long> {
             LocalDateTime endTime
     );
 
-    Optional<Season> findFirstBySourceBatchKeyIsNotNullOrderByIdDesc();
-
     Optional<Season> findFirstByOrderByIdDesc();
 
     Optional<Season> findByIdAndStatus(Long id, SeasonStatus status);

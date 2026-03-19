@@ -5,18 +5,11 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ssafy.S14P21A205.exception.BaseException;
 import com.ssafy.S14P21A205.exception.ErrorCode;
-import com.ssafy.S14P21A205.game.environment.repository.PopulationRepository;
-import com.ssafy.S14P21A205.game.news.dto.AreaRankingItemResponse;
-import com.ssafy.S14P21A205.game.news.dto.MenuMentionCount;
-import com.ssafy.S14P21A205.game.news.dto.NewsRankingResponse;
-import com.ssafy.S14P21A205.game.news.entity.NewsReport;
-import com.ssafy.S14P21A205.game.news.repository.NewsReportRepository;
 import com.ssafy.S14P21A205.game.season.entity.Season;
 import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
 import com.ssafy.S14P21A205.game.season.repository.SeasonRepository;
-import java.time.LocalDate;
-import java.util.ArrayList;
-import java.util.HashMap;
+import com.ssafy.S14P21A205.game.news.dto.MenuMentionCount;
+import com.ssafy.S14P21A205.game.news.repository.NewsReportRepository;
 import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
@@ -38,6 +31,7 @@ public class NewsService {
 
     private final SparkNewsDataService sparkNewsDataService;
     private final NewsDataSaver newsDataSaver;
+    private final NewsArticleRepository newsArticleRepository;
     private final NewsReportRepository newsReportRepository;
     private final SeasonRepository seasonRepository;
     private final PopulationRepository populationRepository;
@@ -91,6 +85,20 @@ public class NewsService {
      */
     public void generateOpeningNews(Long seasonId, int day) {
         newsDataSaver.generateOpeningNews(seasonId, day);
+    }
+
+
+    //오늘의 뉴스 조회. 현재 진행 중인 시즌의 currentDay 기준.
+    public NewsListResponse getTodayNews() {
+        Season season = seasonRepository.findFirstByStatusOrderByIdDesc(SeasonStatus.IN_PROGRESS)
+                .orElseThrow(() -> new BaseException(ErrorCode.SEASON_NOT_FOUND));
+        int day = season.getCurrentDay();
+        List<NewsArticle> articles = newsArticleRepository
+                .findByNewsReport_Season_IdAndDayOrderByIdAsc(season.getId(), day);
+        if (articles.isEmpty()) {
+            throw new BaseException(ErrorCode.NEWS_NOT_FOUND);
+        }
+        return NewsListResponse.of(day, articles);
     }
 
     /**

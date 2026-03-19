@@ -3,8 +3,10 @@ package com.ssafy.S14P21A205.order.service;
 import com.ssafy.S14P21A205.exception.BaseException;
 import com.ssafy.S14P21A205.exception.ErrorCode;
 import com.ssafy.S14P21A205.game.day.policy.StoreRankingPolicy;
+import com.ssafy.S14P21A205.game.day.state.GameDayLiveState;
 import com.ssafy.S14P21A205.game.day.resolver.NewsRankingResolver;
 import com.ssafy.S14P21A205.game.day.state.repository.GameDayStoreStateRedisRepository;
+import com.ssafy.S14P21A205.game.support.StoreStateCarryOverSupport;
 import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
 import com.ssafy.S14P21A205.game.season.repository.DailyReportRepository;
 import com.ssafy.S14P21A205.game.time.model.SeasonPhase;
@@ -29,7 +31,6 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -38,9 +39,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class OrderServiceImpl implements OrderService {
 
-    private static final int INITIAL_CAPITAL = 10_000_000;
     private static final Set<Integer> REGULAR_ORDER_DAYS = Set.of(1, 3, 5, 7);
-    private static final String BALANCE_KEY_PREFIX = "balance:";
     private static final BigDecimal RECOMMENDED_PRICE_MULTIPLIER = new BigDecimal("2.5");
 
     private final StoreRepository storeRepository;
@@ -49,7 +48,6 @@ public class OrderServiceImpl implements OrderService {
     private final DailyReportRepository dailyReportRepository;
     private final GameDayStoreStateRedisRepository gameDayStoreStateRedisRepository;
     private final ItemUserRepository itemUserRepository;
-    private final StringRedisTemplate stringRedisTemplate;
     private final StoreRankingPolicy marketRankingPolicy;
     private final NewsRankingResolver newsRankingResolver;
     private final Clock clock;
@@ -116,7 +114,7 @@ public class OrderServiceImpl implements OrderService {
         }
 
         Order savedOrder = orderRepository.save(
-                Order.create(menu, store, request.quantity(), totalCost, regularOrderDay)
+                Order.create(menu, store, request.quantity(), totalCost, sellingPrice, regularOrderDay)
         );
 
         return RegularOrderResponse.builder()
@@ -295,26 +293,24 @@ public class OrderServiceImpl implements OrderService {
     }
 
     private int resolveCarriedBalance(Store store, int day) {
-        if (day == 1) {
-            Integer persistedBalance = getPersistedBalance(store.getId());
-            return persistedBalance == null ? INITIAL_CAPITAL : persistedBalance;
+        if (day <= 1) {
+            return StoreStateCarryOverSupport.resolveInitialBalance(store);
         }
 
-        return dailyReportRepository.findByStoreIdAndDay(store.getId(), day - 1)
+        Integer reportedBalance = dailyReportRepository.findByStoreIdAndDay(store.getId(), day - 1)
                 .map(report -> report.getBalance() == null ? 0 : report.getBalance())
-                .orElseThrow(() -> new BaseException(ErrorCode.REPORT_NOT_FOUND, "Previous day report not found."));
-    }
-
-    private Integer getPersistedBalance(Long storeId) {
-        String value = stringRedisTemplate.opsForValue().get(balanceKey(storeId));
-        if (value == null || value.isBlank()) {
-            return null;
+                .orElse(null);
+        if (reportedBalance != null) {
+            return reportedBalance;
         }
-        return Integer.valueOf(value);
-    }
 
-    private String balanceKey(Long storeId) {
-        return BALANCE_KEY_PREFIX + storeId;
+        GameDayLiveState previousDayState = gameDayStoreStateRedisRepository.find(store.getId(), day - 1)
+                .orElse(null);
+        if (previousDayState != null && previousDayState.balance() != null) {
+            return Math.toIntExact(previousDayState.balance());
+        }
+
+        return StoreStateCarryOverSupport.resolveInitialBalance(store);
     }
 
     private Integer resolveStock(Long storeId, int day) {
@@ -324,11 +320,21 @@ public class OrderServiceImpl implements OrderService {
     }
 
     private Integer resolveStartingStock(Long storeId, int day) {
-        int carriedStock = day == 1
-                ? 0
-                : dailyReportRepository.findByStoreIdAndDay(storeId, day - 1)
-                .map(report -> report.getStockRemaining() == null ? 0 : report.getStockRemaining())
-                .orElse(0);
+        int carriedStock;
+        if (day <= 1) {
+            carriedStock = StoreStateCarryOverSupport.resolveInitialStock();
+        } else {
+            Integer reportedStock = dailyReportRepository.findByStoreIdAndDay(storeId, day - 1)
+                    .map(report -> report.getStockRemaining() == null ? 0 : report.getStockRemaining())
+                    .orElse(null);
+            if (reportedStock != null) {
+                carriedStock = reportedStock;
+            } else {
+                carriedStock = gameDayStoreStateRedisRepository.find(storeId, day - 1)
+                        .map(state -> state.stock() == null ? 0 : state.stock())
+                        .orElse(StoreStateCarryOverSupport.resolveInitialStock());
+            }
+        }
 
         int orderedStock = orderRepository.findDailyStartOrder(storeId, day)
                 .map(Order::getQuantity)

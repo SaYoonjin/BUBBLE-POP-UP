@@ -16,17 +16,21 @@ export interface RankingRowEntry {
 
 interface RankingRowProps {
   entry: RankingRowEntry;
+  animationDelay?: number;
 }
 
-export default function RankingRow({ entry }: RankingRowProps) {
+export default function RankingRow({ entry, animationDelay }: RankingRowProps) {
   return (
-    <div className={`flex items-center rounded-2xl p-4 shadow-soft border transition-shadow hover:shadow-md group relative overflow-hidden ${
-      entry.isMe
-        ? "bg-primary/5 border-primary"
-        : entry.isBankrupt
-          ? "bg-slate-50 border-slate-100 opacity-60"
-          : "bg-white border-slate-50"
-    }`}>
+    <div
+      className={`flex items-center rounded-2xl p-4 shadow-soft border transition-shadow hover:shadow-md group relative overflow-hidden animate-slide-in-left ${
+        entry.isMe
+          ? "bg-primary/5 border-primary"
+          : entry.isBankrupt
+            ? "bg-slate-50 border-slate-100 opacity-60"
+            : "bg-white border-slate-50"
+      }`}
+      style={animationDelay ? { animationDelay: `${animationDelay}ms` } : undefined}
+    >
       {entry.isMe && <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-primary" />}
 
       {/* Rank */}

@@ -19,7 +19,7 @@ export default function RankingList({ entries }: RankingListProps) {
       </div>
 
       {entries.map((entry, idx) => (
-        <RankingRow key={`${entry.rank}-${idx}`} entry={entry} />
+        <RankingRow key={`${entry.rank}-${idx}`} entry={entry} animationDelay={500 + idx * 80} />
       ))}
     </div>
   );

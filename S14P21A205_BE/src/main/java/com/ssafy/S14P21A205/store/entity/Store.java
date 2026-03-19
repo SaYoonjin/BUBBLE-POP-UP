@@ -37,6 +37,10 @@ public class Store {
     @JoinColumn(name = "location_id", nullable = false)
     private Location location;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "pending_location_id")
+    private Location pendingLocation;
+
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "menu_id", nullable = false)
     private Menu menu;
@@ -59,6 +63,12 @@ public class Store {
 
     @Column(name = "purchase_cursor")
     private Integer purchaseCursor = 0;
+
+    @Column(name = "pending_location_reserved_day")
+    private Integer pendingLocationReservedDay;
+
+    @Column(name = "pending_location_apply_day")
+    private Integer pendingLocationApplyDay;
 
     @UpdateTimestamp
     @Column(name = "updated_at", nullable = false)
@@ -96,6 +106,19 @@ public class Store {
 
     public void changeLocation(Location location) {
         this.location = location;
+    }
+
+    public void reserveLocationChange(Location location, Integer reservedDay, Integer applyDay) {
+        this.pendingLocation = location;
+        this.pendingLocationReservedDay = reservedDay;
+        this.pendingLocationApplyDay = applyDay;
+    }
+
+    public void applyPendingLocationChange() {
+        if (pendingLocation == null) {
+            return;
+        }
+        this.location = pendingLocation;
     }
 
     public void changeMenu(Menu menu) {
