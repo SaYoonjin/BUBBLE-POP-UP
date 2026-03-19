@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import PlayHeader from "../components/play/PlayHeader";
 import EventSidebar, { type GameAlert } from "../components/play/EventSidebar";
@@ -11,6 +11,7 @@ import EmergencyOrderModal, {
 import PromotionModal from "../components/play/modals/PromotionModal";
 import ShareModal from "../components/play/modals/ShareModal";
 import MoveModal from "../components/play/modals/MoveModal";
+import { PLAY_SESSION_DEADLINE_STORAGE_KEY_PREFIX } from "../constants";
 
 const MOCK = {
   location: "성수",
@@ -21,7 +22,6 @@ const MOCK = {
   guests: 24,
   stock: 85,
   balance: 4_500_000,
-  gameTime: "14:30",
   currentPrice: 4_100,
   menuItems: [
     { name: "빵", price: 1_800, emoji: "🍞" },
@@ -120,17 +120,65 @@ const promotionLabels: Record<string, string> = {
 };
 
 const persistentActionTypes = new Set<ActionType>(["discount", "promotion", "share"]);
+const PLAY_DURATION_SECONDS = 120;
+const PLAY_DURATION_MS = PLAY_DURATION_SECONDS * 1000;
+
+function getPlaySessionStorageKey(dayNumber: number) {
+  return `${PLAY_SESSION_DEADLINE_STORAGE_KEY_PREFIX}:${dayNumber}`;
+}
+
+function resolvePlaySessionEndTimestamp(dayNumber: number) {
+  if (typeof window === "undefined") {
+    return Date.now() + PLAY_DURATION_MS;
+  }
+
+  const storageKey = getPlaySessionStorageKey(dayNumber);
+  const storedValue = window.sessionStorage.getItem(storageKey);
+  const parsedTimestamp = Number(storedValue);
+
+  if (Number.isFinite(parsedTimestamp) && parsedTimestamp > 0) {
+    return parsedTimestamp;
+  }
+
+  const nextTimestamp = Date.now() + PLAY_DURATION_MS;
+  window.sessionStorage.setItem(storageKey, String(nextTimestamp));
+
+  return nextTimestamp;
+}
 
 export default function PlayPage() {
   const { day } = useParams<{ day: string }>();
+  const dayNumber = useMemo(() => Number(day) || 1, [day]);
   const [activeModal, setActiveModal] = useState<ActionType | null>(null);
   const [usedActions, setUsedActions] = useState<Set<ActionType>>(new Set());
   const [activeEffects, setActiveEffects] = useState<Set<ActionType>>(new Set());
   const [alerts, setAlerts] = useState<GameAlert[]>(mockAlerts);
   const [balance, setBalance] = useState(MOCK.balance);
   const [stock, setStock] = useState(MOCK.stock);
+  const [playEndTimestampMs, setPlayEndTimestampMs] = useState(() =>
+    resolvePlaySessionEndTimestamp(dayNumber),
+  );
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  const remainingMilliseconds = Math.max(0, playEndTimestampMs - nowMs);
+  const remainingSeconds = Math.max(0, Math.ceil(remainingMilliseconds / 1000));
 
-  const dayNumber = useMemo(() => Number(day) || 1, [day]);
+  useEffect(() => {
+    const nextPlayEndTimestampMs = resolvePlaySessionEndTimestamp(dayNumber);
+    setPlayEndTimestampMs(nextPlayEndTimestampMs);
+    setNowMs(Date.now());
+  }, [dayNumber]);
+
+  useEffect(() => {
+    if (remainingMilliseconds <= 0) {
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      setNowMs(Date.now());
+    }, 100);
+
+    return () => window.clearInterval(timer);
+  }, [remainingMilliseconds]);
 
   const handleAction = (action: ActionType) => {
     setActiveModal(action);
@@ -193,8 +241,8 @@ export default function PlayPage() {
         storeName={MOCK.storeName}
         menuName={MOCK.menuName}
         day={dayNumber}
-        remainingSeconds={153}
-        gameTime={MOCK.gameTime}
+        remainingSeconds={remainingSeconds}
+        remainingMilliseconds={remainingMilliseconds}
         congestion={MOCK.congestion}
         guests={MOCK.guests}
         stock={stock}
