@@ -1,6 +1,7 @@
 package com.ssafy.S14P21A205.game.news.controller;
 
 import com.ssafy.S14P21A205.game.news.dto.NewsListResponse;
+import com.ssafy.S14P21A205.game.news.dto.NewsRankingResponse;
 import com.ssafy.S14P21A205.game.news.service.NewsService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -19,5 +20,11 @@ public class NewsController implements NewsControllerDoc {
     @GetMapping("/today")
     public ResponseEntity<NewsListResponse> getTodayNews() {
         return ResponseEntity.ok(newsService.getTodayNews());
+    }
+
+    @Override
+    @GetMapping("/ranking")
+    public ResponseEntity<NewsRankingResponse> getAreaRankings() {
+        return ResponseEntity.ok(newsService.getAreaRankings());
     }
 }

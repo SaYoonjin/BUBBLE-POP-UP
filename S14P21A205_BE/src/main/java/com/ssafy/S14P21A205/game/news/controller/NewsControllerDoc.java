@@ -2,6 +2,7 @@ package com.ssafy.S14P21A205.game.news.controller;
 
 import com.ssafy.S14P21A205.exception.ErrorResponse;
 import com.ssafy.S14P21A205.game.news.dto.NewsListResponse;
+import com.ssafy.S14P21A205.game.news.dto.NewsRankingResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -29,4 +30,19 @@ public interface NewsControllerDoc {
             )
     })
     ResponseEntity<NewsListResponse> getTodayNews();
+
+    @Operation(summary = "지역별 매출/유동인구 순위 조회", description = "현재 시즌의 지역별 매출 순위와 유동인구 순위를 전일대비 증감율과 함께 조회합니다.")
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "조회 성공",
+                    content = @Content(schema = @Schema(implementation = NewsRankingResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "404",
+                    description = "시즌이 없음",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            )
+    })
+    ResponseEntity<NewsRankingResponse> getAreaRankings();
 }
