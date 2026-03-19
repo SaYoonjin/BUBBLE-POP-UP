@@ -68,6 +68,16 @@ class GameTimePolicyTests {
                 .isEqualTo(3);
         assertThat(gameTimePolicy.isJoinEnabled(SEASON_START_AT, TOTAL_DAYS, dayTwoBusiness)).isTrue();
 
+        LocalDateTime dayFiveReport = SEASON_START_AT.plusSeconds(120 + 4L * 180L + 170L);
+        assertThat(gameTimePolicy.resolveJoinPlayableFromDay(SEASON_START_AT, TOTAL_DAYS, dayFiveReport))
+                .isEqualTo(6);
+        assertThat(gameTimePolicy.isJoinEnabled(SEASON_START_AT, TOTAL_DAYS, dayFiveReport)).isTrue();
+
+        LocalDateTime daySixBusiness = SEASON_START_AT.plusSeconds(120 + 5L * 180L + 50L);
+        assertThat(gameTimePolicy.resolveJoinPlayableFromDay(SEASON_START_AT, TOTAL_DAYS, daySixBusiness))
+                .isNull();
+        assertThat(gameTimePolicy.isJoinEnabled(SEASON_START_AT, TOTAL_DAYS, daySixBusiness)).isFalse();
+
         LocalDateTime daySevenReport = SEASON_START_AT.plusSeconds(1370);
         assertThat(gameTimePolicy.resolveJoinPlayableFromDay(SEASON_START_AT, TOTAL_DAYS, daySevenReport))
                 .isNull();

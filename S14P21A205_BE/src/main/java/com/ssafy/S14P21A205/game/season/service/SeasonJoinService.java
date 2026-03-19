@@ -72,7 +72,7 @@ public class SeasonJoinService {
 
         Integer playableFromDay = resolvePlayableFromDay(currentSeason);
         if (playableFromDay == null) {
-            throw new BaseException(ErrorCode.INVALID_INPUT_VALUE, "Joining the current season is no longer available.");
+            throw new BaseException(ErrorCode.INVALID_INPUT_VALUE, "Joining the current season is available only through day 5.");
         }
 
         Location location = locationRepository.findById(request.locationId().longValue())

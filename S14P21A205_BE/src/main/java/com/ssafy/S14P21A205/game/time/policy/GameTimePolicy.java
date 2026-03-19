@@ -120,7 +120,7 @@ public class GameTimePolicy {
             return null;
         }
         int playableFromDay = currentDay + 1;
-        return playableFromDay > totalDays ? null : playableFromDay;
+        return playableFromDay >= totalDays ? null : playableFromDay;
     }
 
     public boolean isJoinEnabled(LocalDateTime seasonStartTime, int totalDays, LocalDateTime currentTime) {
