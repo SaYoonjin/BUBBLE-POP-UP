@@ -1,11 +1,16 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import CountdownTimer from "../components/common/CountdownTimer";
 import DistrictDetailPanel from "../components/game/DistrictDetailPanel";
 import SeoulMap3D from "../components/game/SeoulMap3D";
 import { seoulDistricts } from "../components/game/seoulDistricts";
+import { LOCATION_SELECTION_DEADLINE_STORAGE_KEY } from "../constants";
+import type { WaitingRouteState } from "../types/waiting";
 
 const LOCATION_SELECTION_SECONDS = 120;
+const PREP_TRANSITION_PATH = "/game/1/prep";
+const MID_SEASON_PREP_PATH = "/game/2/prep";
+const MOCK_NEXT_BUSINESS_DAY_WAIT_SECONDS = 18;
 
 function parseCurrency(value: string) {
   return Number(value.replace(/[^\d]/g, ""));
@@ -15,22 +20,95 @@ function formatCurrency(value: number) {
   return `₩${value.toLocaleString("ko-KR")}`;
 }
 
+function getOrCreateLocationSelectionDeadline() {
+  const nextDeadline = Date.now() + LOCATION_SELECTION_SECONDS * 1000;
+
+  try {
+    const storedDeadline = sessionStorage.getItem(
+      LOCATION_SELECTION_DEADLINE_STORAGE_KEY,
+    );
+    const parsedDeadline = Number(storedDeadline);
+
+    if (Number.isFinite(parsedDeadline) && parsedDeadline > Date.now()) {
+      return parsedDeadline;
+    }
+
+    sessionStorage.setItem(
+      LOCATION_SELECTION_DEADLINE_STORAGE_KEY,
+      String(nextDeadline),
+    );
+  } catch {
+    return nextDeadline;
+  }
+
+  return nextDeadline;
+}
+
+function clearLocationSelectionDeadline() {
+  try {
+    sessionStorage.removeItem(LOCATION_SELECTION_DEADLINE_STORAGE_KEY);
+  } catch {
+    // Ignore storage access failures and continue navigation.
+  }
+}
+
 export default function LocationSelectPage() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [selectionDeadlineMs] = useState(getOrCreateLocationSelectionDeadline);
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   const selectedDistrict = seoulDistricts.find((d) => d.id === selectedId);
   const selectedInteriorCost = selectedDistrict
     ? Math.round(parseCurrency(selectedDistrict.rent) * 7 * 0.1)
     : null;
+  const joinMode = searchParams.get("entry") === "midseason" ? "midseason" : "season-start";
 
   const handleComplete = (brandName: string) => {
-    alert(`${selectedDistrict?.name}에 "${brandName}" 팝업스토어를 오픈합니다.`);
-    navigate("/game/1/prep");
+    if (!selectedDistrict) {
+      return;
+    }
+
+    const remainingSelectionSeconds = Math.max(
+      0,
+      Math.ceil((selectionDeadlineMs - Date.now()) / 1000),
+    );
+
+    if (joinMode === "midseason") {
+      const waitingState: WaitingRouteState = {
+        mode: "next_business_day",
+        brandName,
+        districtName: selectedDistrict.name,
+        endTimestampMs: Date.now() + MOCK_NEXT_BUSINESS_DAY_WAIT_SECONDS * 1000,
+        nextPath: MID_SEASON_PREP_PATH,
+        targetDay: 2,
+      };
+
+      navigate("/game/waiting", { state: waitingState });
+      return;
+    }
+
+    if (remainingSelectionSeconds > 0) {
+      const waitingState: WaitingRouteState = {
+        mode: "prep_locked",
+        brandName,
+        districtName: selectedDistrict.name,
+        endTimestampMs: selectionDeadlineMs,
+        nextPath: PREP_TRANSITION_PATH,
+        targetDay: 1,
+      };
+
+      navigate("/game/waiting", { state: waitingState });
+      return;
+    }
+
+    clearLocationSelectionDeadline();
+    navigate(PREP_TRANSITION_PATH);
   };
 
   const handleTimerComplete = () => {
-    navigate("/game/1/prep");
+    clearLocationSelectionDeadline();
+    navigate(PREP_TRANSITION_PATH);
   };
 
   return (
@@ -79,7 +157,7 @@ export default function LocationSelectPage() {
               <span className="text-[10px] font-bold uppercase tracking-[0.24em] text-slate-400">제한 시간</span>
               <div className="mt-1">
                 <CountdownTimer
-                  initialSeconds={LOCATION_SELECTION_SECONDS}
+                  endTimestampMs={selectionDeadlineMs}
                   label="지역 선택 제한 시간"
                   onComplete={handleTimerComplete}
                   variant="inline"

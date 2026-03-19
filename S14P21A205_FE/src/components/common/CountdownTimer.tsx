@@ -1,38 +1,60 @@
 import { useEffect, useRef, useState } from "react";
 
 interface CountdownTimerProps {
-  initialSeconds: number;
+  initialSeconds?: number;
+  endTimestampMs?: number;
   onComplete?: () => void;
   label?: string;
   variant?: "pill" | "display" | "inline";
   showIcon?: boolean;
 }
 
+function resolveRemainingSeconds(
+  initialSeconds: number | undefined,
+  endTimestampMs: number | undefined,
+) {
+  if (typeof endTimestampMs === "number") {
+    return Math.max(0, Math.ceil((endTimestampMs - Date.now()) / 1000));
+  }
+
+  return Math.max(0, initialSeconds ?? 0);
+}
+
 export default function CountdownTimer({
   initialSeconds,
+  endTimestampMs,
   onComplete,
   label = "남은 시간",
   variant = "pill",
   showIcon = true,
 }: CountdownTimerProps) {
-  const [seconds, setSeconds] = useState(() => initialSeconds);
+  const [seconds, setSeconds] = useState(() =>
+    resolveRemainingSeconds(initialSeconds, endTimestampMs),
+  );
   const hasCompletedRef = useRef(false);
 
   useEffect(() => {
-    if (seconds <= 0) {
-      if (!hasCompletedRef.current) {
+    hasCompletedRef.current = false;
+
+    const tick = () => {
+      const nextSeconds = resolveRemainingSeconds(initialSeconds, endTimestampMs);
+
+      setSeconds(nextSeconds);
+
+      if (nextSeconds <= 0 && !hasCompletedRef.current) {
         hasCompletedRef.current = true;
         onComplete?.();
       }
-      return;
-    }
+    };
+
+    tick();
 
     const timer = window.setInterval(() => {
-      setSeconds((currentSeconds) => currentSeconds - 1);
+      tick();
     }, 1000);
 
     return () => window.clearInterval(timer);
-  }, [seconds, onComplete]);
+  }, [initialSeconds, endTimestampMs, onComplete]);
 
   const minutes = Math.floor(seconds / 60);
   const remainingSeconds = seconds % 60;
