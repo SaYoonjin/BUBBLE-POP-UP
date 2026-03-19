@@ -1,6 +1,12 @@
 package com.ssafy.S14P21A205.game.news.dto;
 
+import com.ssafy.S14P21A205.game.news.entity.NewsArticle;
 import java.util.List;
 
-public record NewsListResponse(Integer day, List<NewsArticleResponse> articles) {
+public record NewsListResponse(Integer day, List<NewsArticleResponse> news) {
+
+    public static NewsListResponse of(Integer day, List<NewsArticle> articles) {
+        return new NewsListResponse(day,
+                articles.stream().map(NewsArticleResponse::from).toList());
+    }
 }
