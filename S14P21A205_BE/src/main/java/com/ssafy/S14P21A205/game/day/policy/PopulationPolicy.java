@@ -105,12 +105,26 @@ public class PopulationPolicy {
             BigDecimal populationEventMultiplier,
             LocalDateTime effectiveNow
     ) {
+        return resolvePopulationSnapshot(
+                startResponse,
+                currentTimeline,
+                populationEventMultiplier,
+                effectiveNow
+        ).currentFloatingPopulation();
+    }
+
+    public PopulationSnapshot resolvePopulationSnapshot(
+            GameDayStartResponse startResponse,
+            DayWindow currentTimeline,
+            BigDecimal populationEventMultiplier,
+            LocalDateTime effectiveNow
+    ) {
         if (!effectiveNow.isAfter(currentTimeline.businessStart()) || !effectiveNow.isBefore(currentTimeline.businessEnd())) {
-            return 0;
+            return PopulationSnapshot.empty();
         }
 
         if (startResponse.hourlySchedule() == null || startResponse.hourlySchedule().isEmpty()) {
-            return 0;
+            return PopulationSnapshot.empty();
         }
 
         List<GameDayStartResponse.HourlySchedule> schedules = new ArrayList<>(startResponse.hourlySchedule().values());
@@ -123,16 +137,27 @@ public class PopulationPolicy {
         );
         GameDayStartResponse.HourlySchedule schedule = schedules.get(scheduleIndex);
 
-        BigDecimal populationBase = schedule.effectivePopulation() != null
-                ? BigDecimal.valueOf(schedule.effectivePopulation())
-                : BigDecimal.valueOf(schedule.population())
-                .multiply(normalizeRate(startResponse.weatherMultiplier()))
-                .multiply(normalizeRate(schedule.trafficMultiplier()))
-                .multiply(normalizeRate(schedule.eventMultiplier()));
+        int baseFloatingPopulation = schedule.population() == null ? 0 : schedule.population();
+        if (baseFloatingPopulation <= 0) {
+            return PopulationSnapshot.empty();
+        }
 
-        BigDecimal population = populationBase
-                .multiply(normalizeRate(populationEventMultiplier));
-        return population.setScale(0, RoundingMode.HALF_UP).intValue();
+        BigDecimal populationGrowthRate = normalizeRate(startResponse.weatherMultiplier())
+                .multiply(normalizeRate(schedule.trafficMultiplier()))
+                .multiply(normalizeRate(schedule.eventMultiplier()))
+                .multiply(normalizeRate(populationEventMultiplier))
+                .setScale(4, RoundingMode.HALF_UP);
+
+        int currentFloatingPopulation = BigDecimal.valueOf(baseFloatingPopulation)
+                .multiply(populationGrowthRate)
+                .setScale(0, RoundingMode.HALF_UP)
+                .intValue();
+
+        return new PopulationSnapshot(
+                baseFloatingPopulation,
+                populationGrowthRate,
+                currentFloatingPopulation
+        );
     }
 
     private BigDecimal averageTrafficStatus(List<Traffic> traffics) {
@@ -184,5 +209,15 @@ public class PopulationPolicy {
             return DECIMAL_ONE;
         }
         return value.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    public record PopulationSnapshot(
+            Integer baseFloatingPopulation,
+            BigDecimal populationGrowthRate,
+            Integer currentFloatingPopulation
+    ) {
+        public static PopulationSnapshot empty() {
+            return new PopulationSnapshot(0, DECIMAL_ONE, 0);
+        }
     }
 }

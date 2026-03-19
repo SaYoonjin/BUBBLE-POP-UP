@@ -1,5 +1,6 @@
 package com.ssafy.S14P21A205.game.day.dto;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -11,10 +12,22 @@ public record GameStateResponse(
         LocalDateTime lastCalculatedAt,
         Long cash,
         Integer customerCount,
+        CustomerTick customerTick,
         Inventory inventory,
         ActionStatus actionStatus,
         List<AppliedEvent> appliedEvents
 ) {
+    public record CustomerTick(
+            Integer tick,
+            Integer customerCount,
+            Integer baseFloatingPopulation,
+            BigDecimal populationGrowthRate,
+            Integer currentFloatingPopulation,
+            Integer regionStoreCount,
+            BigDecimal rValue
+    ) {
+    }
+
     public record Inventory(
             Integer totalStock
     ) {

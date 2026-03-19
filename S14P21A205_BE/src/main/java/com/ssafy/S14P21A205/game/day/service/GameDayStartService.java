@@ -207,6 +207,7 @@ public class GameDayStartService {
                         0,
                         response,
                         0,
+                        response.marketSnapshot() == null ? null : response.marketSnapshot().regionStoreCount(),
                         0,
                         captureRatePolicy.normalizeCaptureRate(response.captureRate()),
                         store.getPrice(),
