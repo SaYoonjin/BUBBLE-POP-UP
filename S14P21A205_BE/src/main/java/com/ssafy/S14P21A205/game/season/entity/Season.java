@@ -70,9 +70,16 @@ public class Season {
     }
 
     public void start(String sourceBatchKey) {
+        startAt(null, sourceBatchKey);
+    }
+
+    public void startAt(LocalDateTime actualStartTime, String sourceBatchKey) {
         this.status = SeasonStatus.IN_PROGRESS;
         this.currentDay = 1;
         this.sourceBatchKey = sourceBatchKey;
+        if (actualStartTime != null) {
+            this.startTime = actualStartTime;
+        }
     }
 
     public void advanceToDay(int nextDay) {
