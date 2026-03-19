@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { getCurrentSeasonTopRankings, getGameWaitingStatus, type GameWaitingResponse } from "../api/game";
 import { getShopItems, type ShopItemResponse } from "../api/shop";
 import { getUserPoints } from "../api/user";
@@ -8,6 +8,7 @@ import AppHeader from "../components/common/AppHeader";
 import BankruptWarning from "../components/common/BankruptWarning";
 import FloatingBubbles from "../components/common/FloatingBubbles";
 import ItemSelector from "../components/common/ItemSelector";
+import Modal from "../components/common/Modal";
 import SeasonCTA from "../components/common/SeasonCTA";
 import {
   getDiscountLabel,
@@ -65,6 +66,11 @@ const SHOP_ITEM_UI_BY_ID: Partial<
   3: { name: "원재료 할인권", category: "INGREDIENT" },
   4: { name: "임대료 할인권", category: "RENT" },
 };
+
+interface DashboardRouteState {
+  showBankruptWarning?: boolean;
+  showMidSeasonSetupExpiredModal?: boolean;
+}
 
 function toDiscountMultiplier(discountRate: number) {
   if (!Number.isFinite(discountRate)) {
@@ -181,6 +187,19 @@ function getCurrentSeasonTitle(currentSeasonNumber: number | null) {
   return "진행 중인 시즌";
 }
 
+function parseDashboardRouteState(value: unknown): DashboardRouteState {
+  if (!value || typeof value !== "object") {
+    return {};
+  }
+
+  const state = value as DashboardRouteState;
+
+  return {
+    showBankruptWarning: Boolean(state.showBankruptWarning),
+    showMidSeasonSetupExpiredModal: Boolean(state.showMidSeasonSetupExpiredModal),
+  };
+}
+
 function resolveSeasonCardData(
   waitingStatus: GameWaitingResponse | null,
   currentSeasonNumber: number | null,
@@ -220,7 +239,7 @@ function resolveSeasonCardData(
     const nextBusinessDay =
       waitingStatus.seasonPhase === "LOCATION_SELECTION"
         ? currentDay
-        : Math.min(TOTAL_DAYS, (waitingStatus.joinPlayableFromDay ?? currentDay + 1));
+        : Math.min(TOTAL_DAYS, waitingStatus.joinPlayableFromDay ?? currentDay + 1);
 
     return {
       title,
@@ -249,6 +268,7 @@ function resolveSeasonCardData(
 
 export default function DashboardPage() {
   const location = useLocation();
+  const navigate = useNavigate();
   const [currentPoints, setCurrentPoints] = useState<number | null>(null);
   const [shopItems, setShopItems] = useState<DashboardSelectedItem[]>([]);
   const [selectedItemIds, setSelectedItemIds] = useState<number[]>(
@@ -258,13 +278,13 @@ export default function DashboardPage() {
   const [currentSeasonNumber, setCurrentSeasonNumber] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const showBankruptWarning = Boolean(
-    location.state &&
-      typeof location.state === "object" &&
-      "showBankruptWarning" in location.state &&
-      location.state.showBankruptWarning,
-  );
 
+  const routeState = useMemo(
+    () => parseDashboardRouteState(location.state),
+    [location.state],
+  );
+  const showBankruptWarning = Boolean(routeState.showBankruptWarning);
+  const showMidSeasonSetupExpiredModal = Boolean(routeState.showMidSeasonSetupExpiredModal);
   const selectedItems = useMemo(
     () => hydrateSelectedDashboardItems(selectedItemIds, shopItems),
     [selectedItemIds, shopItems],
@@ -334,6 +354,10 @@ export default function DashboardPage() {
   const seasonCard = useMemo(
     () => resolveSeasonCardData(waitingStatus, currentSeasonNumber),
     [currentSeasonNumber, waitingStatus],
+  );
+  const showMidSeasonNotice = Boolean(
+    waitingStatus?.status === "IN_PROGRESS" &&
+      isJoinableDay(waitingStatus.currentDay ?? null),
   );
 
   useEffect(() => {
@@ -493,10 +517,46 @@ export default function DashboardPage() {
 
           <div className="flex flex-col gap-6">
             <SeasonCTA {...seasonCard} />
+
+            {showMidSeasonNotice && (
+              <div className="rounded-[20px] border border-amber-200 bg-amber-50/90 p-5 shadow-soft">
+                <div className="flex items-start gap-3">
+                  <div className="mt-0.5 flex size-9 items-center justify-center rounded-full bg-amber-100 text-amber-700">
+                    <span className="material-symbols-outlined text-[20px]">info</span>
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-amber-800">참여 유의사항</p>
+                    <p className="mt-1 text-sm leading-6 text-amber-700">
+                      중간 참여자는 DAY 6 시작 전까지 지역과 팝업명 설정을 모두 완료해야 합니다.
+                      시간을 넘기면 다음 시즌부터 다시 참여할 수 있습니다.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {showBankruptWarning && <BankruptWarning />}
           </div>
         </div>
       </main>
+
+      <Modal
+        isOpen={showMidSeasonSetupExpiredModal}
+        onClose={() => navigate(location.pathname, { replace: true, state: null })}
+        title="설정 시간이 종료되었습니다"
+      >
+        <p className="text-sm leading-6 text-slate-600">
+          DAY 6 시작 전까지 지역과 팝업명 설정을 완료하지 못해 이번 시즌에는 참여할 수
+          없습니다. 다음 시즌이 시작되면 다시 참여해주세요.
+        </p>
+        <button
+          type="button"
+          onClick={() => navigate(location.pathname, { replace: true, state: null })}
+          className="mt-5 flex h-11 w-full items-center justify-center rounded-xl bg-primary font-semibold text-slate-900 transition-colors hover:bg-primary-dark hover:text-white"
+        >
+          확인
+        </button>
+      </Modal>
     </div>
   );
 }

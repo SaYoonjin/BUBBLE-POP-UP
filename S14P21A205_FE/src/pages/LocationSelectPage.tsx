@@ -1,13 +1,13 @@
 import axios from "axios";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { getGameWaitingStatus, joinCurrentSeason } from "../api/game";
+import { getGameWaitingStatus, joinCurrentSeason, type GameWaitingResponse } from "../api/game";
 import CountdownTimer from "../components/common/CountdownTimer";
 import DistrictDetailPanel from "../components/game/DistrictDetailPanel";
 import SeoulMap3D from "../components/game/SeoulMap3D";
 import { seoulDistricts } from "../components/game/seoulDistricts";
 import { LOCATION_SELECTION_DEADLINE_STORAGE_KEY } from "../constants";
-import { setStoredBrandName } from "../hooks/useBrandName";
+import { clearStoredBrandName, setStoredBrandName } from "../hooks/useBrandName";
 import type { WaitingRouteState } from "../types/waiting";
 import {
   applyDiscount,
@@ -16,12 +16,21 @@ import {
   getStoredSelectedDashboardItems,
 } from "../utils/dashboardItems";
 
-const LOCATION_SELECTION_SECONDS = 120;
 const DEFAULT_PREP_DAY = 1;
 const INITIAL_CAPITAL = 10_000_000;
+const PREP_SECONDS = 50;
+const BUSINESS_SECONDS = 120;
+const REPORT_SECONDS = 10;
+const DAY_SECONDS = PREP_SECONDS + BUSINESS_SECONDS + REPORT_SECONDS;
+const MIDSEASON_CUTOFF_DAY = 6;
 
-function isLocationSelectionAvailable(currentDay: number | null, status: "WAITING" | "IN_PROGRESS") {
-  return status === "IN_PROGRESS" && typeof currentDay === "number" && currentDay >= 1 && currentDay <= 5;
+type SelectionMode = "opening_window" | "midseason";
+
+interface SelectionWindowState {
+  mode: SelectionMode;
+  endTimestampMs: number;
+  timerLabel: string;
+  helperText: string;
 }
 
 function parseCurrency(value: string) {
@@ -32,23 +41,14 @@ function formatCurrency(value: number) {
   return `₩${value.toLocaleString("ko-KR")}`;
 }
 
-function getOrCreateLocationSelectionDeadline() {
-  const nextDeadline = Date.now() + LOCATION_SELECTION_SECONDS * 1000;
-
+function persistLocationSelectionDeadline(deadlineMs: number) {
   try {
-    const storedDeadline = sessionStorage.getItem(LOCATION_SELECTION_DEADLINE_STORAGE_KEY);
-    const parsedDeadline = Number(storedDeadline);
-
-    if (Number.isFinite(parsedDeadline) && parsedDeadline > Date.now()) {
-      return parsedDeadline;
-    }
-
-    sessionStorage.setItem(LOCATION_SELECTION_DEADLINE_STORAGE_KEY, String(nextDeadline));
+    sessionStorage.setItem(LOCATION_SELECTION_DEADLINE_STORAGE_KEY, String(deadlineMs));
   } catch {
-    return nextDeadline;
+    // Ignore storage access failures and continue with in-memory state.
   }
 
-  return nextDeadline;
+  return deadlineMs;
 }
 
 function clearLocationSelectionDeadline() {
@@ -57,6 +57,70 @@ function clearLocationSelectionDeadline() {
   } catch {
     // Ignore storage access failures and continue navigation.
   }
+}
+
+function isLocationSelectionAvailable(waitingStatus: GameWaitingResponse) {
+  return (
+    waitingStatus.status === "IN_PROGRESS" &&
+    typeof waitingStatus.currentDay === "number" &&
+    waitingStatus.currentDay >= 1 &&
+    waitingStatus.currentDay <= 5
+  );
+}
+
+function getSecondsUntilDayStart(waitingStatus: GameWaitingResponse, targetDay: number) {
+  const currentDay = waitingStatus.currentDay;
+  const remaining = Math.max(0, waitingStatus.phaseRemainingSeconds ?? 0);
+
+  if (typeof currentDay !== "number") {
+    return remaining;
+  }
+
+  if (targetDay <= currentDay) {
+    return 0;
+  }
+
+  const remainingFullDays = Math.max(0, targetDay - currentDay - 1);
+
+  switch (waitingStatus.seasonPhase) {
+    case "LOCATION_SELECTION":
+      return remaining + Math.max(0, targetDay - 1) * DAY_SECONDS;
+    case "DAY_PREPARING":
+      return remaining + BUSINESS_SECONDS + REPORT_SECONDS + remainingFullDays * DAY_SECONDS;
+    case "DAY_BUSINESS":
+      return remaining + REPORT_SECONDS + remainingFullDays * DAY_SECONDS;
+    case "DAY_REPORT":
+      return remaining + remainingFullDays * DAY_SECONDS;
+    default:
+      return remaining;
+  }
+}
+
+function buildSelectionWindow(waitingStatus: GameWaitingResponse): SelectionWindowState | null {
+  if (!isLocationSelectionAvailable(waitingStatus)) {
+    return null;
+  }
+
+  const remaining = Math.max(0, waitingStatus.phaseRemainingSeconds ?? 0);
+
+  if (waitingStatus.seasonPhase === "LOCATION_SELECTION") {
+    return {
+      mode: "opening_window",
+      endTimestampMs: persistLocationSelectionDeadline(Date.now() + remaining * 1000),
+      timerLabel: "지역 선택 제한 시간",
+      helperText: "영업 준비 오픈 전까지 지역과 팝업명을 설정해주세요.",
+    };
+  }
+
+  return {
+    mode: "midseason",
+    endTimestampMs: persistLocationSelectionDeadline(
+      Date.now() + getSecondsUntilDayStart(waitingStatus, MIDSEASON_CUTOFF_DAY) * 1000,
+    ),
+    timerLabel: "DAY 6 시작까지",
+    helperText:
+      "DAY 6 시작 전까지 지역과 팝업명을 설정해야 이번 시즌에 참여할 수 있습니다.",
+  };
 }
 
 function resolveJoinErrorMessage(error: unknown) {
@@ -79,7 +143,7 @@ function resolveJoinErrorMessage(error: unknown) {
 
 export default function LocationSelectPage() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [selectionDeadlineMs] = useState(getOrCreateLocationSelectionDeadline);
+  const [selectionWindow, setSelectionWindow] = useState<SelectionWindowState | null>(null);
   const [isJoining, setIsJoining] = useState(false);
   const [isAccessChecking, setIsAccessChecking] = useState(true);
   const [joinError, setJoinError] = useState<string | null>(null);
@@ -113,12 +177,15 @@ export default function LocationSelectPage() {
           return;
         }
 
-        if (!isLocationSelectionAvailable(waitingStatus.currentDay, waitingStatus.status)) {
+        const nextSelectionWindow = buildSelectionWindow(waitingStatus);
+
+        if (!nextSelectionWindow) {
           clearLocationSelectionDeadline();
           navigate("/", { replace: true });
           return;
         }
 
+        setSelectionWindow(nextSelectionWindow);
         setIsAccessChecking(false);
       } catch {
         if (!isCancelled) {
@@ -136,7 +203,7 @@ export default function LocationSelectPage() {
   }, [navigate]);
 
   const handleComplete = async (brandName: string) => {
-    if (!selectedDistrict || isJoining) {
+    if (!selectedDistrict || isJoining || !selectionWindow) {
       return;
     }
 
@@ -152,7 +219,7 @@ export default function LocationSelectPage() {
       const nextPrepPath = `/game/${joinResponse.playableFromDay ?? DEFAULT_PREP_DAY}/prep`;
       const remainingSelectionSeconds = Math.max(
         0,
-        Math.ceil((selectionDeadlineMs - Date.now()) / 1000),
+        Math.ceil((selectionWindow.endTimestampMs - Date.now()) / 1000),
       );
 
       if (joinResponse.waitingForPlayableDay) {
@@ -170,12 +237,12 @@ export default function LocationSelectPage() {
         return;
       }
 
-      if (remainingSelectionSeconds > 0) {
+      if (selectionWindow.mode === "opening_window" && remainingSelectionSeconds > 0) {
         const waitingState: WaitingRouteState = {
           mode: "prep_locked",
           brandName,
           districtName: selectedDistrict.name,
-          endTimestampMs: selectionDeadlineMs,
+          endTimestampMs: selectionWindow.endTimestampMs,
           nextPath: nextPrepPath,
           targetDay: joinResponse.playableFromDay,
         };
@@ -194,15 +261,25 @@ export default function LocationSelectPage() {
   };
 
   const handleTimerComplete = () => {
-    if (isJoining) {
+    if (isJoining || !selectionWindow) {
       return;
     }
 
     clearLocationSelectionDeadline();
+
+    if (selectionWindow.mode === "midseason") {
+      clearStoredBrandName();
+      navigate("/", {
+        replace: true,
+        state: { showMidSeasonSetupExpiredModal: true },
+      });
+      return;
+    }
+
     navigate(`/game/${DEFAULT_PREP_DAY}/prep`);
   };
 
-  if (isAccessChecking) {
+  if (isAccessChecking || !selectionWindow) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#FDFDFB] font-display text-slate-400">
         참여 가능 상태를 확인하는 중입니다.
@@ -236,9 +313,7 @@ export default function LocationSelectPage() {
                 <p className="text-base font-bold leading-tight text-slate-800">지역 선택</p>
               </div>
             </div>
-            <p className="hidden text-sm text-slate-500 sm:block">
-              2분 안에 지역을 고르고 팝업 브랜드명을 입력해주세요.
-            </p>
+            <p className="hidden text-sm text-slate-500 sm:block">{selectionWindow.helperText}</p>
           </div>
 
           <div className="flex flex-col gap-3 sm:flex-row sm:items-stretch">
@@ -258,12 +333,12 @@ export default function LocationSelectPage() {
 
             <div className="flex min-h-16 min-w-[196px] flex-col justify-center rounded-[22px] border border-white/70 bg-white/90 px-5 py-3 shadow-premium backdrop-blur">
               <span className="text-[10px] font-bold uppercase tracking-[0.24em] text-slate-400">
-                제한 시간
+                {selectionWindow.timerLabel}
               </span>
               <div className="mt-1">
                 <CountdownTimer
-                  endTimestampMs={selectionDeadlineMs}
-                  label="지역 선택 제한 시간"
+                  endTimestampMs={selectionWindow.endTimestampMs}
+                  label={selectionWindow.timerLabel}
                   onComplete={handleTimerComplete}
                   variant="inline"
                 />
