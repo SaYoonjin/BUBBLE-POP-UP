@@ -75,15 +75,20 @@ function getSelectedDashboardItemIds() {
   }
 }
 
+function isRegularOrderDay(day: number) {
+  return day >= 1 && day <= 7 && day % 2 === 1;
+}
+
 export default function PrepPage() {
   const { day: dayParam } = useParams<{ day: string }>();
+  const parsedDay = Number(dayParam);
+  const day = Number.isNaN(parsedDay) ? 0 : parsedDay;
+  const canPrepareToday = isRegularOrderDay(day);
   const [tab, setTab] = useState<Tab>("prep");
   const [selectedMenu, setSelectedMenu] = useState<number | null>(1);
   const [selectedDashboardItemIds] = useState<number[]>(getSelectedDashboardItemIds);
   const [quantity, setQuantity] = useState(120);
   const [expandedNewsId, setExpandedNewsId] = useState<number | null>(1);
-  const parsedDay = Number(dayParam);
-  const day = Number.isNaN(parsedDay) ? 0 : parsedDay;
   const selectedMenuData = mockMenus.find((menu) => menu.id === selectedMenu) ?? mockMenus[0];
   const originalCostPrice = selectedMenuData.costPrice;
   const hasItemDiscount = selectedDashboardItemIds.length > 0;
@@ -106,6 +111,10 @@ export default function PrepPage() {
   useEffect(() => {
     setPrice(defaultSellingPrice);
   }, [defaultSellingPrice]);
+
+  useEffect(() => {
+    setTab("prep");
+  }, [day]);
 
   return (
     <div className="min-h-screen bg-[#FDFDFB] text-slate-900 font-display flex flex-col">
@@ -130,80 +139,100 @@ export default function PrepPage() {
             </div>
 
             {/* Tabs */}
-            <div className="flex items-center gap-6 border-b border-slate-100">
-              <button
-                onClick={() => setTab("prep")}
-                className={`pb-2.5 text-[15px] transition-colors ${
-                  tab === "prep"
-                    ? "border-b-2 border-slate-900 text-slate-900 font-bold"
-                    : "text-slate-400 hover:text-slate-600 font-medium"
-                }`}
-              >
-                영업 준비
-              </button>
-              <button
-                onClick={() => setTab("news")}
-                className={`pb-2.5 text-[15px] transition-colors ${
-                  tab === "news"
-                    ? "border-b-2 border-slate-900 text-slate-900 font-bold"
-                    : "text-slate-400 hover:text-slate-600 font-medium"
-                }`}
-              >
-                버블 뉴스
-              </button>
+            <div className="border-b border-slate-100">
+              <div className="flex items-center gap-6">
+                <button
+                  onClick={() => setTab("prep")}
+                  className={`pb-2.5 text-[15px] transition-colors ${
+                    tab === "prep"
+                      ? "border-b-2 border-slate-900 text-slate-900 font-bold"
+                      : "text-slate-400 hover:text-slate-600 font-medium"
+                  }`}
+                >
+                  영업 준비
+                </button>
+                <button
+                  onClick={() => setTab("news")}
+                  className={`pb-2.5 text-[15px] transition-colors ${
+                    tab === "news"
+                      ? "border-b-2 border-slate-900 text-slate-900 font-bold"
+                      : "text-slate-400 hover:text-slate-600 font-medium"
+                  }`}
+                >
+                  버블 뉴스
+                </button>
+              </div>
             </div>
           </div>
 
           {/* Tab: 영업 준비 */}
           {tab === "prep" ? (
             <div className="flex flex-col gap-6">
-              <MenuSelector menus={mockMenus} selectedId={selectedMenu} onSelect={setSelectedMenu} />
+              {!canPrepareToday && (
+                <div className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3 text-sm text-slate-500">
+                  <span className="material-symbols-outlined mt-0.5 text-base text-slate-400">
+                    event_busy
+                  </span>
+                  <p className="leading-6">
+                    오늘은 정규발주일이 아니어서 영업 준비를 진행할 수 없습니다. 버블 뉴스를 확인해 다음 영업일을 준비하세요.
+                  </p>
+                </div>
+              )}
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <PriceSlider
-                  menuName={selectedMenuData.name}
-                  price={price}
-                  min={originalCostPrice}
-                  max={maxSellingPrice}
-                  step={100}
-                  originalCostPrice={originalCostPrice}
-                  discountedCostPrice={discountedCostPrice}
-                  hasItemDiscount={hasItemDiscount}
-                  defaultPrice={defaultSellingPrice}
-                  defaultPriceLabel={day >= 2 ? "이전 판매가" : "권장가"}
-                  onChange={setPrice}
-                />
-                <div className="flex flex-col gap-5">
-                  <QuantityCounter quantity={quantity} min={50} max={500} step={10} onChange={setQuantity} />
-                  <div className="flex flex-col gap-3.5">
-                    {hasItemDiscount && (
-                      <div className="rounded-2xl border border-red-100 bg-red-50/60 px-4 py-3 flex items-center justify-between">
-                        <div>
-                          <p className="text-sm font-bold text-red-500">선택 아이템 혜택 적용</p>
-                          <p className="text-xs text-red-400 mt-1">아이템 사용으로 원재료 비용 {discountRate}% 할인</p>
+              <div
+                className={`flex flex-col gap-6 transition-opacity ${
+                  canPrepareToday ? "" : "pointer-events-none select-none opacity-40"
+                }`}
+                aria-disabled={!canPrepareToday}
+              >
+                <MenuSelector menus={mockMenus} selectedId={selectedMenu} onSelect={setSelectedMenu} />
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <PriceSlider
+                    menuName={selectedMenuData.name}
+                    price={price}
+                    min={originalCostPrice}
+                    max={maxSellingPrice}
+                    step={100}
+                    originalCostPrice={originalCostPrice}
+                    discountedCostPrice={discountedCostPrice}
+                    hasItemDiscount={hasItemDiscount}
+                    defaultPrice={defaultSellingPrice}
+                    defaultPriceLabel={day >= 2 ? "이전 판매가" : "권장가"}
+                    onChange={setPrice}
+                  />
+                  <div className="flex flex-col gap-5">
+                    <QuantityCounter quantity={quantity} min={50} max={500} step={10} onChange={setQuantity} />
+                    <div className="flex flex-col gap-3.5">
+                      {hasItemDiscount && (
+                        <div className="rounded-2xl border border-red-100 bg-red-50/60 px-4 py-3 flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-bold text-red-500">선택 아이템 혜택 적용</p>
+                            <p className="text-xs text-red-400 mt-1">아이템 사용으로 원재료 비용 {discountRate}% 할인</p>
+                          </div>
+                          <span className="text-lg font-bold text-red-500">-₩{discountAmount.toLocaleString()}</span>
                         </div>
-                        <span className="text-lg font-bold text-red-500">-₩{discountAmount.toLocaleString()}</span>
+                      )}
+                      <div className="flex items-center justify-between px-4 py-2">
+                        <span className="text-sm text-slate-500 font-medium">총 예상 비용</span>
+                        <div className="text-right">
+                          {hasItemDiscount && (
+                            <p className="text-sm font-bold text-red-400 line-through decoration-2">
+                              ₩{totalCost.toLocaleString()}
+                            </p>
+                          )}
+                          <span className="text-[1.75rem] font-black text-slate-900 tracking-tight">
+                            ₩{discountedTotalCost.toLocaleString()}
+                          </span>
+                        </div>
                       </div>
-                    )}
-                    <div className="flex items-center justify-between px-4 py-2">
-                      <span className="text-sm text-slate-500 font-medium">총 예상 비용</span>
-                      <div className="text-right">
-                        {hasItemDiscount && (
-                          <p className="text-sm font-bold text-red-400 line-through decoration-2">
-                            ₩{totalCost.toLocaleString()}
-                          </p>
-                        )}
-                        <span className="text-[1.75rem] font-black text-slate-900 tracking-tight">
-                          ₩{discountedTotalCost.toLocaleString()}
+                      <button className="w-full bg-primary hover:bg-primary-dark text-slate-900 hover:text-white font-bold text-base py-4 px-6 rounded-2xl shadow-lg shadow-primary/20 transition-all flex items-center justify-center gap-2 group">
+                        <span>준비 완료하기</span>
+                        <span className="material-symbols-outlined group-hover:translate-x-1 transition-transform">
+                          arrow_forward
                         </span>
-                      </div>
+                      </button>
                     </div>
-                    <button className="w-full bg-primary hover:bg-primary-dark text-slate-900 hover:text-white font-bold text-base py-4 px-6 rounded-2xl shadow-lg shadow-primary/20 transition-all flex items-center justify-center gap-2 group">
-                      <span>준비 완료하기</span>
-                      <span className="material-symbols-outlined group-hover:translate-x-1 transition-transform">
-                        arrow_forward
-                      </span>
-                    </button>
                   </div>
                 </div>
               </div>

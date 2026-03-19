@@ -34,27 +34,32 @@ export default function CountdownTimer({
   const hasCompletedRef = useRef(false);
 
   useEffect(() => {
+    setSeconds(resolveRemainingSeconds(initialSeconds, endTimestampMs));
     hasCompletedRef.current = false;
+  }, [initialSeconds, endTimestampMs]);
 
-    const tick = () => {
-      const nextSeconds = resolveRemainingSeconds(initialSeconds, endTimestampMs);
-
-      setSeconds(nextSeconds);
-
-      if (nextSeconds <= 0 && !hasCompletedRef.current) {
+  useEffect(() => {
+    if (seconds <= 0) {
+      if (!hasCompletedRef.current) {
         hasCompletedRef.current = true;
         onComplete?.();
       }
-    };
 
-    tick();
+      return;
+    }
 
     const timer = window.setInterval(() => {
-      tick();
+      setSeconds((currentSeconds) => {
+        if (typeof endTimestampMs === "number") {
+          return resolveRemainingSeconds(undefined, endTimestampMs);
+        }
+
+        return Math.max(0, currentSeconds - 1);
+      });
     }, 1000);
 
     return () => window.clearInterval(timer);
-  }, [initialSeconds, endTimestampMs, onComplete]);
+  }, [seconds, endTimestampMs, onComplete]);
 
   const minutes = Math.floor(seconds / 60);
   const remainingSeconds = seconds % 60;
