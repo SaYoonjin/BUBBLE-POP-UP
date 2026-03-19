@@ -78,6 +78,7 @@ public class SparkEtlScheduler {
         );
 
         List<String> dates = new ArrayList<>();
+        List<String> nonDateLines = new ArrayList<>();
         try {
             ProcessBuilder pb = new ProcessBuilder(command);
             pb.redirectErrorStream(true);
@@ -88,6 +89,8 @@ public class SparkEtlScheduler {
                 while ((line = reader.readLine()) != null) {
                     if (line.startsWith("DATE:")) {
                         dates.add(line.substring(5).trim());
+                    } else {
+                        nonDateLines.add(line);
                     }
                 }
             }
@@ -97,6 +100,16 @@ public class SparkEtlScheduler {
                 process.destroyForcibly();
                 log.warn("list_available_dates.py 타임아웃");
                 return List.of();
+            }
+
+            int exitCode = process.exitValue();
+            if (exitCode != 0) {
+                log.warn("list_available_dates.py 비정상 종료. exitCode={}", exitCode);
+            }
+            if (dates.isEmpty() && !nonDateLines.isEmpty()) {
+                int tailSize = Math.min(nonDateLines.size(), 10);
+                log.warn("DATE: 라인 없음. 마지막 {}줄: {}", tailSize,
+                        nonDateLines.subList(nonDateLines.size() - tailSize, nonDateLines.size()));
             }
         } catch (Exception e) {
             log.error("HDFS 가용 날짜 조회 실패", e);
@@ -148,16 +161,31 @@ public class SparkEtlScheduler {
             pb.redirectErrorStream(true);
             Process process = pb.start();
 
-            try (var in = process.getInputStream()) {
-                in.transferTo(java.io.OutputStream.nullOutputStream());
+            List<String> tailLines = new ArrayList<>();
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    tailLines.add(line);
+                    if (tailLines.size() > 10) {
+                        tailLines.remove(0);
+                    }
+                }
             }
 
             boolean finished = process.waitFor(10, TimeUnit.MINUTES);
             if (!finished) {
                 process.destroyForcibly();
+                log.warn("Spark job 타임아웃: {}", scriptName);
+            } else {
+                int exitCode = process.exitValue();
+                if (exitCode != 0) {
+                    log.error("Spark job 실패: {} exitCode={} tail={}", scriptName, exitCode, tailLines);
+                } else {
+                    log.info("Spark job 완료: {} tail={}", scriptName, tailLines.subList(Math.max(0, tailLines.size() - 3), tailLines.size()));
+                }
             }
         } catch (Exception e) {
-            log.error("Spark job failed: {}", scriptName, e);
+            log.error("Spark job 실행 오류: {}", scriptName, e);
         }
     }
 }
