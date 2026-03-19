@@ -140,7 +140,7 @@ public class SeasonLifecycleService {
             return;
         }
 
-        scheduledSeason.start(sourceBatchKey);
+        scheduledSeason.startAt(now, sourceBatchKey);
         List<Menu> menus = requireMenus();
         Random random = new Random(resolveSeed(scheduledSeason));
 
