@@ -1,3 +1,6 @@
+import Badge from "../common/Badge";
+import { formatCurrency } from "./utils";
+
 interface PodiumEntry {
   rank: number;
   nickname: string;
@@ -20,8 +23,6 @@ const config: Record<number, { color: string; badgeBg: string; avatarBorder: str
   2: { color: "#C0C0C0", badgeBg: "bg-[#C0C0C0]", avatarBorder: "border-[#C0C0C0]/30", order: "md:order-1", mt: "mt-0", badgeSize: "size-8 -top-6" },
   3: { color: "#CD7F32", badgeBg: "bg-[#CD7F32]", avatarBorder: "border-[#CD7F32]/30", order: "md:order-3", mt: "mt-0", badgeSize: "size-8 -top-6" },
 };
-
-const fmt = (v: number) => `₩${v.toLocaleString()}`;
 
 export default function Podium({ entries }: PodiumProps) {
   const top3 = entries.filter((e) => e.rank <= 3);
@@ -53,7 +54,7 @@ export default function Podium({ entries }: PodiumProps) {
             {/* Name */}
             <h3 className={`font-bold ${isFirst ? "text-xl" : "text-lg"} text-slate-900 mb-0.5 flex items-center gap-1`}>
               {entry.nickname}
-              {entry.isMe && <span className="text-[10px] bg-primary text-white px-1.5 py-0.5 rounded-full font-bold">ME</span>}
+              {entry.isMe && <Badge variant="green" size="sm">ME</Badge>}
             </h3>
             <p className="text-sm text-slate-500 mb-1 truncate max-w-[90%]">{entry.storeName}</p>
             <p className="text-xs text-slate-400 mb-3 flex items-center gap-0.5">
@@ -69,7 +70,7 @@ export default function Podium({ entries }: PodiumProps) {
                 ROI {entry.roi.toFixed(1)}%
               </span>
               <p className={`text-primary font-mono font-bold ${isFirst ? "text-xl" : "text-base"} mt-1`}>
-                {fmt(entry.totalRevenue)}
+                {formatCurrency(entry.totalRevenue)}
               </p>
               <span className="text-xs text-primary-dark font-bold mt-0.5">{entry.rewardPoints}P</span>
             </div>

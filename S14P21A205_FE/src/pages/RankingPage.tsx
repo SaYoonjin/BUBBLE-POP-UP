@@ -1,8 +1,10 @@
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import AppHeader from "../components/common/AppHeader";
 import Badge from "../components/common/Badge";
+import Button from "../components/common/Button";
 import Podium from "../components/ranking/Podium";
 import RankingList from "../components/ranking/RankingList";
+import RankingRow from "../components/ranking/RankingRow";
 
 // API 응답 타입
 interface RankingEntry {
@@ -58,9 +60,8 @@ const MOCK_DATA: SeasonRankingResponse = {
   ],
 };
 
-const fmt = (v: number) => `₩${v.toLocaleString()}`;
-
 export default function RankingPage() {
+  const navigate = useNavigate();
   const data = MOCK_DATA;
 
   // myRankings의 userId로 rankings 내 본인 항목 표시
@@ -87,14 +88,14 @@ export default function RankingPage() {
         <div className="w-full max-w-[1100px] flex flex-col gap-8">
           {/* Top buttons */}
           <div className="flex flex-col sm:flex-row justify-between gap-4 w-full">
-            <Link to="/" className="flex items-center justify-center gap-2 px-6 py-2.5 rounded-2xl bg-white border border-slate-200 text-slate-600 font-bold hover:bg-slate-50 transition-all shadow-sm">
+            <Button variant="outline" onClick={() => navigate("/")}>
               <span className="material-symbols-outlined text-xl">arrow_back</span>
               로비로 돌아가기
-            </Link>
-            <Link to="/mypage" className="flex items-center justify-center gap-2 px-6 py-2.5 rounded-2xl bg-primary text-white font-bold hover:bg-primary-dark transition-all shadow-sm">
+            </Button>
+            <Button variant="primary" onClick={() => navigate("/mypage")}>
               <span className="material-symbols-outlined text-xl">history</span>
               시즌 통산 기록 확인하기
-            </Link>
+            </Button>
           </div>
 
           {/* Title */}
@@ -118,64 +119,7 @@ export default function RankingPage() {
                 나의 기록
               </h2>
               {myOutsideEntries.map((entry, idx) => (
-                <div key={idx} className={`flex items-center rounded-2xl p-4 shadow-soft border relative overflow-hidden ${
-                  entry.isBankrupt
-                    ? "bg-slate-50 border-slate-200"
-                    : "bg-primary/5 border-primary"
-                }`}>
-                  <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-primary" />
-
-                  {/* Rank */}
-                  <div className="w-12 flex justify-center mr-4 ml-2">
-                    <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-primary text-white">
-                      {entry.rank ?? "-"}
-                    </span>
-                  </div>
-
-                  {/* Avatar */}
-                  <div className="size-12 rounded-full bg-slate-100 overflow-hidden mr-4 flex-shrink-0 flex items-center justify-center border-2 border-white shadow-sm ring-2 ring-primary/30">
-                    <span className="material-symbols-outlined text-2xl text-slate-400">person</span>
-                  </div>
-
-                  {/* Info */}
-                  <div className="flex flex-col md:flex-row md:items-center flex-1 gap-1 md:gap-4 overflow-hidden">
-                    <div className="flex flex-col min-w-[140px]">
-                      <span className="font-bold text-slate-900 text-lg truncate flex items-center gap-1.5">
-                        {entry.nickname}
-                        {entry.isBankrupt && <Badge variant="rose" size="sm">파산</Badge>}
-                      </span>
-                      <span className="text-xs text-primary font-bold">나 (Player)</span>
-                    </div>
-                    <div className="flex flex-col text-sm text-slate-500">
-                      <span className="flex items-center gap-1 font-medium text-slate-700 truncate">
-                        <span className="material-symbols-outlined text-base">store</span>
-                        {entry.storeName}
-                      </span>
-                      <span className="flex items-center gap-1 text-xs truncate">
-                        <span className="material-symbols-outlined text-sm">location_on</span>
-                        {entry.locationName} · {entry.menuName}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Stats */}
-                  <div className="flex items-center gap-2 md:gap-6 ml-2">
-                    <div className="hidden sm:flex flex-col items-end justify-center w-24">
-                      <span className="text-xs text-slate-400 font-medium mb-0.5">ROI</span>
-                      <span className={`font-bold ${entry.roi < 0 ? "text-rose-500" : "text-slate-700"}`}>
-                        {entry.roi.toFixed(1)}%
-                      </span>
-                    </div>
-                    <div className="flex flex-col items-end w-[140px]">
-                      <span className="font-mono font-bold text-primary text-lg">{fmt(entry.totalRevenue)}</span>
-                    </div>
-                    <div className="w-16 flex justify-end">
-                      <span className="bg-primary/20 text-primary-dark text-xs font-bold px-2.5 py-1 rounded-full">
-                        {entry.rewardPoints}P
-                      </span>
-                    </div>
-                  </div>
-                </div>
+                <RankingRow key={idx} entry={{ ...entry, rank: entry.rank, isMe: true }} />
               ))}
             </div>
           )}
