@@ -287,19 +287,22 @@ export function AnimatedParticipants({ count }: { count: number }) {
 
   return (
     <div className="flex items-center justify-center gap-4 opacity-70">
-      <div className="flex -space-x-2 relative h-8 w-[140px] overflow-visible">
+      <div className="relative h-8 w-[140px] overflow-visible">
         <style>{`
-          @keyframes avatarSlide {
-            0% { transform: translateX(24px); opacity: 0; }
-            15% { transform: translateX(0); opacity: 1; }
-            85% { transform: translateX(0); opacity: 1; }
-            100% { transform: translateX(-24px); opacity: 0; }
+          @keyframes avatarEnter {
+            from { transform: translateX(12px); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
           }
         `}</style>
         {items.map((item, i) => (
           <div key={item.id}
-            className={`w-7 h-7 rounded-full ${item.color} border-2 border-white shrink-0`}
-            style={{ zIndex: 5-i, animation: i === items.length - 1 ? "avatarSlide 2.2s ease-in-out" : undefined }}
+            className={`absolute w-7 h-7 rounded-full ${item.color} border-2 border-white`}
+            style={{
+              left: i * 22,
+              zIndex: 5 - i,
+              transition: "left 0.5s ease-out",
+              animation: i === items.length - 1 ? "avatarEnter 0.5s ease-out" : undefined,
+            }}
           />
         ))}
       </div>
