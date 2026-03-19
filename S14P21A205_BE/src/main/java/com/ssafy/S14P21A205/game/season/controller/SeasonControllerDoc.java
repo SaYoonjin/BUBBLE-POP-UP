@@ -2,6 +2,7 @@ package com.ssafy.S14P21A205.game.season.controller;
 
 import com.ssafy.S14P21A205.exception.ErrorResponse;
 import com.ssafy.S14P21A205.game.season.dto.CurrentSeasonRankingsResponse;
+import com.ssafy.S14P21A205.game.season.dto.CurrentSeasonTimeResponse;
 import com.ssafy.S14P21A205.game.season.dto.CurrentSeasonTopRankingsResponse;
 import com.ssafy.S14P21A205.game.season.dto.GameWaitingResponse;
 import com.ssafy.S14P21A205.game.season.dto.SeasonJoinRequest;
@@ -34,6 +35,32 @@ public interface SeasonControllerDoc {
             )
     })
     ResponseEntity<GameWaitingResponse> getWaitingStatus();
+
+    @Operation(
+            summary = "Get current season global time state",
+            description = "Return the authoritative current season timeline state for screen resynchronization.",
+            security = @SecurityRequirement(name = "bearerAuth")
+    )
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "Current season time lookup success",
+                    content = @Content(schema = @Schema(implementation = CurrentSeasonTimeResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "401",
+                    description = "Authentication required",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "404",
+                    description = "Current season not found",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            )
+    })
+    ResponseEntity<CurrentSeasonTimeResponse> getCurrentSeasonTime(
+            @Parameter(hidden = true) Authentication authentication
+    );
 
     @Operation(
             summary = "Join current season",

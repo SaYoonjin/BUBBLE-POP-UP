@@ -22,8 +22,7 @@ public class SeasonWaitingService {
 
     private final SeasonRepository seasonRepository;
     private final SeasonTimelineService seasonTimelineService = new SeasonTimelineService();
-
-    private Clock clock = Clock.systemDefaultZone();
+    private final Clock clock;
 
     public GameWaitingResponse getWaitingStatus() {
         LocalDateTime now = LocalDateTime.now(clock);

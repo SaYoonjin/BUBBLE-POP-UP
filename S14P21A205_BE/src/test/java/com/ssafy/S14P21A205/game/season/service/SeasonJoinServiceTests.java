@@ -85,11 +85,7 @@ class SeasonJoinServiceTests {
                 locationRepository,
                 menuRepository,
                 stringRedisTemplate,
-                purchaseListGenerator
-        );
-        ReflectionTestUtils.setField(
-                seasonJoinService,
-                "clock",
+                purchaseListGenerator,
                 Clock.fixed(Instant.parse("2026-03-18T01:00:30Z"), ZoneId.of("Asia/Seoul"))
         );
     }
