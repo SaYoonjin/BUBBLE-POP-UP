@@ -22,11 +22,11 @@ public interface DailyReportRepository extends JpaRepository<DailyReport, Long> 
     List<DailyReport> findByStore_Season_IdAndDayLessThanOrderByStore_IdAscDayAsc(Long seasonId, Integer day);
 
     @Query("""
-            SELECT dr.locationName, SUM(dr.revenue)
+            SELECT dr.locationName, AVG(dr.revenue)
             FROM DailyReport dr
             WHERE dr.store.season.id = :seasonId AND dr.day = :day
             GROUP BY dr.locationName
-            ORDER BY SUM(dr.revenue) DESC
+            ORDER BY AVG(dr.revenue) DESC
             """)
     List<Object[]> sumRevenueByLocationAndDay(@Param("seasonId") Long seasonId, @Param("day") int day);
 

@@ -23,7 +23,7 @@ date_range = [(start_date + timedelta(days=i)).strftime("%Y%m%d") for i in range
 print(f"2차 정제 기간: {start_date_str} ~ {last_date.strftime('%Y%m%d')} (7일)")
 
 CELL_TO_NAME = {
-    "다사57254925": "성수",
+    "다사57254925": "서울숲/성수",
     "다사45254500": "신도림",
     "다사62504550": "잠실",
     "다사57504625": "강남",
