@@ -3,7 +3,6 @@ package com.ssafy.S14P21A205.game.season.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.ssafy.S14P21A205.game.day.generator.PurchaseListGenerator;
@@ -34,8 +33,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.security.core.Authentication;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -64,19 +61,12 @@ class SeasonJoinServiceTests {
     private MenuRepository menuRepository;
 
     @Mock
-    private StringRedisTemplate stringRedisTemplate;
-
-    @Mock
-    private ValueOperations<String, String> valueOperations;
-
-    @Mock
     private PurchaseListGenerator purchaseListGenerator;
 
     private SeasonJoinService seasonJoinService;
 
     @BeforeEach
     void setUp() {
-        org.mockito.Mockito.lenient().when(stringRedisTemplate.opsForValue()).thenReturn(valueOperations);
         seasonJoinService = new SeasonJoinService(
                 userService,
                 seasonRepository,
@@ -85,14 +75,13 @@ class SeasonJoinServiceTests {
                 storeRepository,
                 locationRepository,
                 menuRepository,
-                stringRedisTemplate,
                 purchaseListGenerator,
                 Clock.fixed(Instant.parse("2026-03-18T01:00:30Z"), ZoneId.of("Asia/Seoul"))
         );
     }
 
     @Test
-    void joinCurrentSeasonStoresInitialCaptureRateForNewSeasonStore() {
+    void joinCurrentSeasonReturnsJoinBalanceForNewSeasonStore() {
         User user = user(7);
         Season season = season(11L);
         Location location = location(3L, 100_000);
@@ -119,9 +108,6 @@ class SeasonJoinServiceTests {
         assertThat(response.waitingForPlayableDay()).isFalse();
         assertThat(savedStore.getPurchaseSeed()).isEqualTo(9_876L);
         assertThat(savedStore.getPurchaseCursor()).isZero();
-        verify(valueOperations).set("balance:21", "9990000");
-        verify(valueOperations).set("stock:21", "0");
-        verify(valueOperations).set("captureRate:21", "0.10");
     }
 
     @Test
@@ -168,7 +154,6 @@ class SeasonJoinServiceTests {
                 storeRepository,
                 locationRepository,
                 menuRepository,
-                stringRedisTemplate,
                 purchaseListGenerator,
                 Clock.fixed(daySixBusiness.atZone(ZoneId.of("Asia/Seoul")).toInstant(), ZoneId.of("Asia/Seoul"))
         );

@@ -18,7 +18,9 @@ import com.ssafy.S14P21A205.action.repository.ActionRepository;
 import com.ssafy.S14P21A205.exception.BaseException;
 import com.ssafy.S14P21A205.exception.ErrorCode;
 import com.ssafy.S14P21A205.game.day.policy.CaptureRatePolicy;
+import com.ssafy.S14P21A205.game.day.policy.StoreRankingPolicy;
 import com.ssafy.S14P21A205.game.day.resolver.EventEffectResolver;
+import com.ssafy.S14P21A205.game.day.resolver.NewsRankingResolver;
 import com.ssafy.S14P21A205.game.day.resolver.TrafficDelayResolver;
 import com.ssafy.S14P21A205.game.day.state.GameDayLiveState;
 import com.ssafy.S14P21A205.game.day.state.repository.GameDayStoreStateRedisRepository;
@@ -28,9 +30,12 @@ import com.ssafy.S14P21A205.game.time.service.SeasonTimelineService;
 import com.ssafy.S14P21A205.order.entity.Order;
 import com.ssafy.S14P21A205.order.repository.OrderRepository;
 import com.ssafy.S14P21A205.shop.entity.ItemCategory;
+import com.ssafy.S14P21A205.shop.entity.Menu;
 import com.ssafy.S14P21A205.shop.repository.ItemUserRepository;
 import com.ssafy.S14P21A205.store.entity.Store;
+import com.ssafy.S14P21A205.store.repository.MenuRepository;
 import com.ssafy.S14P21A205.store.repository.StoreRepository;
+import com.ssafy.S14P21A205.store.service.StoreLocationTransitionSupport;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Clock;
@@ -77,15 +82,19 @@ public class ActionServiceImpl implements ActionService {
     private static final BigDecimal RATIO_70 = new BigDecimal("0.70");
     private static final BigDecimal RATIO_60 = new BigDecimal("0.60");
     private static final BigDecimal DONATION_CAPTURE_RATE_BONUS = new BigDecimal("0.10");
+    private static final StoreLocationTransitionSupport STORE_LOCATION_TRANSITION_SUPPORT = new StoreLocationTransitionSupport();
 
     private final GameDayStoreStateRedisRepository gameDayStoreStateRedisRepository;
     private final ActionRepository actionRepository;
     private final ActionLogRepository actionLogRepository;
     private final StoreRepository storeRepository;
+    private final MenuRepository menuRepository;
     private final OrderRepository orderRepository;
     private final ItemUserRepository itemUserRepository;
     private final EventEffectResolver eventEffectResolver;
     private final TrafficDelayResolver trafficDelayResolver;
+    private final StoreRankingPolicy storeRankingPolicy;
+    private final NewsRankingResolver newsRankingResolver;
     private final CaptureRatePolicy captureRatePolicy;
     private final Clock clock;
 
@@ -251,6 +260,11 @@ public class ActionServiceImpl implements ActionService {
     public EmergencyOrderResponse executeEmergencyOrder(Integer userId, EmergencyOrderRequest request) {
         Store store = findStore(userId);
         int day = resolveCurrentDay(store);
+        Menu menu = getMenuById(request.menuId());
+
+        if (request.salePrice() < menu.getOriginPrice()) {
+            throw new BaseException(ErrorCode.INVALID_INPUT_VALUE);
+        }
 
         validateNotUsed(store.getId(), day, "emergency");
 
@@ -259,12 +273,14 @@ public class ActionServiceImpl implements ActionService {
                 .orElseThrow(() -> new BaseException(ErrorCode.GAME_STATE_NOT_FOUND));
         LocalDateTime now = LocalDateTime.now(clock);
 
-        BigDecimal ingredientCostMultiplier = resolveIngredientCostMultiplier(store, day, state, now);
-        int adjustedOriginPrice = BigDecimal.valueOf(store.getMenu().getOriginPrice())
-                .multiply(resolveIngredientDiscountRate(store.getUser().getId()))
-                .multiply(ingredientCostMultiplier)
-                .setScale(0, RoundingMode.HALF_UP)
-                .intValue();
+        BigDecimal ingredientCostMultiplier = resolveIngredientCostMultiplier(store, menu, day, state, now);
+        int menuTrendRank = resolveMenuEntryRank(store, day, menu);
+        int adjustedOriginPrice = storeRankingPolicy.apply(
+                menu.getOriginPrice(),
+                storeRankingPolicy.resolveMenuEntryMultiplier(menuTrendRank),
+                resolveIngredientDiscountRate(store.getUser().getId()),
+                ingredientCostMultiplier
+        );
         int totalCost = BigDecimal.valueOf(adjustedOriginPrice)
                 .multiply(BigDecimal.valueOf(request.quantity()))
                 .multiply(EMERGENCY_COST_MULTIPLIER)
@@ -289,7 +305,15 @@ public class ActionServiceImpl implements ActionService {
 
         actionLogRepository.save(new ActionLog(action, store, day, null));
         Order order = orderRepository.save(
-                Order.createEmergency(store.getMenu(), store, request.quantity(), totalCost, day, arrivedTime)
+                Order.createEmergency(
+                        menu,
+                        store,
+                        request.quantity(),
+                        totalCost,
+                        request.salePrice(),
+                        day,
+                        arrivedTime
+                )
         );
 
         gameDayStoreStateRedisRepository.markActionUsed(store.getId(), day, "emergency");
@@ -314,8 +338,15 @@ public class ActionServiceImpl implements ActionService {
     }
 
     private Store findStore(Integer userId) {
-        return storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(userId, SeasonStatus.IN_PROGRESS)
+        Store store = storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(userId, SeasonStatus.IN_PROGRESS)
                 .orElseThrow(() -> new BaseException(ErrorCode.STORE_NOT_FOUND));
+        STORE_LOCATION_TRANSITION_SUPPORT.applyPendingLocationIfDue(store, LocalDateTime.now(clock));
+        return store;
+    }
+
+    private Menu getMenuById(Integer menuId) {
+        return menuRepository.findById(Long.valueOf(menuId))
+                .orElseThrow(() -> new BaseException(ErrorCode.MENU_NOT_FOUND));
     }
 
     private int resolveCurrentDay(Store store) {
@@ -426,6 +457,7 @@ public class ActionServiceImpl implements ActionService {
 
     private BigDecimal resolveIngredientCostMultiplier(
             Store store,
+            Menu menu,
             int day,
             GameDayLiveState state,
             LocalDateTime now
@@ -439,7 +471,7 @@ public class ActionServiceImpl implements ActionService {
                 day,
                 now,
                 store.getLocation().getId(),
-                store.getMenu().getId()
+                menu.getId()
         ).ingredientCostMultiplier();
     }
 
@@ -511,11 +543,28 @@ public class ActionServiceImpl implements ActionService {
     }
 
     private String formatDay(Integer day) {
-        return day <= 0 ? "-" : "DAY " + day;
+        return day == null || day <= 0 ? "-" : "DAY " + day;
     }
 
     private String formatValue(Object value) {
         return value == null ? "-" : value.toString();
+    }
+
+    private int resolveMenuEntryRank(Store store, int day, Menu menu) {
+        Integer newsRank = newsRankingResolver.resolveMenuEntryRank(
+                store.getSeason().getId(),
+                day,
+                menu
+        );
+        if (newsRank != null && newsRank > 0) {
+            return newsRank;
+        }
+
+        List<Store> seasonStores = storeRepository.findBySeason_IdOrderByIdAsc(store.getSeason().getId());
+        if (seasonStores == null || seasonStores.isEmpty()) {
+            return 1;
+        }
+        return storeRankingPolicy.resolveMenuTrendRank(menu.getId(), seasonStores);
     }
 
     private long valueOf(Integer amount) {
