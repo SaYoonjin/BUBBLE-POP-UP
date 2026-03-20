@@ -3,9 +3,14 @@ import { useEffect, useState } from "react";
 interface ModalWrapperProps {
   onClose: () => void;
   children: React.ReactNode;
+  panelClassName?: string;
 }
 
-export default function ModalWrapper({ onClose, children }: ModalWrapperProps) {
+export default function ModalWrapper({
+  onClose,
+  children,
+  panelClassName,
+}: ModalWrapperProps) {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
@@ -26,6 +31,7 @@ export default function ModalWrapper({ onClose, children }: ModalWrapperProps) {
       <div className={`
         relative w-[420px] max-h-[85vh] bg-white rounded-[28px] shadow-2xl overflow-y-auto custom-scrollbar
         transition-all duration-300 ease-out mx-4
+        ${panelClassName ?? ""}
         ${visible ? "opacity-100 scale-100 translate-y-0" : "opacity-0 scale-95 translate-y-4"}
       `}>
         <button

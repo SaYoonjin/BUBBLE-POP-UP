@@ -11,6 +11,10 @@ interface PriceSliderProps {
   hasItemDiscount: boolean;
   defaultPrice: number;
   defaultPriceLabel: string;
+  referencePrices?: Array<{
+    label: string;
+    value: number;
+  }>;
   onChange: (price: number) => void;
 }
 
@@ -25,6 +29,7 @@ export default function PriceSlider({
   hasItemDiscount,
   defaultPrice,
   defaultPriceLabel,
+  referencePrices = [],
   onChange,
 }: PriceSliderProps) {
   const [showTooltip, setShowTooltip] = useState(false);
@@ -32,36 +37,36 @@ export default function PriceSlider({
   const isProfit = margin > 0;
 
   return (
-    <div className="bg-white rounded-[1.5rem] p-6 md:p-7 shadow-soft border border-transparent flex flex-col h-full">
-      <div className="flex items-center justify-between mb-5">
+    <div className="flex h-full flex-col rounded-[1.5rem] border border-transparent bg-white p-6 shadow-soft md:p-7">
+      <div className="mb-5 flex items-center justify-between">
         <div>
-          <h3 className="text-base md:text-lg font-bold text-slate-900">가격 설정</h3>
-          <p className="text-sm text-slate-400 mt-1">{menuName} 판매가를 조정합니다.</p>
+          <h3 className="text-base font-bold text-slate-900 md:text-lg">판매가 설정</h3>
+          <p className="mt-1 text-sm text-slate-400">{menuName} 판매가를 조절합니다.</p>
         </div>
         <div className="relative">
           <button
             type="button"
             onClick={() => setShowTooltip((prev) => !prev)}
-            className="size-9 rounded-full bg-slate-50 border border-slate-200 text-slate-400 hover:text-primary-dark hover:border-primary/20 hover:bg-primary/5 transition-colors flex items-center justify-center"
+            className="flex size-9 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-slate-400 transition-colors hover:border-primary/20 hover:bg-primary/5 hover:text-primary-dark"
             aria-label="가격 설정 범위 보기"
           >
             <span className="material-symbols-outlined text-[20px]">payments</span>
           </button>
           {showTooltip && (
             <div className="absolute right-0 top-11 z-10 w-52 rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-[13px] leading-relaxed text-slate-600 shadow-lg">
-              원가부터 권장가의 2배까지 설정할 수 있습니다.
+              최소 판매가부터 권장가의 2배까지 설정할 수 있습니다.
             </div>
           )}
         </div>
       </div>
 
-      <div className="flex flex-col justify-center grow gap-6">
-        <div className="text-center py-1">
-          <p className="text-slate-400 text-[13px] font-medium mb-2">판매 가격</p>
-          <p className="text-[2.5rem] md:text-[2.875rem] font-black text-slate-900 tracking-tight">
+      <div className="flex grow flex-col justify-center gap-6">
+        <div className="py-1 text-center">
+          <p className="mb-2 text-[13px] font-medium text-slate-400">판매 가격</p>
+          <p className="text-[2.5rem] font-black tracking-tight text-slate-900 md:text-[2.875rem]">
             ₩{price.toLocaleString()}
           </p>
-          <p className="mt-2.5 text-[13px] text-primary-dark font-semibold">
+          <p className="mt-2.5 text-[13px] font-semibold text-primary-dark">
             {defaultPriceLabel} ₩{defaultPrice.toLocaleString()}
           </p>
         </div>
@@ -73,36 +78,58 @@ export default function PriceSlider({
             max={max}
             step={step}
             value={price}
-            onChange={(e) => onChange(Number(e.target.value))}
-            className="w-full h-2 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-primary hover:accent-primary-dark transition-all"
+            onChange={(event) => onChange(Number(event.target.value))}
+            className="h-2 w-full cursor-pointer appearance-none rounded-lg bg-slate-100 accent-primary transition-all hover:accent-primary-dark"
           />
-          <div className="flex justify-between text-xs text-slate-400 mt-2.5 font-medium">
+          <div className="mt-2.5 flex justify-between text-xs font-medium text-slate-400">
             <span>최소 ₩{min.toLocaleString()}</span>
             <span>최대 ₩{max.toLocaleString()}</span>
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3 mt-auto pt-3">
-          <div className="bg-slate-50 rounded-2xl p-3 text-center">
-            <p className="text-xs text-slate-400 font-medium mb-1">원가</p>
+        {referencePrices.length > 0 && (
+          <div className={`grid gap-2 ${referencePrices.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
+            {referencePrices.map((reference) => (
+              <div
+                key={`${reference.label}-${reference.value}`}
+                className="rounded-2xl border border-slate-100 bg-slate-50 px-3 py-2 text-center"
+              >
+                <p className="text-[11px] font-semibold text-slate-400">{reference.label}</p>
+                <p className="mt-1 text-sm font-bold text-slate-800">
+                  ₩{reference.value.toLocaleString()}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="mt-auto grid grid-cols-2 gap-3 pt-3">
+          <div className="rounded-2xl bg-slate-50 p-3 text-center">
+            <p className="mb-1 text-xs font-medium text-slate-400">원가</p>
             {hasItemDiscount ? (
               <div className="space-y-1">
                 <p className="text-xs font-bold text-rose-300 line-through decoration-2">
                   ₩{originalCostPrice.toLocaleString()}
                 </p>
-                <p className="font-bold text-rose-500 text-base md:text-lg">
+                <p className="text-base font-bold text-rose-500 md:text-lg">
                   ₩{discountedCostPrice.toLocaleString()}
                 </p>
               </div>
             ) : (
-              <p className="font-bold text-slate-700 text-base md:text-lg">
+              <p className="text-base font-bold text-slate-700 md:text-lg">
                 ₩{originalCostPrice.toLocaleString()}
               </p>
             )}
           </div>
-          <div className={`rounded-2xl p-3 text-center border ${isProfit ? "bg-primary/5 border-primary/10" : "bg-red-50 border-red-100"}`}>
-            <p className={`text-xs font-medium mb-1 ${isProfit ? "text-primary-dark" : "text-red-400"}`}>마진</p>
-            <p className={`font-bold text-base md:text-lg ${isProfit ? "text-primary" : "text-red-500"}`}>
+          <div
+            className={`rounded-2xl border p-3 text-center ${
+              isProfit ? "border-primary/10 bg-primary/5" : "border-red-100 bg-red-50"
+            }`}
+          >
+            <p className={`mb-1 text-xs font-medium ${isProfit ? "text-primary-dark" : "text-red-400"}`}>
+              마진
+            </p>
+            <p className={`text-base font-bold md:text-lg ${isProfit ? "text-primary" : "text-red-500"}`}>
               {isProfit ? "+" : ""}₩{margin.toLocaleString()}
             </p>
             {hasItemDiscount && (

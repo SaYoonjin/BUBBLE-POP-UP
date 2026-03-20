@@ -173,7 +173,7 @@ export interface GameDayStartResponse {
 
 /** 영업일 시작 */
 export async function startGameDay() {
-  const { data } = await client.post<GameDayStartResponse>("/api/game/day/start");
+  const { data } = await client.get<GameDayStartResponse>("/api/game/day/start");
   return data;
 }
 
