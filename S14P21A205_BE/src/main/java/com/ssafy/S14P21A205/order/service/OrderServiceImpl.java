@@ -3,6 +3,7 @@ package com.ssafy.S14P21A205.order.service;
 import com.ssafy.S14P21A205.exception.BaseException;
 import com.ssafy.S14P21A205.exception.ErrorCode;
 import com.ssafy.S14P21A205.game.day.policy.StoreRankingPolicy;
+import com.ssafy.S14P21A205.game.day.service.GameDayStartService;
 import com.ssafy.S14P21A205.game.day.state.GameDayLiveState;
 import com.ssafy.S14P21A205.game.day.resolver.NewsRankingResolver;
 import com.ssafy.S14P21A205.game.day.state.repository.GameDayStoreStateRedisRepository;
@@ -50,6 +51,7 @@ public class OrderServiceImpl implements OrderService {
     private final ItemUserRepository itemUserRepository;
     private final StoreRankingPolicy marketRankingPolicy;
     private final NewsRankingResolver newsRankingResolver;
+    private final GameDayStartService gameDayStartService;
     private final Clock clock;
 
     private final SeasonTimelineService seasonTimelineService = new SeasonTimelineService();
@@ -83,13 +85,13 @@ public class OrderServiceImpl implements OrderService {
     public RegularOrderResponse createRegularOrder(Integer userId, RegularOrderRequest request) {
         Store store = getStoreByUserId(userId);
         Long storeId = store.getId();
-        SeasonTimePoint seasonTimePoint = resolveSeasonTimePoint(store);
+        LocalDateTime now = LocalDateTime.now(clock);
+        SeasonTimePoint seasonTimePoint = seasonTimelineService.resolve(store.getSeason(), now);
         int regularOrderDay = resolveRegularOrderDay(store, seasonTimePoint);
 
         validateRegularOrderPhase(seasonTimePoint.phase());
         validateRegularOrderDay(regularOrderDay);
         validateQuantity(request.quantity());
-        validateDayNotStarted(storeId, regularOrderDay);
         validateNoExistingOrder(storeId, regularOrderDay);
 
         Menu menu = getMenuById(request.menuId());
@@ -116,6 +118,7 @@ public class OrderServiceImpl implements OrderService {
         Order savedOrder = orderRepository.save(
                 Order.create(menu, store, request.quantity(), totalCost, sellingPrice, regularOrderDay)
         );
+        gameDayStartService.synchronizeCurrentDayState(store, now, seasonTimePoint);
 
         return RegularOrderResponse.builder()
                 .orderId(savedOrder.getId())
@@ -233,12 +236,6 @@ public class OrderServiceImpl implements OrderService {
 
     private SeasonTimePoint resolveSeasonTimePoint(Store store) {
         return seasonTimelineService.resolve(store.getSeason(), LocalDateTime.now(clock));
-    }
-
-    private void validateDayNotStarted(Long storeId, int day) {
-        if (gameDayStoreStateRedisRepository.exists(storeId, day)) {
-            throw new BaseException(ErrorCode.ORDER_DAY_ALREADY_STARTED);
-        }
     }
 
     private void validateNoExistingOrder(Long storeId, Integer orderedDay) {
