@@ -5,7 +5,6 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ssafy.S14P21A205.exception.BaseException;
 import com.ssafy.S14P21A205.exception.ErrorCode;
-import com.ssafy.S14P21A205.game.environment.repository.PopulationRepository;
 import com.ssafy.S14P21A205.game.news.dto.AreaRankingItemResponse;
 import com.ssafy.S14P21A205.game.news.dto.MenuMentionCount;
 import com.ssafy.S14P21A205.game.news.dto.NewsListResponse;
@@ -17,7 +16,6 @@ import com.ssafy.S14P21A205.game.news.repository.NewsReportRepository;
 import com.ssafy.S14P21A205.game.season.entity.Season;
 import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
 import com.ssafy.S14P21A205.game.season.repository.SeasonRepository;
-import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -44,7 +42,6 @@ public class NewsService {
     private final NewsArticleRepository newsArticleRepository;
     private final NewsReportRepository newsReportRepository;
     private final SeasonRepository seasonRepository;
-    private final PopulationRepository populationRepository;
 
     /**
      * 시즌 뉴스 생성 (Spark ETL → DB 저장 + AI 호출).
@@ -115,7 +112,7 @@ public class NewsService {
         int currentDay = season.getCurrentDay();
 
         List<AreaRankingItemResponse> revenueRanking = limitTop3(buildRevenueRanking(season.getId(), currentDay));
-        List<AreaRankingItemResponse> trafficRanking = limitTop3(buildTrafficRanking(currentDay));
+        List<AreaRankingItemResponse> trafficRanking = limitTop3(buildTrafficRanking(season.getId(), currentDay));
 
         return new NewsRankingResponse(currentDay, revenueRanking, trafficRanking);
     }
@@ -145,42 +142,24 @@ public class NewsService {
                 .orElse(List.of());
     }
 
-    private List<AreaRankingItemResponse> buildTrafficRanking(int currentDay) {
-        List<LocalDate> dates = populationRepository.findDistinctDatesOrdered();
-        if (dates.isEmpty() || currentDay > dates.size()) {
+    private List<AreaRankingItemResponse> buildTrafficRanking(Long seasonId, int currentDay) {
+        List<Map<String, Object>> current = parseTrafficFromReport(seasonId, currentDay);
+        if (current.isEmpty()) {
             return List.of();
         }
 
-        LocalDate targetDate = dates.get(currentDay - 1);
-        List<Object[]> currentData = populationRepository.avgPopulationByLocationAndDate(targetDate);
-        if (currentData.isEmpty()) {
-            return List.of();
-        }
+        List<Map<String, Object>> previous = currentDay >= 2
+                ? parseTrafficFromReport(seasonId, currentDay - 1)
+                : List.of();
 
-        List<Map<String, Object>> current = currentData.stream()
-                .map(row -> {
-                    Map<String, Object> item = new HashMap<>();
-                    item.put("name", row[0]);
-                    item.put("population", ((Number) row[1]).longValue());
-                    return item;
-                })
-                .toList();
+        return buildRankingWithChangeRate(current, previous, "avgPopulation");
+    }
 
-        List<Map<String, Object>> previous = List.of();
-        if (currentDay >= 2 && dates.size() >= currentDay) {
-            LocalDate prevDate = dates.get(currentDay - 2);
-            List<Object[]> prevData = populationRepository.avgPopulationByLocationAndDate(prevDate);
-            previous = prevData.stream()
-                    .map(row -> {
-                        Map<String, Object> item = new HashMap<>();
-                        item.put("name", row[0]);
-                        item.put("population", ((Number) row[1]).longValue());
-                        return item;
-                    })
-                    .toList();
-        }
-
-        return buildRankingWithChangeRate(current, previous, "population");
+    private List<Map<String, Object>> parseTrafficFromReport(Long seasonId, int day) {
+        return newsReportRepository.findBySeasonIdAndDay(seasonId, day)
+                .map(NewsReport::getAreaPopulationRanking)
+                .map(this::parseJsonArray)
+                .orElse(List.of());
     }
 
     private List<AreaRankingItemResponse> buildRankingWithChangeRate(
