@@ -26,8 +26,11 @@ import com.ssafy.S14P21A205.store.repository.StoreRepository;
 import com.ssafy.S14P21A205.store.service.StoreLocationTransitionSupport;
 import com.ssafy.S14P21A205.user.entity.User;
 import com.ssafy.S14P21A205.user.service.UserService;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
@@ -149,6 +152,7 @@ public class GameDayReportService {
 
         DailyReport report = dailyReportRepository.findByStoreIdAndDay(store.getId(), day)
                 .orElseThrow(() -> new BaseException(ErrorCode.REPORT_NOT_FOUND));
+        List<DailyReport> storeReports = dailyReportRepository.findByStore_IdOrderByDayAsc(store.getId());
 
         return new GameDayReportResponse(
                 report.getStore().getSeason().getId(),
@@ -163,7 +167,8 @@ public class GameDayReportService {
                 defaultInt(report.getStockRemaining()),
                 STOCK_DISPOSED_COUNT,
                 captureRatePolicy.normalizeCaptureRate(report.getCaptureRate()),
-                resolveDailyRevenue(store.getId(), report.getDay()),
+                resolveChangeCaptureRate(report, storeReports),
+                resolveDailyRevenue(storeReports, report.getDay()),
                 resolveTomorrowWeather(
                         store.getSeason().getId(),
                         resolveTomorrowLocationId(store, report.getDay()),
@@ -290,9 +295,28 @@ public class GameDayReportService {
         return report.getStore().getMenu().getMenuName();
     }
 
-    private GameDayReportResponse.DailyRevenue resolveDailyRevenue(Long storeId, Integer reportDay) {
+    private BigDecimal resolveChangeCaptureRate(DailyReport currentReport, List<DailyReport> storeReports) {
+        if (currentReport == null || currentReport.getDay() == null || currentReport.getDay() <= 1) {
+            return null;
+        }
+
+        DailyReport previousReport = storeReports.stream()
+                .filter(report -> report.getDay() != null)
+                .filter(report -> report.getDay().equals(currentReport.getDay() - 1))
+                .findFirst()
+                .orElse(null);
+        if (previousReport == null || previousReport.getCaptureRate() == null || currentReport.getCaptureRate() == null) {
+            return null;
+        }
+
+        return captureRatePolicy.normalizeCaptureRate(currentReport.getCaptureRate())
+                .subtract(captureRatePolicy.normalizeCaptureRate(previousReport.getCaptureRate()))
+                .setScale(4, RoundingMode.HALF_UP);
+    }
+
+    private GameDayReportResponse.DailyRevenue resolveDailyRevenue(List<DailyReport> storeReports, Integer reportDay) {
         Long[] profits = new Long[MAX_SUPPORTED_DAY];
-        for (DailyReport report : dailyReportRepository.findByStore_IdOrderByDayAsc(storeId)) {
+        for (DailyReport report : storeReports) {
             if (report.getDay() == null || report.getDay() < 1 || report.getDay() > MAX_SUPPORTED_DAY) {
                 continue;
             }

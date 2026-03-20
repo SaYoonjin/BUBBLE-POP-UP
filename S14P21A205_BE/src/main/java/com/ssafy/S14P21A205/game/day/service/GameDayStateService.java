@@ -14,6 +14,7 @@ import com.ssafy.S14P21A205.game.day.policy.CostPolicy;
 import com.ssafy.S14P21A205.game.day.policy.CustomerScorePolicy;
 import com.ssafy.S14P21A205.game.day.policy.PopulationPolicy;
 import com.ssafy.S14P21A205.game.day.resolver.EventEffectResolver;
+import com.ssafy.S14P21A205.game.day.resolver.TrafficDelayResolver;
 import com.ssafy.S14P21A205.game.day.state.GameDayLiveState;
 import com.ssafy.S14P21A205.game.day.state.repository.GameDayStoreStateRedisRepository;
 import com.ssafy.S14P21A205.game.season.entity.Season;
@@ -64,6 +65,7 @@ public class GameDayStateService {
     private final CustomerScorePolicy customerScorePolicy;
     private final CaptureRatePolicy captureRatePolicy;
     private final CostPolicy costPolicy;
+    private final TrafficDelayResolver trafficDelayResolver;
     private final GameDayStoreStateRedisRepository gameDayStoreStateRedisRepository;
     private final GameDayStartService gameDayStartService;
     private final Clock clock;
@@ -159,12 +161,26 @@ public class GameDayStateService {
                 calculatedState.cash(),
                 calculatedState.totalStock()
         );
+        TrafficDelayResolver.ResolvedTraffic resolvedTraffic = trafficDelayResolver.resolve(
+                store.getSeason().getId(),
+                store.getLocation().getId(),
+                day,
+                store.getSeason().getTotalDays(),
+                currentTimeline.dayStart(),
+                effectiveNow
+        );
 
         return Optional.of(new GameStateResponse(
                 serverTime,
                 store.getSeason().getId(),
                 day,
                 String.valueOf(calculatedState.populationPerStore()),
+                new GameStateResponse.Traffic(
+                        resolvedTraffic.trafficStatus(),
+                        resolvedTraffic.trafficStatus() == null ? null : resolvedTraffic.trafficStatus().getValue(),
+                        resolvedTraffic.resolvedHour(),
+                        resolvedTraffic.delaySeconds()
+                ),
                 effectiveNow,
                 calculatedState.cash(),
                 calculatedState.liveState().cumulativeCustomerCount(),
