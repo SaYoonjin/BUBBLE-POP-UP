@@ -211,6 +211,14 @@ public class PopulationPolicy {
         return value.setScale(2, RoundingMode.HALF_UP);
     }
 
+    public PopulationLevel resolvePopulationLevel(Integer population) {
+        return PopulationLevel.fromScore(population);
+    }
+
+    public String resolvePopulationLabel(Integer population) {
+        return resolvePopulationLevel(population).label();
+    }
+
     public record PopulationSnapshot(
             Integer baseFloatingPopulation,
             BigDecimal populationGrowthRate,
@@ -221,3 +229,5 @@ public class PopulationPolicy {
         }
     }
 }
+
+

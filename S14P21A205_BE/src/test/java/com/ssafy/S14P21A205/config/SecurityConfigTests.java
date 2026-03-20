@@ -1,6 +1,7 @@
 package com.ssafy.S14P21A205.config;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -9,6 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.ssafy.S14P21A205.action.service.ActionService;
 import com.ssafy.S14P21A205.action.repository.ActionRepository;
+import com.ssafy.S14P21A205.auth.dto.AuthTokenResponse;
 import com.ssafy.S14P21A205.auth.service.AuthService;
 import com.ssafy.S14P21A205.auth.service.JwtTokenService;
 import com.ssafy.S14P21A205.game.day.dto.GameDayStartResponse;
@@ -55,6 +57,7 @@ import com.ssafy.S14P21A205.user.entity.User;
 import com.ssafy.S14P21A205.store.service.StoreService;
 import com.ssafy.S14P21A205.user.service.UserService;
 import java.math.BigDecimal;
+import java.net.URI;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -250,6 +253,33 @@ class SecurityConfigTests {
 
         mockMvc.perform(get("/game/waiting"))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    void authLoginAllowsUnauthenticatedRequest() throws Exception {
+        when(authService.startLogin(any(), any(), any())).thenReturn(URI.create("/oauth2/authorization/google"));
+
+        mockMvc.perform(get("/auth/login"))
+                .andExpect(status().isFound());
+    }
+
+    @Test
+    void authRefreshAllowsUnauthenticatedRequest() throws Exception {
+        when(authService.refresh(anyString()))
+                .thenReturn(new AuthTokenResponse("access-token", "refresh-token", "Bearer", 3600, 86400));
+
+        mockMvc.perform(post("/auth/refresh")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"refreshToken\":\"refresh-token\"}"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void authLogoutAllowsUnauthenticatedRequest() throws Exception {
+        mockMvc.perform(post("/auth/logout")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"refreshToken\":\"refresh-token\"}"))
+                .andExpect(status().isNoContent());
     }
 
     @Test
