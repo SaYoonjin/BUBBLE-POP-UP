@@ -18,6 +18,7 @@ import com.ssafy.S14P21A205.game.day.state.repository.GameDayStoreStateRedisRepo
 import com.ssafy.S14P21A205.game.environment.entity.WeatherType;
 import com.ssafy.S14P21A205.game.season.entity.Season;
 import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
+import com.ssafy.S14P21A205.game.time.model.DayWindow;
 import com.ssafy.S14P21A205.game.time.model.SeasonPhase;
 import com.ssafy.S14P21A205.game.time.model.SeasonTimePoint;
 import com.ssafy.S14P21A205.game.time.policy.GameTimePolicy;
@@ -37,6 +38,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.Authentication;
@@ -74,8 +76,6 @@ public class GameDayStartService {
     public GameDayStartResponse startDay(Authentication authentication) {
         User user = userService.getCurrentUser(authentication);
         Store store = getActiveStore(user.getId());
-        ensurePurchaseQueueInitialized(store);
-
         LocalDateTime now = LocalDateTime.now(clock);
         STORE_LOCATION_TRANSITION_SUPPORT.applyPendingLocationIfDue(store, now);
         SeasonTimePoint seasonTimePoint = seasonTimelineService.resolve(store.getSeason(), now);
@@ -99,7 +99,105 @@ public class GameDayStartService {
         }
 
         validatePlayableDay(store, day);
-        validateStartPhase(seasonTimePoint.phase());
+        if (seasonTimePoint.phase() == SeasonPhase.DAY_PREPARING) {
+            return buildDayStartResponse(store, day, now, now).response();
+        }
+
+        return ensureCurrentDayState(store, now, seasonTimePoint)
+                .map(GameDayLiveState::startResponse)
+                .orElseThrow(() -> new BaseException(
+                        ErrorCode.INVALID_INPUT_VALUE,
+                        "Day start information is only available during active day phases."
+                ));
+    }
+
+    @Transactional
+    public Optional<GameDayLiveState> ensureCurrentDayState(Store store, LocalDateTime now, SeasonTimePoint seasonTimePoint) {
+        return upsertCurrentDayState(store, now, seasonTimePoint, false);
+    }
+
+    @Transactional
+    public Optional<GameDayLiveState> synchronizeCurrentDayState(Store store, LocalDateTime now, SeasonTimePoint seasonTimePoint) {
+        return upsertCurrentDayState(store, now, seasonTimePoint, true);
+    }
+
+    private Optional<GameDayLiveState> upsertCurrentDayState(
+            Store store,
+            LocalDateTime now,
+            SeasonTimePoint seasonTimePoint,
+            boolean forceRefresh
+    ) {
+        if (store == null || now == null || seasonTimePoint == null || !seasonTimePoint.isPlayableDayPhase()) {
+            return Optional.empty();
+        }
+
+        int day = resolveCurrentDay(store.getSeason(), seasonTimePoint);
+        if (!isPlayableDay(store, day)) {
+            return Optional.empty();
+        }
+
+        GameDayLiveState existingState = gameDayStoreStateRedisRepository.find(store.getId(), day).orElse(null);
+        if (!forceRefresh && existingState != null && existingState.startResponse() != null) {
+            return Optional.of(existingState);
+        }
+
+        ensurePurchaseQueueInitialized(store);
+        DayWindow currentTimeline = seasonTimelineService.day(store.getSeason(), day);
+        LocalDateTime openingReferenceTime = seasonTimePoint.phase() == SeasonPhase.DAY_PREPARING
+                ? now
+                : currentTimeline.businessStart();
+        LocalDateTime lastCalculatedAt = seasonTimePoint.phase() == SeasonPhase.DAY_PREPARING
+                ? now
+                : currentTimeline.businessStart();
+        DayStartBuild build = buildDayStartResponse(store, day, now, openingReferenceTime);
+        writeInitialState(
+                store,
+                day,
+                build.openingState(),
+                build.response(),
+                currentTimeline.dayStart(),
+                lastCalculatedAt,
+                build.openingSalePrice(),
+                build.openingStock()
+        );
+        return gameDayStoreStateRedisRepository.find(store.getId(), day);
+    }
+
+    private Store getActiveStore(Integer userId) {
+        return storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(userId, SeasonStatus.IN_PROGRESS)
+                .orElseThrow(() -> new BaseException(ErrorCode.RESOURCE_NOT_FOUND));
+    }
+
+    private int resolveCurrentDay(Season season, SeasonTimePoint seasonTimePoint) {
+        Integer currentDay = seasonTimePoint.currentDay();
+        if (currentDay == null || currentDay < 1 || currentDay > season.getTotalDays()) {
+            throw new BaseException(ErrorCode.INVALID_INPUT_VALUE, "Current season day is out of range.");
+        }
+        return currentDay;
+    }
+
+    private void validatePlayableDay(Store store, int day) {
+        if (!isPlayableDay(store, day)) {
+            int playableFromDay = store.getPlayableFromDay() == null ? 1 : store.getPlayableFromDay();
+            throw new BaseException(
+                    ErrorCode.INVALID_INPUT_VALUE,
+                    "This store can join from day %d.".formatted(playableFromDay)
+            );
+        }
+    }
+
+    private boolean isPlayableDay(Store store, int day) {
+        int playableFromDay = store.getPlayableFromDay() == null ? 1 : store.getPlayableFromDay();
+        return day >= playableFromDay;
+    }
+
+    private DayStartBuild buildDayStartResponse(
+            Store store,
+            int day,
+            LocalDateTime now,
+            LocalDateTime openingReferenceTime
+    ) {
+        STORE_LOCATION_TRANSITION_SUPPORT.applyPendingLocationIfDue(store, openingReferenceTime);
 
         EnvironmentScheduleResolver.ResolvedEnvironment resolvedEnvironment = environmentScheduleResolver.resolve(
                 store.getSeason().getId(),
@@ -108,14 +206,14 @@ public class GameDayStartService {
         );
         DaySchedule daySchedule = resolvedEnvironment.daySchedule();
         List<Store> seasonStores = storeRepository.findBySeason_IdOrderByIdAsc(store.getSeason().getId());
-        STORE_LOCATION_TRANSITION_SUPPORT.applyPendingLocationIfDue(seasonStores, now);
+        STORE_LOCATION_TRANSITION_SUPPORT.applyPendingLocationIfDue(seasonStores, openingReferenceTime);
         Menu plannedMenu = store.getMenu();
         Integer plannedPrice = store.getPrice();
         List<Order> emergencyOrders = orderRepository.findByStoreIdAndOrderTypeOrderByArrivedTimeAscIdAsc(
                 store.getId(),
                 OrderType.EMERGENCY
         );
-        applyArrivedEmergencyMenuAndPrice(store, emergencyOrders, now);
+        applyArrivedEmergencyMenuAndPrice(store, emergencyOrders, openingReferenceTime);
         NewsRankingResolver.PreviousDayRanking previousDayRanking = newsRankingResolver.resolve(store, day);
         List<GameDayStartResponse.EventSchedule> eventSchedule = eventScheduleResolver.resolve(
                 store.getSeason().getId(),
@@ -140,7 +238,7 @@ public class GameDayStartService {
                 day,
                 openingState,
                 emergencyOrders,
-                now,
+                openingReferenceTime,
                 plannedMenu,
                 plannedPrice
         );
@@ -172,46 +270,18 @@ public class GameDayStartService {
         );
 
         log.info(
-                "start-day-created storeId={} seasonId={} day={} weather={} captureRate={} initialBalance={} initialStock={}",
+                "start-day-built storeId={} seasonId={} day={} weather={} captureRate={} initialBalance={} initialStock={} referenceTime={} requestedAt={}",
                 store.getId(),
                 store.getSeason().getId(),
                 day,
                 resolvedEnvironment.weatherType(),
                 response.captureRate(),
                 response.initialBalance(),
-                response.initialStock()
+                response.initialStock(),
+                openingReferenceTime,
+                now
         );
-        writeInitialState(store, day, openingState, response, seasonTimePoint, now, openingSalePrice, openingInventory.stock());
-        return response;
-    }
-
-    private Store getActiveStore(Integer userId) {
-        return storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(userId, SeasonStatus.IN_PROGRESS)
-                .orElseThrow(() -> new BaseException(ErrorCode.RESOURCE_NOT_FOUND));
-    }
-
-    private int resolveCurrentDay(Season season, SeasonTimePoint seasonTimePoint) {
-        Integer currentDay = seasonTimePoint.currentDay();
-        if (currentDay == null || currentDay < 1 || currentDay > season.getTotalDays()) {
-            throw new BaseException(ErrorCode.INVALID_INPUT_VALUE, "Current season day is out of range.");
-        }
-        return currentDay;
-    }
-
-    private void validatePlayableDay(Store store, int day) {
-        int playableFromDay = store.getPlayableFromDay() == null ? 1 : store.getPlayableFromDay();
-        if (day < playableFromDay) {
-            throw new BaseException(
-                    ErrorCode.INVALID_INPUT_VALUE,
-                    "This store can join from day %d.".formatted(playableFromDay)
-            );
-        }
-    }
-
-    private void validateStartPhase(SeasonPhase phase) {
-        if (phase != SeasonPhase.DAY_PREPARING) {
-            throw new BaseException(ErrorCode.INVALID_INPUT_VALUE, "The day can only be started during the preparing phase.");
-        }
+        return new DayStartBuild(response, openingState, openingSalePrice, openingInventory.stock());
     }
 
     private void writeInitialState(
@@ -219,8 +289,8 @@ public class GameDayStartService {
             int day,
             OpeningState openingState,
             GameDayStartResponse response,
-            SeasonTimePoint seasonTimePoint,
-            LocalDateTime now,
+            LocalDateTime startedAt,
+            LocalDateTime lastCalculatedAt,
             int openingSalePrice,
             int openingStock
     ) {
@@ -229,9 +299,6 @@ public class GameDayStartService {
                 store.getPurchaseSeed(),
                 store.getPurchaseCursor()
         );
-        LocalDateTime startedAt = seasonTimePoint.phaseStartAt() == null
-                ? LocalDateTime.now(clock)
-                : seasonTimePoint.phaseStartAt();
         gameDayStoreStateRedisRepository.save(
                 store.getId(),
                 day,
@@ -257,7 +324,7 @@ public class GameDayStartService {
                         0L,
                         (long) openingState.initialBalance(),
                         openingStock,
-                        now
+                        lastCalculatedAt
                 )
         );
     }
@@ -336,6 +403,14 @@ public class GameDayStartService {
     private record FestivalSummary(
             String name,
             BigDecimal populationMultiplier
+    ) {
+    }
+
+    private record DayStartBuild(
+            GameDayStartResponse response,
+            OpeningState openingState,
+            int openingSalePrice,
+            int openingStock
     ) {
     }
 }

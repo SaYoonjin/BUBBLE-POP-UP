@@ -222,14 +222,14 @@ class SecurityConfigTests {
                         null
                 ));
 
-        mockMvc.perform(post("/game/day/start")
+        mockMvc.perform(get("/game/day/start")
                         .with(jwt().jwt(jwt -> jwt.subject("1"))))
                 .andExpect(status().isOk());
     }
 
     @Test
     void startDayRejectsUnauthenticatedRequest() throws Exception {
-        mockMvc.perform(post("/game/day/start"))
+        mockMvc.perform(get("/game/day/start"))
                 .andExpect(status().isUnauthorized());
     }
 
