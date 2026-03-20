@@ -26,6 +26,7 @@ class GameDayReportResponseTests {
                 45,
                 0,
                 new BigDecimal("1.50"),
+                new BigDecimal("0.90"),
                 new GameDayReportResponse.DailyRevenue(1000L, 1000L, 1000L, 1000L, 1000L, 1000L, null),
                 new GameDayReportResponse.TomorrowWeather("CLEAR"),
                 true,
@@ -37,6 +38,9 @@ class GameDayReportResponseTests {
         assertThat(json.has("capture_rate")).isTrue();
         assertThat(json.has("captureRate")).isFalse();
         assertThat(json.get("capture_rate").decimalValue()).isEqualByComparingTo("1.50");
+        assertThat(json.has("change_capture_rate")).isTrue();
+        assertThat(json.has("changeCaptureRate")).isFalse();
+        assertThat(json.get("change_capture_rate").decimalValue()).isEqualByComparingTo("0.90");
         assertThat(json.get("storeName").asText()).isEqualTo("Yoonjin Cookie");
         assertThat(json.get("dailyRevenue").get("first").longValue()).isEqualTo(1000L);
         assertThat(json.get("dailyRevenue").get("seventh").isNull()).isTrue();
