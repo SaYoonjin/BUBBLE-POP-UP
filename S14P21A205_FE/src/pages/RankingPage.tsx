@@ -43,7 +43,7 @@ export default function RankingPage() {
 
   const podiumEntries = data.rankings
     .filter((r) => r.rank != null && r.rank <= 3)
-    .map((r) => ({ ...r, isMe: myUserIds.has(r.userId) }));
+    .map((r) => ({ ...r, rank: r.rank as number, isMe: myUserIds.has(r.userId) }));
 
   const listEntries = data.rankings
     .filter((r) => r.rank != null && r.rank >= 4)
