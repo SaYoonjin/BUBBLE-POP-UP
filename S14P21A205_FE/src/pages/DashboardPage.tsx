@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { getCurrentSeasonTopRankings, getGameWaitingStatus, type GameWaitingResponse } from "../api/game";
+import { getCurrentSeasonTopRankings, getGameWaitingStatus, getSeasonTime, type GameWaitingResponse } from "../api/game";
 import { getShopItems, type ShopItemResponse } from "../api/shop";
+import { getStore } from "../api/store";
 import { getUserPoints } from "../api/user";
+import { phaseToRoute, type SeasonPhase } from "../constants/gameTime";
 import AnimatedNumber from "../components/common/AnimatedNumber";
 import AppHeader from "../components/common/AppHeader";
 import BankruptWarning from "../components/common/BankruptWarning";
@@ -278,6 +280,7 @@ export default function DashboardPage() {
   const [currentSeasonNumber, setCurrentSeasonNumber] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [gameReturnPath, setGameReturnPath] = useState<string | null>(null);
 
   const routeState = useMemo(
     () => parseDashboardRouteState(location.state),
@@ -408,6 +411,20 @@ export default function DashboardPage() {
 
       setLoadError(errors[0] ?? null);
       setIsLoading(false);
+
+      // 게임 참여 중이면 돌아가기 경로 계산
+      try {
+        await getStore(); // 성공하면 참여 중
+        const timeData = await getSeasonTime();
+        const phase = timeData.seasonPhase as SeasonPhase;
+        const day = timeData.currentDay;
+        const path = phaseToRoute(phase, day);
+        if (path && path !== "/") {
+          setGameReturnPath(path);
+        }
+      } catch {
+        // getStore 실패 = 미참여 → 무시
+      }
     }
 
     void loadDashboard();
@@ -517,6 +534,16 @@ export default function DashboardPage() {
 
           <div className="flex flex-col gap-6">
             <SeasonCTA {...seasonCard} />
+
+            {gameReturnPath && (
+              <button
+                onClick={() => navigate(gameReturnPath)}
+                className="w-full flex items-center justify-center gap-2 rounded-2xl bg-primary px-6 py-4 text-white font-bold shadow-lg hover:bg-primary-dark transition-all hover:-translate-y-0.5"
+              >
+                <span className="material-symbols-outlined text-xl">sports_esports</span>
+                게임으로 돌아가기
+              </button>
+            )}
 
             {showMidSeasonNotice && (
               <div className="rounded-[20px] border border-amber-200 bg-amber-50/90 p-5 shadow-soft">
