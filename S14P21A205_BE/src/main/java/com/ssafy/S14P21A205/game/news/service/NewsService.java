@@ -52,11 +52,6 @@ public class NewsService {
      * DB 저장은 NewsDataSaver를 통해 별도 트랜잭션으로 처리.
      */
     public void generateSeasonNews(Long seasonId) {
-        if (newsReportRepository.existsBySeasonId(seasonId)) {
-            log.info("News already generated for season {}", seasonId);
-            return;
-        }
-
         Season season = seasonRepository.findById(seasonId)
                 .orElseThrow(() -> new BaseException(ErrorCode.SEASON_NOT_FOUND));
         int totalDays = season.getTotalDays();
