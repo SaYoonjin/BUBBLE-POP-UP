@@ -40,6 +40,32 @@ export interface CurrentSeasonTopRankingsResponse {
   refreshedAt: string;
 }
 
+export interface CurrentSeasonRankingItem {
+  rank: number | null;
+  userId: number;
+  nickname: string;
+  storeName: string;
+  locationName: string;
+  menuName: string;
+  roi: number;
+  totalRevenue: number;
+  rewardPoints: number;
+  isBankrupt: boolean;
+}
+
+export interface CurrentSeasonFinalRankingsResponse {
+  seasonId: number;
+  rankings: CurrentSeasonRankingItem[];
+  myRankings: CurrentSeasonRankingItem[];
+}
+
+export async function getCurrentSeasonFinalRankings() {
+  const { data } = await client.get<CurrentSeasonFinalRankingsResponse>(
+    "/api/game/seasons/current/rankings/final",
+  );
+  return data;
+}
+
 export async function getGameWaitingStatus() {
   const { data } = await client.get<GameWaitingResponse>("/api/game/waiting");
   return data;
