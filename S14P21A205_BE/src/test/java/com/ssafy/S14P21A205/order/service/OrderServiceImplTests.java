@@ -10,6 +10,7 @@ import com.ssafy.S14P21A205.exception.BaseException;
 import com.ssafy.S14P21A205.exception.ErrorCode;
 import com.ssafy.S14P21A205.game.day.policy.StoreRankingPolicy;
 import com.ssafy.S14P21A205.game.day.resolver.NewsRankingResolver;
+import com.ssafy.S14P21A205.game.day.service.GameDayStartService;
 import com.ssafy.S14P21A205.game.day.state.repository.GameDayStoreStateRedisRepository;
 import com.ssafy.S14P21A205.game.season.entity.Season;
 import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
@@ -66,6 +67,9 @@ class OrderServiceImplTests {
     @Mock
     private NewsRankingResolver newsRankingResolver;
 
+    @Mock
+    private GameDayStartService gameDayStartService;
+
     private OrderServiceImpl orderService;
 
     @BeforeEach
@@ -79,8 +83,12 @@ class OrderServiceImplTests {
                 itemUserRepository,
                 new StoreRankingPolicy(),
                 newsRankingResolver,
+                gameDayStartService,
                 Clock.fixed(Instant.parse("2026-03-17T01:00:00Z"), ZoneId.of("Asia/Seoul"))
         );
+        org.mockito.Mockito.lenient()
+                .when(gameDayStartService.synchronizeCurrentDayState(any(), any(), any()))
+                .thenReturn(Optional.empty());
     }
 
     @Test
@@ -90,7 +98,6 @@ class OrderServiceImplTests {
 
         when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
                 .thenReturn(Optional.of(store));
-        when(gameDayStoreStateRedisRepository.exists(15L, 1)).thenReturn(false);
         when(orderRepository.findDailyStartOrder(15L, 1)).thenReturn(Optional.empty());
         when(menuRepository.findById(7L)).thenReturn(Optional.of(menu));
         when(storeRepository.findBySeason_IdOrderByIdAsc(9L)).thenReturn(List.of(store));
@@ -110,6 +117,7 @@ class OrderServiceImplTests {
 
         ArgumentCaptor<Order> orderCaptor = ArgumentCaptor.forClass(Order.class);
         verify(orderRepository).save(orderCaptor.capture());
+        verify(gameDayStartService).synchronizeCurrentDayState(any(), any(), any());
         assertThat(orderCaptor.getValue().getSalePrice()).isEqualTo(7_000);
         assertThat(orderCaptor.getValue().getTotalCost()).isEqualTo(150_000);
         assertThat(response.orderId()).isEqualTo(101L);
@@ -124,7 +132,6 @@ class OrderServiceImplTests {
 
         when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
                 .thenReturn(Optional.of(store));
-        when(gameDayStoreStateRedisRepository.exists(15L, 1)).thenReturn(false);
         when(orderRepository.findDailyStartOrder(15L, 1)).thenReturn(Optional.empty());
         when(menuRepository.findById(7L)).thenReturn(Optional.of(menu));
         when(storeRepository.findBySeason_IdOrderByIdAsc(9L)).thenReturn(List.of(store));
