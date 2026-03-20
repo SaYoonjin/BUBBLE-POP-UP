@@ -528,6 +528,7 @@ export default function DashboardPage() {
               groups={itemGroups}
               selectedIds={effectiveSelectedIds}
               onToggle={handleToggle}
+              availablePoints={displayedPoints}
               isLoading={isLoading && shopItems.length === 0}
             />
           </div>
