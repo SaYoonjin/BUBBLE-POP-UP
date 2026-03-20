@@ -15,10 +15,11 @@ import PromotionModal, {
   type PromotionOption,
 } from "../components/play/modals/PromotionModal";
 import ShareModal from "../components/play/modals/ShareModal";
-import MoveModal from "../components/play/modals/MoveModal";
+import MoveModal, { type MoveRegion } from "../components/play/modals/MoveModal";
 import {
   getPromotionPrice,
   postDiscount,
+  postDonation,
   postEmergencyOrder,
   postPromotion,
   type PromotionType,
@@ -30,7 +31,14 @@ import {
   type GameTrafficStatus,
 } from "../api/game";
 import { getCurrentOrder, type CurrentOrderResponse } from "../api/order";
-import { getStoreMenus, type StoreMenuResponse } from "../api/store";
+import {
+  getLocationList,
+  getStore,
+  getStoreMenus,
+  updateStoreLocation,
+  type LocationItem,
+  type StoreMenuResponse,
+} from "../api/store";
 import useBrandName from "../hooks/useBrandName";
 import { useUserStore } from "../stores/useUserStore";
 import { normalizeDiscountMultiplier } from "../utils/dashboardItems";
@@ -187,6 +195,32 @@ function isPromotionUsed(actionStatus: GameStateResponse["actionStatus"]) {
   );
 }
 
+const LOCATION_ICON_MAP: Record<string, string> = {
+  홍대: "🎨",
+  성수: "🧋",
+  명동: "🛍️",
+  이태원: "🌃",
+  건대: "🎓",
+  강남: "🏙️",
+  여의도: "🏢",
+  사의동: "🍽️",
+};
+
+function getMoveCost(rent: number) {
+  return Math.round(rent * 7 * 0.1);
+}
+
+function mapLocationToMoveRegion(location: LocationItem): MoveRegion {
+  return {
+    id: location.locationId,
+    name: location.locationName,
+    rent: location.rent,
+    moveCost: getMoveCost(location.rent),
+    congestionLabel: "연동 예정",
+    icon: LOCATION_ICON_MAP[location.locationName] ?? "📍",
+  };
+}
+
 function resolveMenuEmoji(menuId: number, menuName: string) {
   return MENU_EMOJI_MAP[menuId] ?? MENU_EMOJI_BY_NAME[menuName.trim()] ?? "🍽️";
 }
@@ -294,8 +328,10 @@ function PlayPageSession({
   const [balance, setBalance] = useState(MOCK.balance);
   const [stock, setStock] = useState(MOCK.stock);
   const [guests, setGuests] = useState(MOCK.guests);
+  const [currentLocationName, setCurrentLocationName] = useState(MOCK.location);
   const [currentOrder, setCurrentOrder] = useState<CurrentOrderResponse | null>(null);
   const [menuItems, setMenuItems] = useState<EmergencyMenuItem[]>([]);
+  const [moveRegions, setMoveRegions] = useState<MoveRegion[]>([]);
   const [promotionOptions, setPromotionOptions] = useState<PromotionOption[]>(() =>
     buildPromotionOptions(),
   );
@@ -303,6 +339,8 @@ function PlayPageSession({
   const [emergencyArriveAt, setEmergencyArriveAt] = useState<string | null>(null);
   const [isEmergencyDataLoading, setIsEmergencyDataLoading] = useState(true);
   const [emergencyDataError, setEmergencyDataError] = useState<string | null>(null);
+  const [isMoveDataLoading, setIsMoveDataLoading] = useState(true);
+  const [moveDataError, setMoveDataError] = useState<string | null>(null);
   const playEndTimestampMs = phaseEndTimestamp;
   const [nowMs, setNowMs] = useState(() => Date.now());
   const hasDeadlineAlertRef = useRef(false);
@@ -323,7 +361,7 @@ function PlayPageSession({
   const discountMinimumPrice = currentOrder?.costPrice ?? discountCurrentPrice;
 
   const syncPersistentActionState = (
-    action: Extract<ActionType, "discount" | "promotion">,
+    action: Extract<ActionType, "discount" | "promotion" | "share">,
     isUsed: boolean,
   ) => {
     setUsedActions((prev) => {
@@ -359,6 +397,10 @@ function PlayPageSession({
     syncPersistentActionState("promotion", promotionUsed);
   };
 
+  const syncShareActionState = (donationUsed: boolean) => {
+    syncPersistentActionState("share", donationUsed);
+  };
+
   const applyGameState = (state: GameStateResponse) => {
     setBalance(state.cash);
     setStock(state.inventory.totalStock);
@@ -370,6 +412,7 @@ function PlayPageSession({
     );
     syncDiscountActionState(state.actionStatus.discountUsed);
     syncPromotionActionState(isPromotionUsed(state.actionStatus));
+    syncShareActionState(state.actionStatus.donationUsed);
   };
 
   const rankings = useMemo(
@@ -392,6 +435,8 @@ function PlayPageSession({
     const loadEmergencyOrderData = async () => {
       setIsEmergencyDataLoading(true);
       setEmergencyDataError(null);
+      setIsMoveDataLoading(true);
+      setMoveDataError(null);
 
       let startErrorMessage: string | null = null;
 
@@ -401,11 +446,20 @@ function PlayPageSession({
         startErrorMessage = getErrorMessage(error, "영업 상태를 준비하지 못했습니다.");
       }
 
-      const [stateResult, orderResult, menuResult, promotionPriceResult] = await Promise.allSettled([
+      const [
+        stateResult,
+        orderResult,
+        menuResult,
+        promotionPriceResult,
+        storeResult,
+        locationResult,
+      ] = await Promise.allSettled([
         getGameDayState(),
         getCurrentOrder(),
         getStoreMenus(),
         getPromotionPrice(),
+        getStore(),
+        getLocationList(),
       ]);
 
       if (!isActive) {
@@ -419,6 +473,7 @@ function PlayPageSession({
         setEmergencyArriveAt(null);
         syncDiscountActionState(false);
         syncPromotionActionState(false);
+        syncShareActionState(false);
       }
 
       if (orderResult.status === "fulfilled") {
@@ -446,6 +501,19 @@ function PlayPageSession({
         setPromotionOptions(buildPromotionOptions());
       }
 
+      const nextCurrentLocationName =
+        storeResult.status === "fulfilled" ? storeResult.value.location : currentLocationName;
+
+      if (storeResult.status === "fulfilled") {
+        setCurrentLocationName(storeResult.value.location);
+      }
+
+      if (locationResult.status === "fulfilled") {
+        setMoveRegions(locationResult.value.locations.map(mapLocationToMoveRegion));
+      } else {
+        setMoveRegions([]);
+      }
+
       const nextError =
         stateResult.status === "rejected"
           ? getErrorMessage(
@@ -460,6 +528,20 @@ function PlayPageSession({
 
       setEmergencyDataError(nextError);
       setIsEmergencyDataLoading(false);
+
+      const nextMoveError =
+        storeResult.status === "rejected"
+          ? getErrorMessage(storeResult.reason, "현재 매장 위치를 불러오지 못했습니다.")
+          : locationResult.status === "rejected"
+            ? getErrorMessage(locationResult.reason, "지역 목록을 불러오지 못했습니다.")
+            : null;
+
+      if (storeResult.status !== "fulfilled") {
+        setCurrentLocationName(nextCurrentLocationName);
+      }
+
+      setMoveDataError(nextMoveError);
+      setIsMoveDataLoading(false);
     };
 
     void loadEmergencyOrderData();
@@ -582,7 +664,7 @@ function PlayPageSession({
   return (
     <div className="selection:bg-primary selection:text-white flex h-screen w-full flex-col overflow-hidden font-display text-slate-900">
       <PlayHeader
-        location={MOCK.location}
+        location={currentLocationName}
         storeName={playStoreName}
         menuName={currentMenuName}
         day={dayNumber}
@@ -720,9 +802,20 @@ function PlayPageSession({
         <ShareModal
           currentStock={stock}
           onClose={closeModal}
-          onSubmit={(quantity) => {
+          onSubmit={async (quantity) => {
+            const response = await postDonation(quantity);
+
+            syncShareActionState(true);
+
+            const [stateSyncResult] = await Promise.allSettled([getGameDayState()]);
+            const hasSyncedState = stateSyncResult.status === "fulfilled";
+
+            if (hasSyncedState) {
+              applyGameState(stateSyncResult.value);
+            }
+
             completeAction("share", {
-              stockDelta: -quantity,
+              stockDelta: hasSyncedState ? undefined : -response.quantity,
               alert: {
                 title: "나눔 이벤트 진행",
                 description: `재고 ${quantity}개 나눔을 시작했습니다.`,
@@ -735,11 +828,33 @@ function PlayPageSession({
       {activeModal === "move" && (
         <MoveModal
           currentBalance={balance}
-          currentRegionName={MOCK.location}
+          currentRegionName={currentLocationName}
+          regions={moveRegions}
+          isInitializing={isMoveDataLoading}
+          initializationError={moveDataError}
           onClose={closeModal}
-          onSubmit={({ regionName, cost }) => {
+          onSubmit={async ({ regionId, regionName }) => {
+            const response = await updateStoreLocation(regionId);
+
+            const [stateSyncResult, storeSyncResult] = await Promise.allSettled([
+              getGameDayState(),
+              getStore(),
+            ]);
+            const hasSyncedState = stateSyncResult.status === "fulfilled";
+
+            if (hasSyncedState) {
+              applyGameState(stateSyncResult.value);
+            } else {
+              setBalance(response.balance);
+            }
+
+            if (storeSyncResult.status === "fulfilled") {
+              setCurrentLocationName(storeSyncResult.value.location);
+            } else {
+              setCurrentLocationName(regionName);
+            }
+
             completeAction("move", {
-              cost,
               alert: {
                 title: "영업 지역 이전 예약",
                 description: `${regionName}으로 다음 영업부터 이동합니다.`,
