@@ -20,6 +20,8 @@ public record GameStateResponse(
     public record CustomerTick(
             Integer tick,
             Integer customerCount,
+            Integer unitPrice,
+            List<Integer> soldUnits,
             Integer baseFloatingPopulation,
             BigDecimal populationGrowthRate,
             Integer currentFloatingPopulation,
