@@ -89,21 +89,29 @@ export async function getCurrentSeasonTopRankings() {
 export interface GameDayReportResponse {
   seasonId: number;
   day: number;
+  storeName: string;
   locationName: string;
   menuName: string;
   revenue: number;
   totalCost: number;
-  netProfit: number;
   visitors: number;
   salesCount: number;
   stockRemaining: number;
   stockDisposedCount: number;
-  reputationScore: number;
+  capture_rate: number;
   reputationChange: number;
+  dailyRevenue: {
+    first: number;
+    second: number;
+    third: number;
+    fourth: number;
+    fifth: number;
+    sixth: number;
+    seventh: number;
+  } | null;
   tomorrowWeather: { condition: string } | null;
   isNextDayOrderDay: boolean | null;
   consecutiveDeficitDays: number;
-  isBankrupt: boolean;
 }
 
 export async function getDayReport(day: number) {
