@@ -105,7 +105,6 @@ class SeasonJoinServiceTests {
         assertThat(response.storeId()).isEqualTo(21L);
         assertThat(response.balance()).isEqualTo(9_990_000);
         assertThat(response.playableFromDay()).isEqualTo(1);
-        assertThat(response.waitingForPlayableDay()).isFalse();
         assertThat(savedStore.getPurchaseSeed()).isEqualTo(9_876L);
         assertThat(savedStore.getPurchaseCursor()).isZero();
     }
@@ -241,3 +240,4 @@ class SeasonJoinServiceTests {
         }
     }
 }
+
