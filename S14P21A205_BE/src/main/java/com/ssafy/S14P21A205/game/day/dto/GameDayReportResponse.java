@@ -1,7 +1,5 @@
 package com.ssafy.S14P21A205.game.day.dto;
 
-import java.math.BigDecimal;
-
 public record GameDayReportResponse(
         Long seasonId,
         Integer day,
@@ -14,8 +12,6 @@ public record GameDayReportResponse(
         Integer salesCount,
         Integer stockRemaining,
         Integer stockDisposedCount,
-        BigDecimal reputationScore,
-        BigDecimal reputationChange,
         TomorrowWeather tomorrowWeather,
         Boolean isNextDayOrderDay,
         Integer consecutiveDeficitDays,

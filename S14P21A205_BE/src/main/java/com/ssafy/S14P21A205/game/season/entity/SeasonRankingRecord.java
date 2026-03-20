@@ -10,7 +10,6 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -34,9 +33,6 @@ public class SeasonRankingRecord {
 
     @Column(name = "final_rank", nullable = false)
     private Integer finalRank;
-
-    @Column(name = "reputation_score", nullable = false, precision = 3, scale = 1)
-    private BigDecimal reputationScore;
 
     @Column(name = "total_revenue", nullable = false)
     private Integer totalRevenue;
@@ -69,7 +65,6 @@ public class SeasonRankingRecord {
     private SeasonRankingRecord(
             Store store,
             Integer finalRank,
-            BigDecimal reputationScore,
             Integer totalRevenue,
             Integer totalCost,
             Integer totalNetProfit,
@@ -81,7 +76,6 @@ public class SeasonRankingRecord {
     ) {
         this.store = store;
         this.finalRank = finalRank;
-        this.reputationScore = reputationScore;
         this.totalRevenue = totalRevenue;
         this.totalCost = totalCost;
         this.totalNetProfit = totalNetProfit;
@@ -95,7 +89,6 @@ public class SeasonRankingRecord {
     public static SeasonRankingRecord create(
             Store store,
             Integer finalRank,
-            BigDecimal reputationScore,
             Integer totalRevenue,
             Integer totalCost,
             Integer totalNetProfit,
@@ -108,7 +101,6 @@ public class SeasonRankingRecord {
         return new SeasonRankingRecord(
                 store,
                 finalRank,
-                reputationScore,
                 totalRevenue,
                 totalCost,
                 totalNetProfit,

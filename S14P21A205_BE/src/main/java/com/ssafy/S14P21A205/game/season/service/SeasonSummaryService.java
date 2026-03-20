@@ -62,7 +62,6 @@ public class SeasonSummaryService {
                         store.getMenu().getMenuName()
                 ),
                 new SeasonSummaryResponse.BusinessRecord(
-                        toOneDecimal(record.getReputationScore()),
                         valueOf(record.getTotalRevenue()),
                         valueOf(record.getTotalCost()),
                         valueOf(record.getTotalNetProfit()),
