@@ -5,8 +5,8 @@ import com.ssafy.S14P21A205.exception.ErrorCode;
 import com.ssafy.S14P21A205.game.day.dto.GameDayReportResponse;
 import com.ssafy.S14P21A205.game.day.generator.PurchaseListGenerator;
 import com.ssafy.S14P21A205.game.day.policy.BankruptcyPolicy;
+import com.ssafy.S14P21A205.game.day.policy.CaptureRatePolicy;
 import com.ssafy.S14P21A205.game.day.policy.ProfitPolicy;
-import com.ssafy.S14P21A205.game.day.policy.ReputationPolicy;
 import com.ssafy.S14P21A205.game.day.state.GameDayLiveState;
 import com.ssafy.S14P21A205.game.day.state.repository.GameDayStoreStateRedisRepository;
 import com.ssafy.S14P21A205.game.environment.entity.WeatherLocation;
@@ -20,12 +20,12 @@ import com.ssafy.S14P21A205.game.time.model.DayWindow;
 import com.ssafy.S14P21A205.game.time.model.SeasonPhase;
 import com.ssafy.S14P21A205.game.time.model.SeasonTimePoint;
 import com.ssafy.S14P21A205.game.time.service.SeasonTimelineService;
+import com.ssafy.S14P21A205.shop.service.ShopService;
 import com.ssafy.S14P21A205.store.entity.Store;
 import com.ssafy.S14P21A205.store.repository.StoreRepository;
 import com.ssafy.S14P21A205.store.service.StoreLocationTransitionSupport;
 import com.ssafy.S14P21A205.user.entity.User;
 import com.ssafy.S14P21A205.user.service.UserService;
-import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.Optional;
@@ -42,7 +42,6 @@ public class GameDayReportService {
 
     private static final int MAX_SUPPORTED_DAY = 7;
     private static final int STOCK_DISPOSED_COUNT = 0;
-    private static final BigDecimal ZERO_CAPTURE_RATE = new BigDecimal("0.00");
     private static final Set<Integer> REGULAR_ORDER_DAYS = Set.of(1, 3, 5, 7);
     private static final SeasonTimelineService SEASON_TIMELINE_SERVICE = new SeasonTimelineService();
     private static final StoreLocationTransitionSupport STORE_LOCATION_TRANSITION_SUPPORT = new StoreLocationTransitionSupport();
@@ -54,10 +53,11 @@ public class GameDayReportService {
     private final WeatherDayRedisRepository weatherDayRedisRepository;
     private final WeatherLocationRepository weatherLocationRepository;
     private final ProfitPolicy profitPolicy;
-    private final ReputationPolicy reputationPolicy;
+    private final CaptureRatePolicy captureRatePolicy;
     private final BankruptcyPolicy bankruptcyPolicy;
     private final GameDayStateService gameDayStateService;
     private final PurchaseListGenerator purchaseListGenerator;
+    private final ShopService shopService;
     private final Clock clock;
 
     @Transactional
@@ -132,11 +132,14 @@ public class GameDayReportService {
                 bankruptcyResult.consecutiveDeficitDays(),
                 bankruptcyResult.bankrupt(),
                 safeToInt(valueOf(state.balance())),
-                reputationPolicy.normalizeCaptureRate(reputationPolicy.resolveCaptureRate(state))
+                resolveCaptureRate(state)
         ));
         store.changePurchaseCursor(
                 purchaseListGenerator.advanceCursor(store.getPurchaseCursor(), defaultInt(state.purchaseCursor()))
         );
+        if (bankruptcyResult.bankrupt()) {
+            shopService.resetPurchasedItems(store.getUser().getId());
+        }
     }
 
     public GameDayReportResponse getDayReport(Authentication authentication, int day) {
@@ -146,14 +149,6 @@ public class GameDayReportService {
 
         DailyReport report = dailyReportRepository.findByStoreIdAndDay(store.getId(), day)
                 .orElseThrow(() -> new BaseException(ErrorCode.REPORT_NOT_FOUND));
-
-        BigDecimal previousCaptureRate = day == 1
-                ? ZERO_CAPTURE_RATE
-                : dailyReportRepository.findByStoreIdAndDay(store.getId(), day - 1)
-                .map(DailyReport::getCaptureRate)
-                .map(reputationPolicy::normalizeCaptureRate)
-                .orElse(ZERO_CAPTURE_RATE);
-        BigDecimal captureRate = reputationPolicy.normalizeCaptureRate(report.getCaptureRate());
 
         return new GameDayReportResponse(
                 report.getStore().getSeason().getId(),
@@ -167,8 +162,6 @@ public class GameDayReportService {
                 defaultInt(report.getSalesCount()),
                 defaultInt(report.getStockRemaining()),
                 STOCK_DISPOSED_COUNT,
-                reputationPolicy.toReputationScore(captureRate),
-                reputationPolicy.toReputationChange(captureRate.subtract(previousCaptureRate)),
                 resolveTomorrowWeather(
                         store.getSeason().getId(),
                         resolveTomorrowLocationId(store, report.getDay()),
@@ -287,6 +280,16 @@ public class GameDayReportService {
             return report.getMenuName();
         }
         return report.getStore().getMenu().getMenuName();
+    }
+
+    private java.math.BigDecimal resolveCaptureRate(GameDayLiveState state) {
+        if (state.captureRate() != null) {
+            return captureRatePolicy.normalizeCaptureRate(state.captureRate());
+        }
+        if (state.startResponse() != null && state.startResponse().captureRate() != null) {
+            return captureRatePolicy.normalizeCaptureRate(state.startResponse().captureRate());
+        }
+        return captureRatePolicy.normalizeCaptureRate(java.math.BigDecimal.ZERO);
     }
 
     private int safeToInt(long value) {

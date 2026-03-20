@@ -1,13 +1,13 @@
 package com.ssafy.S14P21A205.game.season.service;
 
 import com.ssafy.S14P21A205.game.day.policy.ProfitPolicy;
-import com.ssafy.S14P21A205.game.day.policy.ReputationPolicy;
 import com.ssafy.S14P21A205.game.day.service.GameDayReportService;
 import com.ssafy.S14P21A205.game.season.entity.DailyReport;
 import com.ssafy.S14P21A205.game.season.entity.Season;
 import com.ssafy.S14P21A205.game.season.entity.SeasonRankingRecord;
 import com.ssafy.S14P21A205.game.season.repository.DailyReportRepository;
 import com.ssafy.S14P21A205.game.season.repository.SeasonRankingRecordRepository;
+import com.ssafy.S14P21A205.shop.service.ShopService;
 import com.ssafy.S14P21A205.store.entity.Store;
 import com.ssafy.S14P21A205.store.repository.StoreRepository;
 import com.ssafy.S14P21A205.user.entity.User;
@@ -32,15 +32,14 @@ public class SeasonFinalRankingService {
 
     private static final int DEFAULT_TOTAL_DAYS = 7;
     private static final int UNRANKED_FINAL_RANK = 0;
-    private static final BigDecimal ZERO_REPUTATION_SCORE = new BigDecimal("0.0");
 
     private final StoreRepository storeRepository;
     private final DailyReportRepository dailyReportRepository;
     private final SeasonRankingRecordRepository seasonRankingRecordRepository;
     private final GameDayReportService gameDayReportService;
     private final ProfitPolicy profitPolicy;
-    private final ReputationPolicy reputationPolicy;
     private final UserRepository userRepository;
+    private final ShopService shopService;
 
     public void saveFinalRankings(Season season) {
         if (season == null || season.getId() == null) {
@@ -82,6 +81,7 @@ public class SeasonFinalRankingService {
 
         seasonRankingRecordRepository.saveAll(records);
         grantRewardPoints(records);
+        resetPurchasedItems(records);
         log.info(
                 "Final season rankings saved. seasonId={} savedCount={} lastSavedRank={} topSummary={}",
                 season.getId(),
@@ -100,7 +100,6 @@ public class SeasonFinalRankingService {
         for (DailyReport report : reports) {
             Long storeId = report.getStore().getId();
             AggregatedStats current = aggregatedStatsByStoreId.getOrDefault(storeId, AggregatedStats.empty());
-            BigDecimal captureRate = reputationPolicy.normalizeCaptureRate(report.getCaptureRate());
             aggregatedStatsByStoreId.put(
                     storeId,
                     new AggregatedStats(
@@ -109,7 +108,6 @@ public class SeasonFinalRankingService {
                             current.totalNetProfit() + valueOf(report.getNetProfit()),
                             current.totalVisitors() + valueOf(report.getVisitors()),
                             current.daysPlayed() + 1,
-                            reputationPolicy.toReputationScore(captureRate),
                             Boolean.TRUE.equals(report.getIsBankrupt())
                     )
             );
@@ -160,7 +158,6 @@ public class SeasonFinalRankingService {
             records.add(SeasonRankingRecord.create(
                     candidate.store(),
                     currentRank,
-                    stats.reputationScore(),
                     safeToInt(stats.totalRevenue()),
                     safeToInt(stats.totalCost()),
                     safeToInt(stats.totalNetProfit()),
@@ -177,7 +174,6 @@ public class SeasonFinalRankingService {
             records.add(SeasonRankingRecord.create(
                     candidate.store(),
                     UNRANKED_FINAL_RANK,
-                    stats.reputationScore(),
                     safeToInt(stats.totalRevenue()),
                     safeToInt(stats.totalCost()),
                     safeToInt(stats.totalNetProfit()),
@@ -208,6 +204,13 @@ public class SeasonFinalRankingService {
                     .orElseThrow(() -> new IllegalStateException("User not found for reward grant."));
             user.addPoints(entry.getValue());
         }
+    }
+
+    private void resetPurchasedItems(List<SeasonRankingRecord> records) {
+        records.stream()
+                .map(record -> record.getStore().getUser().getId())
+                .distinct()
+                .forEach(shopService::resetPurchasedItems);
     }
 
     private String summarize(List<SeasonRankingRecord> records, int limit) {
@@ -265,11 +268,10 @@ public class SeasonFinalRankingService {
             long totalNetProfit,
             long totalVisitors,
             int daysPlayed,
-            BigDecimal reputationScore,
             boolean bankruptcy
     ) {
         private static AggregatedStats empty() {
-            return new AggregatedStats(0L, 0L, 0L, 0L, 0, ZERO_REPUTATION_SCORE, false);
+            return new AggregatedStats(0L, 0L, 0L, 0L, 0, false);
         }
     }
 }
