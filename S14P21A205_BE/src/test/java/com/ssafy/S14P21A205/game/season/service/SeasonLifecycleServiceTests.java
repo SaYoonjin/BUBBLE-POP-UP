@@ -11,6 +11,8 @@ import com.ssafy.S14P21A205.game.day.scheduler.SeasonDayClosingScheduler;
 import com.ssafy.S14P21A205.game.news.repository.NewsReportRepository;
 import com.ssafy.S14P21A205.game.news.service.NewsService;
 import com.ssafy.S14P21A205.game.news.service.SparkNewsDataService;
+import com.ssafy.S14P21A205.game.news.repository.NewsReportRepository;
+import com.ssafy.S14P21A205.game.scheduler.SparkEtlScheduler;
 import com.ssafy.S14P21A205.game.environment.entity.Festival;
 import com.ssafy.S14P21A205.game.environment.entity.Population;
 import com.ssafy.S14P21A205.game.environment.entity.Traffic;

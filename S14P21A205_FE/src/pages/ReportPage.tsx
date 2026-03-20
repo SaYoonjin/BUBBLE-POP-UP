@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useOutletContext, useParams, useNavigate } from "react-router-dom";
+import type { GameGuardContext } from "../router/GameGuard";
 import AppHeader from "../components/common/AppHeader";
 import StatCard from "../components/common/StatCard";
 import Badge from "../components/common/Badge";
@@ -36,6 +37,7 @@ function isStockDisposalDay(day: number) {
 export default function ReportPage() {
   const { day: dayParam } = useParams<{ day: string }>();
   const navigate = useNavigate();
+  const guardContext = useOutletContext<GameGuardContext>();
   const day = Number(dayParam) || 1;
   const { brandName } = useBrandName();
 
@@ -132,9 +134,9 @@ export default function ReportPage() {
             </div>
             <div className="flex flex-col items-end gap-1.5">
               <CountdownTimer
-                initialSeconds={10}
+                endTimestampMs={guardContext.phaseEndTimestamp}
                 label={isBankrupt ? "결과 확인" : "다음날 이동"}
-                onComplete={() => isBankrupt ? setShowBankruptModal(true) : navigate(`/game/${day + 1}/prep`)}
+                onComplete={() => isBankrupt ? setShowBankruptModal(true) : undefined}
                 variant="pill"
               />
               <span className="text-xs text-slate-400 font-medium pr-1">

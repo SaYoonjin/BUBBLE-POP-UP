@@ -93,3 +93,98 @@ export async function getAllDayReports(currentDay: number) {
   );
   return Promise.all(promises);
 }
+
+// --- 영업 중 페이지용 ---
+
+export interface CustomerTick {
+  tick: number;
+  customerCount: number;
+  baseFloatingPopulation: number;
+  populationGrowthRate: number;
+  currentFloatingPopulation: number;
+  regionStoreCount: number;
+  rValue: number;
+}
+
+export interface GameActionStatus {
+  discountUsed: boolean;
+  donationUsed: boolean;
+  influencerUsed: boolean;
+  snsUsed: boolean;
+  leafletUsed: boolean;
+  friendUsed: boolean;
+  emergencyOrderPending: boolean;
+  emergencyOrderArriveAt: string | null;
+}
+
+export interface AppliedEvent {
+  eventType: string;
+  eventName: string;
+  newsTitle: string;
+  appliedAt: string;
+}
+
+export interface GameStateResponse {
+  serverTime: string;
+  seasonId: number;
+  day: number;
+  population: string;
+  lastCalculatedAt: string;
+  cash: number;
+  customerCount: number;
+  customerTick: CustomerTick;
+  inventory: { totalStock: number };
+  actionStatus: GameActionStatus;
+  appliedEvents: AppliedEvent[];
+}
+
+export interface CurrentSeasonTimeResponse {
+  seasonPhase: string;
+  currentDay: number;
+  phaseRemainingSeconds: number;
+  serverTime: string;
+  seasonStartTime: string;
+  gameTime: string | null;
+  tick: number | null;
+  joinEnabled: boolean;
+  joinPlayableFromDay: number | null;
+}
+
+export interface GameDayStartResponse {
+  startTime: string;
+  endTime: string;
+  weatherType: string;
+  weatherMultiplier: number;
+  initialBalance: number;
+  initialStock: number;
+  eventSchedule: Array<{
+    time: string;
+    type: string;
+    newsTitle: string;
+    populationMultiplier: number;
+    balanceChange: number;
+  }>;
+  marketSnapshot: {
+    avgMenuPrice: number;
+    regionStoreCount: number;
+    totalFloatingPopulation: number;
+  };
+}
+
+/** 영업일 시작 */
+export async function startGameDay() {
+  const { data } = await client.post<GameDayStartResponse>("/api/game/day/start");
+  return data;
+}
+
+/** 실시간 게임 상태 조회 */
+export async function getGameDayState() {
+  const { data } = await client.get<GameStateResponse>("/api/game/day/state");
+  return data;
+}
+
+/** 현재 시즌 시간 정보 (타이머 보정용) */
+export async function getSeasonTime() {
+  const { data } = await client.get<CurrentSeasonTimeResponse>("/api/game/seasons/time");
+  return data;
+}

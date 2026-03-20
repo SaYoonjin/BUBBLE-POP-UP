@@ -14,7 +14,6 @@ public record SeasonSummaryResponse(
     }
 
     public record BusinessRecord(
-            Double reputationScore,
             Long totalRevenue,
             Long totalCost,
             Long totalNetProfit,
