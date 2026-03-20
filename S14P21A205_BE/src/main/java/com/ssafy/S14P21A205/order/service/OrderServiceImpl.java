@@ -3,7 +3,7 @@ package com.ssafy.S14P21A205.order.service;
 import com.ssafy.S14P21A205.exception.BaseException;
 import com.ssafy.S14P21A205.exception.ErrorCode;
 import com.ssafy.S14P21A205.game.day.policy.StoreRankingPolicy;
-import com.ssafy.S14P21A205.game.day.resolver.EventEffectResolver;
+import com.ssafy.S14P21A205.game.day.service.GameDayStartService;
 import com.ssafy.S14P21A205.game.day.state.GameDayLiveState;
 import com.ssafy.S14P21A205.game.day.resolver.NewsRankingResolver;
 import com.ssafy.S14P21A205.game.day.state.repository.GameDayStoreStateRedisRepository;
@@ -51,7 +51,7 @@ public class OrderServiceImpl implements OrderService {
     private final ItemUserRepository itemUserRepository;
     private final StoreRankingPolicy marketRankingPolicy;
     private final NewsRankingResolver newsRankingResolver;
-    private final EventEffectResolver eventEffectResolver;
+    private final GameDayStartService gameDayStartService;
     private final Clock clock;
 
     private final SeasonTimelineService seasonTimelineService = new SeasonTimelineService();
@@ -66,13 +66,7 @@ public class OrderServiceImpl implements OrderService {
 
         BigDecimal ingredientDiscountRate = getIngredientDiscountRate(store.getUser().getId());
         int menuTrendRank = resolveMenuEntryRank(store, currentDay, menu, seasonStores);
-        BigDecimal ingredientCostMultiplier = resolveRegularOrderIngredientCostMultiplier(store, currentDay, menu);
-        PricingPolicy pricingPolicy = resolvePricingPolicy(
-                menu,
-                ingredientDiscountRate,
-                ingredientCostMultiplier,
-                menuTrendRank
-        );
+        PricingPolicy pricingPolicy = resolvePricingPolicy(menu, ingredientDiscountRate, menuTrendRank);
         Integer stock = resolveStock(storeId, currentDay);
 
         return CurrentOrderResponse.builder()
@@ -91,13 +85,13 @@ public class OrderServiceImpl implements OrderService {
     public RegularOrderResponse createRegularOrder(Integer userId, RegularOrderRequest request) {
         Store store = getStoreByUserId(userId);
         Long storeId = store.getId();
-        SeasonTimePoint seasonTimePoint = resolveSeasonTimePoint(store);
+        LocalDateTime now = LocalDateTime.now(clock);
+        SeasonTimePoint seasonTimePoint = seasonTimelineService.resolve(store.getSeason(), now);
         int regularOrderDay = resolveRegularOrderDay(store, seasonTimePoint);
 
         validateRegularOrderPhase(seasonTimePoint.phase());
         validateRegularOrderDay(regularOrderDay);
         validateQuantity(request.quantity());
-        validateDayNotStarted(storeId, regularOrderDay);
         validateNoExistingOrder(storeId, regularOrderDay);
 
         Menu menu = getMenuById(request.menuId());
@@ -106,13 +100,7 @@ public class OrderServiceImpl implements OrderService {
 
         BigDecimal discountRate = getIngredientDiscountRate(store.getUser().getId());
         int menuTrendRank = resolveMenuEntryRank(store, regularOrderDay, menu, seasonStores);
-        BigDecimal ingredientCostMultiplier = resolveRegularOrderIngredientCostMultiplier(store, regularOrderDay, menu);
-        PricingPolicy pricingPolicy = resolvePricingPolicy(
-                menu,
-                discountRate,
-                ingredientCostMultiplier,
-                menuTrendRank
-        );
+        PricingPolicy pricingPolicy = resolvePricingPolicy(menu, discountRate, menuTrendRank);
         Integer sellingPrice = resolveSellingPrice(request.price(), sameMenu, store.getPrice(), pricingPolicy);
         validateSellingPrice(sellingPrice, pricingPolicy);
         Integer totalCost = Math.multiplyExact(pricingPolicy.costPrice(), request.quantity());
@@ -130,6 +118,7 @@ public class OrderServiceImpl implements OrderService {
         Order savedOrder = orderRepository.save(
                 Order.create(menu, store, request.quantity(), totalCost, sellingPrice, regularOrderDay)
         );
+        gameDayStartService.synchronizeCurrentDayState(store, now, seasonTimePoint);
 
         return RegularOrderResponse.builder()
                 .orderId(savedOrder.getId())
@@ -162,17 +151,11 @@ public class OrderServiceImpl implements OrderService {
                 .orElse(BigDecimal.ONE);
     }
 
-    private Integer resolveCostPrice(
-            Menu menu,
-            BigDecimal discountRate,
-            BigDecimal ingredientCostMultiplier,
-            int menuTrendRank
-    ) {
+    private Integer resolveCostPrice(Menu menu, BigDecimal discountRate, int menuTrendRank) {
         return marketRankingPolicy.apply(
                 menu.getOriginPrice(),
                 marketRankingPolicy.resolveMenuEntryMultiplier(menuTrendRank),
-                discountRate,
-                ingredientCostMultiplier
+                discountRate
         );
     }
 
@@ -183,13 +166,8 @@ public class OrderServiceImpl implements OrderService {
         );
     }
 
-    private PricingPolicy resolvePricingPolicy(
-            Menu menu,
-            BigDecimal discountRate,
-            BigDecimal ingredientCostMultiplier,
-            int menuTrendRank
-    ) {
-        int costPrice = resolveCostPrice(menu, discountRate, ingredientCostMultiplier, menuTrendRank);
+    private PricingPolicy resolvePricingPolicy(Menu menu, BigDecimal discountRate, int menuTrendRank) {
+        int costPrice = resolveCostPrice(menu, discountRate, menuTrendRank);
         int minimumSellingPrice = resolveMinimumSellingPrice(menu, menuTrendRank);
         int recommendedPrice = BigDecimal.valueOf(minimumSellingPrice)
                 .multiply(RECOMMENDED_PRICE_MULTIPLIER)
@@ -212,17 +190,6 @@ public class OrderServiceImpl implements OrderService {
             return currentStorePrice;
         }
         return pricingPolicy.recommendedPrice();
-    }
-
-    private BigDecimal resolveRegularOrderIngredientCostMultiplier(Store store, int day, Menu menu) {
-        LocalDateTime effectiveAtOpening = seasonTimelineService.day(store.getSeason(), day).businessStart();
-        return eventEffectResolver.resolve(
-                store.getSeason(),
-                day,
-                effectiveAtOpening,
-                store.getLocation().getId(),
-                menu.getId()
-        ).ingredientCostMultiplier();
     }
 
     private void validateSellingPrice(Integer sellingPrice, PricingPolicy pricingPolicy) {
@@ -269,12 +236,6 @@ public class OrderServiceImpl implements OrderService {
 
     private SeasonTimePoint resolveSeasonTimePoint(Store store) {
         return seasonTimelineService.resolve(store.getSeason(), LocalDateTime.now(clock));
-    }
-
-    private void validateDayNotStarted(Long storeId, int day) {
-        if (gameDayStoreStateRedisRepository.exists(storeId, day)) {
-            throw new BaseException(ErrorCode.ORDER_DAY_ALREADY_STARTED);
-        }
     }
 
     private void validateNoExistingOrder(Long storeId, Integer orderedDay) {

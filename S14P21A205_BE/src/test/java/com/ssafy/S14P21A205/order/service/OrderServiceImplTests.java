@@ -9,8 +9,8 @@ import static org.mockito.Mockito.when;
 import com.ssafy.S14P21A205.exception.BaseException;
 import com.ssafy.S14P21A205.exception.ErrorCode;
 import com.ssafy.S14P21A205.game.day.policy.StoreRankingPolicy;
-import com.ssafy.S14P21A205.game.day.resolver.EventEffectResolver;
 import com.ssafy.S14P21A205.game.day.resolver.NewsRankingResolver;
+import com.ssafy.S14P21A205.game.day.service.GameDayStartService;
 import com.ssafy.S14P21A205.game.day.state.repository.GameDayStoreStateRedisRepository;
 import com.ssafy.S14P21A205.game.season.entity.Season;
 import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
@@ -33,7 +33,6 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -69,7 +68,7 @@ class OrderServiceImplTests {
     private NewsRankingResolver newsRankingResolver;
 
     @Mock
-    private EventEffectResolver eventEffectResolver;
+    private GameDayStartService gameDayStartService;
 
     private OrderServiceImpl orderService;
 
@@ -84,9 +83,12 @@ class OrderServiceImplTests {
                 itemUserRepository,
                 new StoreRankingPolicy(),
                 newsRankingResolver,
-                eventEffectResolver,
+                gameDayStartService,
                 Clock.fixed(Instant.parse("2026-03-17T01:00:00Z"), ZoneId.of("Asia/Seoul"))
         );
+        org.mockito.Mockito.lenient()
+                .when(gameDayStartService.synchronizeCurrentDayState(any(), any(), any()))
+                .thenReturn(Optional.empty());
     }
 
     @Test
@@ -96,7 +98,6 @@ class OrderServiceImplTests {
 
         when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
                 .thenReturn(Optional.of(store));
-        when(gameDayStoreStateRedisRepository.exists(15L, 1)).thenReturn(false);
         when(orderRepository.findDailyStartOrder(15L, 1)).thenReturn(Optional.empty());
         when(menuRepository.findById(7L)).thenReturn(Optional.of(menu));
         when(storeRepository.findBySeason_IdOrderByIdAsc(9L)).thenReturn(List.of(store));
@@ -106,8 +107,6 @@ class OrderServiceImplTests {
                 .thenReturn(Optional.of(BigDecimal.ONE));
         when(newsRankingResolver.resolveMenuEntryRank(9L, 1, menu)).thenReturn(null);
         when(newsRankingResolver.resolveAreaEntryRank(9L, 1, store.getLocation())).thenReturn(null);
-        when(eventEffectResolver.resolve(any(), any(Integer.class), any(), any(), any()))
-                .thenReturn(new EventEffectResolver.EventEffect(0L, 0, BigDecimal.ONE, BigDecimal.ONE, Collections.emptyList(), Collections.emptyList()));
         when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> {
             Order saved = invocation.getArgument(0);
             ReflectionTestUtils.setField(saved, "id", 101L);
@@ -118,6 +117,7 @@ class OrderServiceImplTests {
 
         ArgumentCaptor<Order> orderCaptor = ArgumentCaptor.forClass(Order.class);
         verify(orderRepository).save(orderCaptor.capture());
+        verify(gameDayStartService).synchronizeCurrentDayState(any(), any(), any());
         assertThat(orderCaptor.getValue().getSalePrice()).isEqualTo(7_000);
         assertThat(orderCaptor.getValue().getTotalCost()).isEqualTo(150_000);
         assertThat(response.orderId()).isEqualTo(101L);
@@ -132,58 +132,17 @@ class OrderServiceImplTests {
 
         when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
                 .thenReturn(Optional.of(store));
-        when(gameDayStoreStateRedisRepository.exists(15L, 1)).thenReturn(false);
         when(orderRepository.findDailyStartOrder(15L, 1)).thenReturn(Optional.empty());
         when(menuRepository.findById(7L)).thenReturn(Optional.of(menu));
         when(storeRepository.findBySeason_IdOrderByIdAsc(9L)).thenReturn(List.of(store));
         when(itemUserRepository.findPurchasedDiscountRateByUserIdAndCategory(1, ItemCategory.INGREDIENT))
                 .thenReturn(Optional.of(BigDecimal.ONE));
         when(newsRankingResolver.resolveMenuEntryRank(9L, 1, menu)).thenReturn(null);
-        when(eventEffectResolver.resolve(any(), any(Integer.class), any(), any(), any()))
-                .thenReturn(new EventEffectResolver.EventEffect(0L, 0, BigDecimal.ONE, BigDecimal.ONE, Collections.emptyList(), Collections.emptyList()));
 
         assertThatThrownBy(() -> orderService.createRegularOrder(1, new RegularOrderRequest(7, 50, 2_000)))
                 .isInstanceOf(BaseException.class)
                 .satisfies(exception -> assertThat(((BaseException) exception).getErrorCode())
                         .isEqualTo(ErrorCode.ORDER_INVALID_SELLING_PRICE));
-    }
-
-    @Test
-    void createRegularOrderAppliesIngredientCostEventMultiplierToTotalCost() {
-        Store store = store(15L, 1, 3L, 7L, 2_500, 4_000);
-        Menu menu = store.getMenu();
-
-        when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
-                .thenReturn(Optional.of(store));
-        when(gameDayStoreStateRedisRepository.exists(15L, 1)).thenReturn(false);
-        when(orderRepository.findDailyStartOrder(15L, 1)).thenReturn(Optional.empty());
-        when(menuRepository.findById(7L)).thenReturn(Optional.of(menu));
-        when(storeRepository.findBySeason_IdOrderByIdAsc(9L)).thenReturn(List.of(store));
-        when(itemUserRepository.findPurchasedDiscountRateByUserIdAndCategory(1, ItemCategory.INGREDIENT))
-                .thenReturn(Optional.of(BigDecimal.ONE));
-        when(itemUserRepository.findPurchasedDiscountRateByUserIdAndCategory(1, ItemCategory.RENT))
-                .thenReturn(Optional.of(BigDecimal.ONE));
-        when(newsRankingResolver.resolveMenuEntryRank(9L, 1, menu)).thenReturn(null);
-        when(newsRankingResolver.resolveAreaEntryRank(9L, 1, store.getLocation())).thenReturn(null);
-        when(eventEffectResolver.resolve(any(), any(Integer.class), any(), any(), any()))
-                .thenReturn(new EventEffectResolver.EventEffect(
-                        0L,
-                        0,
-                        BigDecimal.ONE,
-                        new BigDecimal("1.05"),
-                        Collections.emptyList(),
-                        Collections.emptyList()
-                ));
-        when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> {
-            Order saved = invocation.getArgument(0);
-            ReflectionTestUtils.setField(saved, "id", 201L);
-            return saved;
-        });
-
-        RegularOrderResponse response = orderService.createRegularOrder(1, new RegularOrderRequest(7, 50, 7_000));
-
-        assertThat(response.totalCost()).isEqualTo(157_500);
-        assertThat(response.costPrice()).isEqualTo(3_150);
     }
 
     private Store store(Long storeId, Integer userId, Long locationId, Long menuId, int originPrice, int currentPrice) {

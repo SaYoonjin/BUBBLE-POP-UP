@@ -84,6 +84,9 @@ class GameDayStateServiceTests {
     private GameDayStoreStateRedisRepository gameDayStoreStateRedisRepository;
 
     @Mock
+    private GameDayStartService gameDayStartService;
+
+    @Mock
     private StringRedisTemplate stringRedisTemplate;
 
     private GameDayStateService gameDayStateService;
@@ -97,6 +100,9 @@ class GameDayStateServiceTests {
                         org.mockito.ArgumentMatchers.eq(OrderType.EMERGENCY)
                 ))
                 .thenReturn(List.of());
+        org.mockito.Mockito.lenient()
+                .when(gameDayStartService.ensureCurrentDayState(any(), any(), any()))
+                .thenReturn(Optional.empty());
     }
 
     private GameDayStateService createService(Clock clock) {
@@ -118,6 +124,7 @@ class GameDayStateServiceTests {
                 captureRatePolicy,
                 costPolicy,
                 gameDayStoreStateRedisRepository,
+                gameDayStartService,
                 clock
         );
     }
