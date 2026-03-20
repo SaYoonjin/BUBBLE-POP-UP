@@ -65,6 +65,7 @@ public class GameDayStateService {
     private final CaptureRatePolicy captureRatePolicy;
     private final CostPolicy costPolicy;
     private final GameDayStoreStateRedisRepository gameDayStoreStateRedisRepository;
+    private final GameDayStartService gameDayStartService;
     private final Clock clock;
 
     @Transactional
@@ -95,7 +96,10 @@ public class GameDayStateService {
         GameDayLiveState rawState = gameDayStoreStateRedisRepository.find(store.getId(), day)
                 .orElse(null);
         if (rawState == null || rawState.startResponse() == null) {
-            return Optional.empty();
+            rawState = gameDayStartService.ensureCurrentDayState(store, serverTime, seasonTimePoint).orElse(null);
+            if (rawState == null || rawState.startResponse() == null) {
+                return Optional.empty();
+            }
         }
 
         Order dailyStartOrder = orderRepository.findDailyStartOrder(store.getId(), day).orElse(null);

@@ -20,6 +20,24 @@ export interface MenuListResponse {
   menus: MenuItem[];
 }
 
+export interface StoreMenuResponse {
+  menuId: number;
+  menuName: string;
+  ingredientPrice: number;
+  discount: number;
+}
+
+export interface StoreMenuListResponse {
+  menus: StoreMenuResponse[];
+}
+
+export interface StoreResponse {
+  location: string;
+  popupName: string;
+  menu: string;
+  day: number;
+}
+
 export interface LocationItem {
   locationId: number;
   locationName: string;
@@ -60,5 +78,10 @@ export async function getLocationList() {
 /** 매장 지역 변경 */
 export async function updateStoreLocation(locationId: number) {
   const { data } = await client.patch<UpdateStoreLocationResponse>("/api/stores/location", { locationId });
+  return data;
+}
+
+export async function getStoreMenus() {
+  const { data } = await client.get<StoreMenuListResponse>("/api/stores/menus");
   return data;
 }

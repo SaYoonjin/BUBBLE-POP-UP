@@ -15,7 +15,7 @@ import java.util.concurrent.TimeUnit;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.scheduling.annotation.Scheduled;
+
 import org.springframework.stereotype.Component;
 
 @Component
@@ -34,7 +34,6 @@ public class SparkEtlScheduler {
 
     private final Clock clock;
 
-    @Scheduled(fixedRate = 1800000)
     public void runEtl() {
         String randomDate = pickDateFromHdfs();
         String batchKey = "spark-" + randomDate + "-" + LocalDateTime.now(clock).format(BATCH_KEY_FMT);

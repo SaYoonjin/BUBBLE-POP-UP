@@ -7,5 +7,6 @@ public enum NewsCategory {
     MENU_ENTRY,
     TREND,
     AREA_ENTRY,
-    EXTRA
+    EXTRA,
+    GUIDE
 }

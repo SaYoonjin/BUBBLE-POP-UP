@@ -8,6 +8,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.ssafy.S14P21A205.game.day.scheduler.SeasonDayClosingScheduler;
+import com.ssafy.S14P21A205.game.news.repository.NewsReportRepository;
 import com.ssafy.S14P21A205.game.news.service.NewsService;
 import com.ssafy.S14P21A205.game.news.service.SparkNewsDataService;
 import com.ssafy.S14P21A205.game.environment.entity.Festival;
@@ -30,6 +31,7 @@ import com.ssafy.S14P21A205.game.event.repository.RandomEventRepository;
 import com.ssafy.S14P21A205.game.season.entity.Season;
 import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
 import com.ssafy.S14P21A205.game.season.repository.SeasonRepository;
+import com.ssafy.S14P21A205.game.scheduler.SparkEtlScheduler;
 import com.ssafy.S14P21A205.shop.entity.Menu;
 import com.ssafy.S14P21A205.store.entity.Location;
 import com.ssafy.S14P21A205.store.repository.LocationRepository;
@@ -93,10 +95,16 @@ class SeasonLifecycleServiceTests {
     private FestivalRepository festivalRepository;
 
     @Mock
+    private NewsReportRepository newsReportRepository;
+
+    @Mock
     private NewsService newsService;
 
     @Mock
     private SparkNewsDataService sparkNewsDataService;
+
+    @Mock
+    private SparkEtlScheduler sparkEtlScheduler;
 
     private SeasonLifecycleService seasonLifecycleService;
 
@@ -133,7 +141,6 @@ class SeasonLifecycleServiceTests {
         when(seasonRepository.findFirstByStatusOrderByIdDesc(SeasonStatus.IN_PROGRESS)).thenReturn(Optional.empty());
         when(seasonRepository.findFirstByStatusOrderByStartTimeAscIdAsc(SeasonStatus.SCHEDULED))
                 .thenReturn(Optional.of(scheduledSeason));
-        when(seasonRepository.findFirstBySourceBatchKeyIsNotNullOrderByIdDesc()).thenReturn(Optional.empty());
         when(locationRepository.findAllByOrderByIdAsc()).thenReturn(List.of(location));
         when(menuRepository.findAllByOrderByIdAsc()).thenReturn(List.of(menu));
         when(weatherRepository.findAllByOrderByIdAsc()).thenReturn(allWeatherMasters());
@@ -148,6 +155,7 @@ class SeasonLifecycleServiceTests {
         assertThat(scheduledSeason.getStatus()).isEqualTo(SeasonStatus.IN_PROGRESS);
         assertThat(scheduledSeason.getCurrentDay()).isEqualTo(1);
         assertThat(scheduledSeason.getSourceBatchKey()).isEqualTo(batchKey);
+        assertThat(scheduledSeason.getStartTime()).isEqualTo(now);
         verify(weatherDayRedisRepository).saveDay(eq(11L), eq(1), any());
         verify(trafficDayRedisRepository).saveDay(eq(11L), eq(3L), eq(1), any());
         verify(seasonDayClosingScheduler).synchronize(scheduledSeason);
@@ -224,8 +232,10 @@ class SeasonLifecycleServiceTests {
                 locationRepository,
                 menuRepository,
                 festivalRepository,
+                newsReportRepository,
                 newsService,
                 sparkNewsDataService,
+                sparkEtlScheduler,
                 clock
         );
     }

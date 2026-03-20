@@ -60,6 +60,40 @@ export async function getCurrentSeasonTopRankings() {
   return data;
 }
 
+export interface GameDayReportResponse {
+  seasonId: number;
+  day: number;
+  locationName: string;
+  menuName: string;
+  revenue: number;
+  totalCost: number;
+  netProfit: number;
+  visitors: number;
+  salesCount: number;
+  stockRemaining: number;
+  stockDisposedCount: number;
+  reputationScore: number;
+  reputationChange: number;
+  tomorrowWeather: { condition: string } | null;
+  isNextDayOrderDay: boolean | null;
+  consecutiveDeficitDays: number;
+  isBankrupt: boolean;
+}
+
+export async function getDayReport(day: number) {
+  const { data } = await client.get<GameDayReportResponse>(
+    `/api/game/day/reports/${day}`,
+  );
+  return data;
+}
+
+export async function getAllDayReports(currentDay: number) {
+  const promises = Array.from({ length: currentDay }, (_, i) =>
+    getDayReport(i + 1),
+  );
+  return Promise.all(promises);
+}
+
 // --- 영업 중 페이지용 ---
 
 export interface CustomerTick {

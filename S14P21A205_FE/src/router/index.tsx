@@ -10,7 +10,6 @@ import PrepPage from "../pages/PrepPage";
 import PlayPage from "../pages/PlayPage";
 import ReportPage from "../pages/ReportPage";
 import RankingPage from "../pages/RankingPage";
-import ComponentTestPage from "../pages/ComponentTestPage";
 import NewsPage from "../pages/NewsPage";
 import CozyPrepPage from "../pages/CozyPrepPage";
 import WaitingPage from "../pages/WaitingPage";
@@ -20,7 +19,6 @@ const router = createBrowserRouter([
   { path: "/", element: <HomePage /> },
   { path: "/login", element: <LoginPage /> },
   { path: "/auth/callback", element: <AuthCallbackPage /> },
-  { path: "/test", element: <ComponentTestPage /> },
   { path: "/news", element: <NewsPage /> },
   { path: "/cozy/prep", element: <CozyPrepPage /> },
   {

@@ -14,7 +14,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object";
 }
 
-function normalizeDiscountMultiplier(value: number) {
+export function normalizeDiscountMultiplier(value: number) {
   if (!Number.isFinite(value)) {
     return 1;
   }

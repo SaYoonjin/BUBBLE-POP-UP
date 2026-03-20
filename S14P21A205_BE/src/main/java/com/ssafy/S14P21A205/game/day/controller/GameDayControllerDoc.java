@@ -19,14 +19,14 @@ import org.springframework.security.core.Authentication;
 public interface GameDayControllerDoc {
 
     @Operation(
-            summary = "Start the current business day",
-            description = "Initialize today's business state for the active season.",
+            summary = "Get the current day opening info",
+            description = "Return the current day's opening information without requiring a manual start trigger.",
             security = @SecurityRequirement(name = "bearerAuth")
     )
     @ApiResponses({
             @ApiResponse(
                     responseCode = "200",
-                    description = "Day start success",
+                    description = "Day opening info success",
                     content = @Content(schema = @Schema(implementation = GameDayStartResponse.class))
             ),
             @ApiResponse(
