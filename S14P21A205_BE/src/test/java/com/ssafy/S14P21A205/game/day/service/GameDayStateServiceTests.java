@@ -13,13 +13,15 @@ import com.ssafy.S14P21A205.exception.ErrorCode;
 import com.ssafy.S14P21A205.game.day.policy.CaptureRatePolicy;
 import com.ssafy.S14P21A205.game.day.policy.CostPolicy;
 import com.ssafy.S14P21A205.game.day.policy.CustomerScorePolicy;
-import com.ssafy.S14P21A205.game.day.resolver.EventEffectResolver;
-import com.ssafy.S14P21A205.game.day.policy.PopulationPolicy;
 import com.ssafy.S14P21A205.game.day.engine.StockEngine;
-import com.ssafy.S14P21A205.game.day.state.GameDayLiveState;
-import com.ssafy.S14P21A205.game.day.dto.GameStateResponse;
 import com.ssafy.S14P21A205.game.day.dto.GameDayStartResponse;
+import com.ssafy.S14P21A205.game.day.dto.GameStateResponse;
+import com.ssafy.S14P21A205.game.day.policy.PopulationPolicy;
+import com.ssafy.S14P21A205.game.day.resolver.EventEffectResolver;
+import com.ssafy.S14P21A205.game.day.resolver.TrafficDelayResolver;
+import com.ssafy.S14P21A205.game.day.state.GameDayLiveState;
 import com.ssafy.S14P21A205.game.day.state.repository.GameDayStoreStateRedisRepository;
+import com.ssafy.S14P21A205.game.environment.entity.TrafficStatus;
 import com.ssafy.S14P21A205.game.event.entity.DailyEvent;
 import com.ssafy.S14P21A205.game.event.entity.EventCategory;
 import com.ssafy.S14P21A205.game.event.entity.EventEndTime;
@@ -84,6 +86,9 @@ class GameDayStateServiceTests {
     private GameDayStoreStateRedisRepository gameDayStoreStateRedisRepository;
 
     @Mock
+    private TrafficDelayResolver trafficDelayResolver;
+
+    @Mock
     private GameDayStartService gameDayStartService;
 
     @Mock
@@ -103,6 +108,16 @@ class GameDayStateServiceTests {
         org.mockito.Mockito.lenient()
                 .when(gameDayStartService.ensureCurrentDayState(any(), any(), any()))
                 .thenReturn(Optional.empty());
+        org.mockito.Mockito.lenient()
+                .when(trafficDelayResolver.resolve(
+                        org.mockito.ArgumentMatchers.anyLong(),
+                        org.mockito.ArgumentMatchers.anyLong(),
+                        org.mockito.ArgumentMatchers.anyInt(),
+                        org.mockito.ArgumentMatchers.anyInt(),
+                        any(),
+                        any()
+                ))
+                .thenReturn(new TrafficDelayResolver.ResolvedTraffic(1, 12, TrafficStatus.NORMAL, 15));
     }
 
     private GameDayStateService createService(Clock clock) {
@@ -123,6 +138,7 @@ class GameDayStateServiceTests {
                 customerScorePolicy,
                 captureRatePolicy,
                 costPolicy,
+                trafficDelayResolver,
                 gameDayStoreStateRedisRepository,
                 gameDayStartService,
                 clock
@@ -191,9 +207,19 @@ class GameDayStateServiceTests {
         assertThat(response.customerCount()).isEqualTo(6);
         assertThat(response.inventory().totalStock()).isEqualTo(7);
         assertThat(response.population()).isEqualTo("330");
+        assertThat(response.traffic()).isEqualTo(new GameStateResponse.Traffic(TrafficStatus.NORMAL, 3, 12, 15));
         assertThat(response.appliedEvents()).hasSize(1);
         assertThat(response.appliedEvents().get(0).eventType()).isEqualTo("CELEBRITY_APPEARANCE");
         assertThat(response.appliedEvents().get(0).eventName()).isEqualTo("연예인 등장");
+
+        verify(trafficDelayResolver).resolve(
+                9L,
+                3L,
+                1,
+                7,
+                LocalDateTime.of(2026, 3, 9, 14, 30, 20),
+                LocalDateTime.of(2026, 3, 9, 14, 32, 10)
+        );
 
         ArgumentCaptor<GameDayLiveState> stateCaptor = ArgumentCaptor.forClass(GameDayLiveState.class);
         verify(gameDayStoreStateRedisRepository).saveStateAndTickLog(org.mockito.ArgumentMatchers.eq(15L), org.mockito.ArgumentMatchers.eq(1), stateCaptor.capture());
