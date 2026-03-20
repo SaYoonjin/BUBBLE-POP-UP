@@ -133,11 +133,27 @@ export async function getAllDayReports(currentDay: number) {
 export interface CustomerTick {
   tick: number;
   customerCount: number;
+  unitPrice: number;
+  soldUnits: number[];
   baseFloatingPopulation: number;
   populationGrowthRate: number;
   currentFloatingPopulation: number;
   regionStoreCount: number;
   rValue: number;
+}
+
+export type GameTrafficStatus =
+  | "VERY_SMOOTH"
+  | "SMOOTH"
+  | "NORMAL"
+  | "CONGESTED"
+  | "VERY_CONGESTED";
+
+export interface GameTraffic {
+  status: GameTrafficStatus | null;
+  value: number | null;
+  gameHour: number | null;
+  delaySeconds: number | null;
 }
 
 export interface GameActionStatus {
@@ -163,6 +179,7 @@ export interface GameStateResponse {
   seasonId: number;
   day: number;
   population: string;
+  traffic: GameTraffic | null;
   lastCalculatedAt: string;
   cash: number;
   customerCount: number;
@@ -207,7 +224,7 @@ export interface GameDayStartResponse {
 
 /** 영업일 시작 */
 export async function startGameDay() {
-  const { data } = await client.post<GameDayStartResponse>("/api/game/day/start");
+  const { data } = await client.get<GameDayStartResponse>("/api/game/day/start");
   return data;
 }
 

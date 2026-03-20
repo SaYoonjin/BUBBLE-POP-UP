@@ -92,8 +92,7 @@ public class SeasonJoinService {
                 savedStore.getId(),
                 savedStore.getStoreName(),
                 remainingBalance,
-                playableFromDay,
-                playableFromDay > 1
+                playableFromDay
         );
     }
 
@@ -149,3 +148,5 @@ public class SeasonJoinService {
         return menu.getOriginPrice();
     }
 }
+
+
