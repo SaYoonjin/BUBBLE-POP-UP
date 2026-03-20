@@ -93,7 +93,6 @@ public class StoreServiceImpl implements StoreService {
 
     @Override
     public LocationListResponse getLocations(Integer userId) {
-        getStoreByUserId(userId);
         float discount = getDisplayedRentDiscountRate(userId).floatValue();
 
         return new LocationListResponse(
