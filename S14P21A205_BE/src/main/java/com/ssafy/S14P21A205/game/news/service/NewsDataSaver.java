@@ -17,6 +17,7 @@ import com.ssafy.S14P21A205.game.news.service.AiNewsGenerator.NewsGenerationResu
 import com.ssafy.S14P21A205.store.entity.Location;
 import com.ssafy.S14P21A205.store.repository.LocationRepository;
 import com.ssafy.S14P21A205.store.repository.StoreRepository;
+import java.time.LocalDate;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.ArrayList;
@@ -59,12 +60,15 @@ public class NewsDataSaver {
         newsReportRepository.deleteAllInBatch();
         log.info("Cleared all news before regeneration for season {}", seasonId);
 
-        String trafficRanking = buildAreaTrafficRanking();
+        List<LocalDate> trafficDates = populationRepository.findDistinctDatesOrdered();
         log.info("[NEWS] Step 3/4: Generating news for {} days via AI", totalDays);
 
         for (int day = 1; day <= totalDays; day++) {
             List<MenuMentionCount> mentions = dayMentions.getOrDefault(day, List.of());
 
+            String trafficRanking = (day <= trafficDates.size())
+                    ? buildAreaTrafficRankingForDate(trafficDates.get(day - 1))
+                    : buildAreaTrafficRanking();
             String trendRanking = convertMentionsToJson(mentions);
             NewsReport report = NewsReport.create(
                     season, day, "[]", trafficRanking, "[]", trendRanking, "[]");
@@ -410,6 +414,19 @@ public class NewsDataSaver {
 
     private String buildAreaTrafficRanking() {
         List<Object[]> rows = populationRepository.avgPopulationByLocation();
+        List<Map<String, Object>> ranking = rows.stream()
+                .map(row -> {
+                    Map<String, Object> item = new LinkedHashMap<>();
+                    item.put("name", row[0]);
+                    item.put("avgPopulation", ((Number) row[1]).doubleValue());
+                    return item;
+                })
+                .toList();
+        return toJson(ranking);
+    }
+
+    private String buildAreaTrafficRankingForDate(LocalDate date) {
+        List<Object[]> rows = populationRepository.avgPopulationByLocationAndDate(date);
         List<Map<String, Object>> ranking = rows.stream()
                 .map(row -> {
                     Map<String, Object> item = new LinkedHashMap<>();

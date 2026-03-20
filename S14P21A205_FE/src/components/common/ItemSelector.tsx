@@ -21,6 +21,7 @@ interface ItemSelectorProps {
   groups: ItemGroup[];
   selectedIds: number[];
   onToggle: (id: number) => void;
+  availablePoints?: number | null;
   isLoading?: boolean;
   emptyMessage?: string;
 }
@@ -29,6 +30,7 @@ export default function ItemSelector({
   groups,
   selectedIds,
   onToggle,
+  availablePoints = null,
   isLoading = false,
   emptyMessage = "선택 가능한 아이템이 없습니다.",
 }: ItemSelectorProps) {
@@ -95,10 +97,15 @@ export default function ItemSelector({
                     const otherGroupCount = selectedIds.filter((selectedId) => {
                       return !group.items.some((groupItem) => groupItem.id === selectedId);
                     }).length;
-                    const isDisabled =
+                    const cannotAfford =
                       !isSelected &&
-                      (Boolean(selectedInGroup) ||
-                        otherGroupCount + (selectedInGroup ? 1 : 0) >= 2);
+                      availablePoints !== null &&
+                      item.price > availablePoints + (selectedInGroup?.price ?? 0);
+                    const isDisabled =
+                      cannotAfford ||
+                      (!isSelected &&
+                        !selectedInGroup &&
+                        otherGroupCount >= 2);
 
                     return (
                       <button

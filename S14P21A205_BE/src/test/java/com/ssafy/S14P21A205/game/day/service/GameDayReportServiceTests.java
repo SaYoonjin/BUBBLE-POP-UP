@@ -14,8 +14,8 @@ import com.ssafy.S14P21A205.exception.ErrorCode;
 import com.ssafy.S14P21A205.game.day.dto.GameDayReportResponse;
 import com.ssafy.S14P21A205.game.day.generator.PurchaseListGenerator;
 import com.ssafy.S14P21A205.game.day.policy.BankruptcyPolicy;
+import com.ssafy.S14P21A205.game.day.policy.CaptureRatePolicy;
 import com.ssafy.S14P21A205.game.day.policy.ProfitPolicy;
-import com.ssafy.S14P21A205.game.day.policy.ReputationPolicy;
 import com.ssafy.S14P21A205.game.day.state.GameDayLiveState;
 import com.ssafy.S14P21A205.game.day.state.repository.GameDayStoreStateRedisRepository;
 import com.ssafy.S14P21A205.game.environment.entity.Weather;
@@ -28,6 +28,7 @@ import com.ssafy.S14P21A205.game.season.entity.Season;
 import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
 import com.ssafy.S14P21A205.game.season.repository.DailyReportRepository;
 import com.ssafy.S14P21A205.shop.entity.Menu;
+import com.ssafy.S14P21A205.shop.service.ShopService;
 import com.ssafy.S14P21A205.store.entity.Location;
 import com.ssafy.S14P21A205.store.entity.Store;
 import com.ssafy.S14P21A205.store.repository.StoreRepository;
@@ -77,12 +78,15 @@ class GameDayReportServiceTests {
     @Mock
     private GameDayStateService gameDayStateService;
 
+    @Mock
+    private ShopService shopService;
+
     private GameDayReportService gameDayReportService;
 
     @BeforeEach
     void setUp() {
         ProfitPolicy profitPolicy = new ProfitPolicy();
-        ReputationPolicy reputationPolicy = new ReputationPolicy();
+        CaptureRatePolicy captureRatePolicy = new CaptureRatePolicy();
         BankruptcyPolicy bankruptcyPolicy = new BankruptcyPolicy();
         gameDayReportService = new GameDayReportService(
                 userService,
@@ -92,10 +96,11 @@ class GameDayReportServiceTests {
                 weatherDayRedisRepository,
                 weatherLocationRepository,
                 profitPolicy,
-                reputationPolicy,
+                captureRatePolicy,
                 bankruptcyPolicy,
                 gameDayStateService,
                 purchaseListGenerator,
+                shopService,
                 Clock.fixed(Instant.parse("2026-03-09T05:33:00Z"), ZoneId.of("Asia/Seoul"))
         );
         org.mockito.Mockito.lenient()
@@ -152,25 +157,50 @@ class GameDayReportServiceTests {
     }
 
     @Test
+    void recordClosedDayReportResetsPurchasedItemsWhenStoreBecomesBankrupt() {
+        Store store = store(15L, 9L, 3, 7, "Seongsu", "Cookie", 300);
+        GameDayLiveState state = state(
+                LocalDateTime.of(2026, 3, 9, 14, 30, 0),
+                new BigDecimal("0.10"),
+                1_000L,
+                5_000L,
+                12,
+                5,
+                8_000L,
+                10,
+                4
+        );
+        DailyReport previousDayReport = dailyReport(
+                store,
+                2,
+                "Seongsu",
+                "Cookie",
+                1_000,
+                3_000,
+                -2_000,
+                10,
+                5,
+                4,
+                2,
+                false,
+                9_000,
+                new BigDecimal("0.05")
+        );
+
+        when(dailyReportRepository.existsByStoreIdAndDay(15L, 3)).thenReturn(false);
+        when(gameDayStateService.refreshGameState(store)).thenReturn(Optional.empty());
+        when(gameDayStoreStateRedisRepository.find(15L, 3)).thenReturn(Optional.of(state));
+        when(dailyReportRepository.findByStoreIdAndDay(15L, 2)).thenReturn(Optional.of(previousDayReport));
+
+        gameDayReportService.recordClosedDayReport(store, 3);
+
+        verify(shopService).resetPurchasedItems(1);
+    }
+
+    @Test
     void getDayReportReturnsComputedFields() {
         User user = user(1);
         Store store = store(15L, 9L, 2, 7, "Current Location", "Current Menu", 300);
-        DailyReport dayOne = dailyReport(
-                store,
-                1,
-                "Old Location",
-                "Old Menu",
-                1_000,
-                800,
-                200,
-                10,
-                8,
-                4,
-                0,
-                false,
-                10_200,
-                new BigDecimal("0.04")
-        );
         DailyReport dayTwo = dailyReport(
                 store,
                 2,
@@ -192,7 +222,11 @@ class GameDayReportServiceTests {
         when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
                 .thenReturn(Optional.of(store));
         when(dailyReportRepository.findByStoreIdAndDay(15L, 2)).thenReturn(Optional.of(dayTwo));
-        when(dailyReportRepository.findByStoreIdAndDay(15L, 1)).thenReturn(Optional.of(dayOne));
+        when(dailyReportRepository.findByStore_IdOrderByDayAsc(15L)).thenReturn(List.of(
+                dailyReport(store, 1, "Seongsu", "Cookie", 4_000, 1_200, 2_800, 40, 18, 10, 0, false, 10_000, new BigDecimal("0.08")),
+                dayTwo,
+                dailyReport(store, 3, "Seongsu", "Cookie", 9_000, 2_000, 7_000, 55, 24, 8, 0, false, 20_000, new BigDecimal("0.11"))
+        ));
         when(weatherLocationRepository.findByDayOrderByLocation_IdAsc(3)).thenReturn(List.of(
                 weatherLocation(store.getLocation(), 3, weather(WeatherType.SNOW))
         ));
@@ -201,22 +235,30 @@ class GameDayReportServiceTests {
 
         assertThat(response.seasonId()).isEqualTo(9L);
         assertThat(response.day()).isEqualTo(2);
+        assertThat(response.storeName()).isEqualTo("Ignored Store Name");
         assertThat(response.locationName()).isEqualTo("Seongsu");
         assertThat(response.menuName()).isEqualTo("Cookie");
         assertThat(response.revenue()).isEqualTo(5_000L);
         assertThat(response.totalCost()).isEqualTo(1_300L);
-        assertThat(response.netProfit()).isEqualTo(3_700L);
         assertThat(response.visitors()).isEqualTo(42);
         assertThat(response.salesCount()).isEqualTo(20);
         assertThat(response.stockRemaining()).isEqualTo(12);
         assertThat(response.stockDisposedCount()).isZero();
-        assertThat(response.reputationScore()).isEqualByComparingTo("0.5");
-        assertThat(response.reputationChange()).isEqualByComparingTo("0.3");
+        assertThat(response.captureRate()).isEqualByComparingTo("0.10");
+        assertThat(response.changeCaptureRate()).isEqualByComparingTo("0.0200");
+        assertThat(response.dailyRevenue()).isEqualTo(new GameDayReportResponse.DailyRevenue(
+                4_000L,
+                5_000L,
+                null,
+                null,
+                null,
+                null,
+                null
+        ));
         assertThat(response.tomorrowWeather()).isNotNull();
         assertThat(response.tomorrowWeather().condition()).isEqualTo("SNOW");
         assertThat(response.isNextDayOrderDay()).isTrue();
         assertThat(response.consecutiveDeficitDays()).isEqualTo(2);
-        assertThat(response.isBankrupt()).isFalse();
     }
 
     @Test
@@ -225,7 +267,6 @@ class GameDayReportServiceTests {
         Store store = store(15L, 9L, 2, 7, "Current Location", "Current Menu", 300);
         Location reservedLocation = location(9L, "Reserved Location", 500);
         ReflectionTestUtils.setField(store, "pendingLocation", reservedLocation);
-        ReflectionTestUtils.setField(store, "pendingLocationReservedDay", 2);
         ReflectionTestUtils.setField(store, "pendingLocationApplyDay", 3);
 
         DailyReport dayTwo = dailyReport(
@@ -249,7 +290,11 @@ class GameDayReportServiceTests {
         when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
                 .thenReturn(Optional.of(store));
         when(dailyReportRepository.findByStoreIdAndDay(15L, 2)).thenReturn(Optional.of(dayTwo));
-        when(dailyReportRepository.findByStoreIdAndDay(15L, 1)).thenReturn(Optional.empty());
+        when(dailyReportRepository.findByStore_IdOrderByDayAsc(15L)).thenReturn(List.of(
+                dailyReport(store, 1, "Current Location", "Current Menu", 3_000, 1_000, 2_000, 20, 10, 5, 0, false, 8_000, new BigDecimal("0.09")),
+                dayTwo,
+                dailyReport(store, 3, "Current Location", "Current Menu", 9_000, 2_000, 7_000, 50, 25, 9, 0, false, 20_000, new BigDecimal("0.11"))
+        ));
         when(weatherLocationRepository.findByDayOrderByLocation_IdAsc(3)).thenReturn(List.of(
                 weatherLocation(store.getLocation(), 3, weather(WeatherType.SNOW)),
                 weatherLocation(reservedLocation, 3, weather(WeatherType.RAIN))
@@ -312,6 +357,7 @@ class GameDayReportServiceTests {
 
         Store store = instantiate(Store.class);
         ReflectionTestUtils.setField(store, "id", storeId);
+        ReflectionTestUtils.setField(store, "user", user(1));
         ReflectionTestUtils.setField(store, "location", location);
         ReflectionTestUtils.setField(store, "menu", menu);
         ReflectionTestUtils.setField(store, "season", season);
@@ -349,6 +395,7 @@ class GameDayReportServiceTests {
                 captureRate,
                 500,
                 0,
+                List.of(),
                 0,
                 0L,
                 cumulativeCustomerCount,

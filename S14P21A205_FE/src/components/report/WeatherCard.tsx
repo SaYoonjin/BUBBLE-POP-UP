@@ -721,7 +721,7 @@ function BankruptScene() {
   );
 }
 
-const SCENE_MAP: Record<WeatherCondition, () => JSX.Element> = {
+const SCENE_MAP: Record<WeatherCondition, () => React.JSX.Element> = {
   SUNNY: SunnyScene,
   RAIN: RainScene,
   SNOW: SnowScene,

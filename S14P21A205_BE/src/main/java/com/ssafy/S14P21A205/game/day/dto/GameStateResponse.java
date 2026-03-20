@@ -1,5 +1,6 @@
 package com.ssafy.S14P21A205.game.day.dto;
 
+import com.ssafy.S14P21A205.game.environment.entity.TrafficStatus;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -9,6 +10,7 @@ public record GameStateResponse(
         Long seasonId,
         Integer day,
         String population,
+        Traffic traffic,
         LocalDateTime lastCalculatedAt,
         Long cash,
         Integer customerCount,
@@ -20,6 +22,8 @@ public record GameStateResponse(
     public record CustomerTick(
             Integer tick,
             Integer customerCount,
+            Integer unitPrice,
+            List<Integer> soldUnits,
             Integer baseFloatingPopulation,
             BigDecimal populationGrowthRate,
             Integer currentFloatingPopulation,
@@ -30,6 +34,14 @@ public record GameStateResponse(
 
     public record Inventory(
             Integer totalStock
+    ) {
+    }
+
+    public record Traffic(
+            TrafficStatus status,
+            Integer value,
+            Integer gameHour,
+            Integer delaySeconds
     ) {
     }
 

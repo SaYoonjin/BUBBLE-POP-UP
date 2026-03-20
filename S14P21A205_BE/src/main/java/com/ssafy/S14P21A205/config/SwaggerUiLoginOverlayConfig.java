@@ -68,10 +68,10 @@ public class SwaggerUiLoginOverlayConfig {
     private static String swaggerLoginBarHtml() {
         return """
                 <div id="swagger-auth-bar" style="position: sticky; top: 0; z-index: 9999; background: #111; color: #fff; padding: 10px 12px; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, 'Apple SD Gothic Neo', 'Noto Sans KR'; display: flex; gap: 10px; align-items: center;">
-                  <a href="/api/auth/login?redirect=/swagger-ui/index.html" style="display: inline-flex; align-items: center; gap: 8px; background: #4285F4; color: #fff; border-radius: 10px; padding: 8px 10px; text-decoration: none; font-size: 13px; font-weight: 600;">
+                  <a href="/auth/login?redirect=/swagger-ui/index.html" style="display: inline-flex; align-items: center; gap: 8px; background: #4285F4; color: #fff; border-radius: 10px; padding: 8px 10px; text-decoration: none; font-size: 13px; font-weight: 600;">
                     Google 로그인
                   </a>
-                  <a href="/api/auth/login?provider=ssafy&redirect=/swagger-ui/index.html" style="display: inline-flex; align-items: center; gap: 8px; background: #00A86B; color: #fff; border-radius: 10px; padding: 8px 10px; text-decoration: none; font-size: 13px; font-weight: 600;">
+                  <a href="/auth/login?provider=ssafy&redirect=/swagger-ui/index.html" style="display: inline-flex; align-items: center; gap: 8px; background: #00A86B; color: #fff; border-radius: 10px; padding: 8px 10px; text-decoration: none; font-size: 13px; font-weight: 600;">
                     SSAFY 로그인
                   </a>
                   <button id="swagger-auth-me" type="button" style="background: #fff; color: #111; border: 1px solid rgba(255,255,255,0.15); border-radius: 10px; padding: 8px 10px; font-size: 13px; cursor: pointer;">
@@ -182,7 +182,7 @@ public class SwaggerUiLoginOverlayConfig {
                           alert("로그인 후 다시 시도해주세요.");
                           return;
                         }
-                        const response = await request("/api/users");
+                        const response = await request("/users");
                         if (!response.ok) {
                           alert("인증 상태를 확인해주세요. HTTP " + response.status);
                           return;
@@ -195,7 +195,7 @@ public class SwaggerUiLoginOverlayConfig {
                     const refreshBtn = document.getElementById("swagger-auth-refresh");
                     if (refreshBtn) {
                       refreshBtn.addEventListener("click", async () => {
-                        const response = await request("/api/auth/refresh", "POST");
+                        const response = await request("/auth/refresh", "POST");
                         if (!response.ok) {
                           alert("토큰 재발급에 실패했습니다. HTTP " + response.status);
                           return;
@@ -210,7 +210,7 @@ public class SwaggerUiLoginOverlayConfig {
                     const logoutBtn = document.getElementById("swagger-auth-logout");
                     if (logoutBtn) {
                       logoutBtn.addEventListener("click", async () => {
-                        await request("/api/auth/logout", "POST");
+                        await request("/auth/logout", "POST");
                         clearTokens();
                         window.location.reload();
                       });

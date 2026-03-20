@@ -1,6 +1,7 @@
 import axios from "axios";
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useOutletContext } from "react-router-dom";
+import type { GameGuardContext } from "../router/GameGuard";
 import { getGameWaitingStatus, joinCurrentSeason, type GameWaitingResponse } from "../api/game";
 import CountdownTimer from "../components/common/CountdownTimer";
 import DistrictDetailPanel from "../components/game/DistrictDetailPanel";
@@ -8,6 +9,7 @@ import SeoulMap3D from "../components/game/SeoulMap3D";
 import { seoulDistricts } from "../components/game/seoulDistricts";
 import { LOCATION_SELECTION_DEADLINE_STORAGE_KEY } from "../constants";
 import { clearStoredBrandName, setStoredBrandName } from "../hooks/useBrandName";
+import { useGameStore } from "../stores/useGameStore";
 import type { WaitingRouteState } from "../types/waiting";
 import {
   applyDiscount,
@@ -16,7 +18,6 @@ import {
   getStoredSelectedDashboardItems,
 } from "../utils/dashboardItems";
 
-const LOCATION_SELECTION_SECONDS = 120;
 const DEFAULT_PREP_DAY = 1;
 const INITIAL_CAPITAL = 10_000_000;
 const PREP_SECONDS = 50;
@@ -43,19 +44,7 @@ function formatCurrency(value: number) {
   return `₩${value.toLocaleString("ko-KR")}`;
 }
 
-function persistLocationSelectionDeadline(deadlineMs: number) {
-  try {
-    sessionStorage.setItem(LOCATION_SELECTION_DEADLINE_STORAGE_KEY, String(deadlineMs));
-  } catch {
-    // Ignore storage access failures and continue with in-memory state.
-  }
 
-  return deadlineMs;
-}
-
-function createLocationSelectionDeadline() {
-  return persistLocationSelectionDeadline(Date.now() + LOCATION_SELECTION_SECONDS * 1000);
-}
 
 function clearLocationSelectionDeadline() {
   try {
@@ -110,10 +99,13 @@ function buildSelectionWindow(
     return null;
   }
 
+  const currentDay = waitingStatus.currentDay ?? 1;
+  const nextPrepDay = waitingStatus.seasonPhase === "LOCATION_SELECTION" ? 1 : currentDay + 1;
+
   const baseWindow = {
     endTimestampMs: locationSelectionDeadlineMs,
-    timerLabel: "지역 선택 제한 시간",
-    helperText: "2분 안에 지역을 고르고 팝업 브랜드명을 입력해주세요.",
+    timerLabel: `${nextPrepDay}일차 영업 준비까지`,
+    helperText: "영업 준비가 시작되기 전에 지역을 고르고 팝업 브랜드명을 입력해주세요.",
   };
 
   if (waitingStatus.seasonPhase === "LOCATION_SELECTION") {
@@ -123,9 +115,12 @@ function buildSelectionWindow(
     };
   }
 
+  // midseason: 다음 영업 시작(prep)까지의 시간으로 타이머 설정
+  const secondsUntilNextPrep = getSecondsUntilDayStart(waitingStatus, nextPrepDay);
   return {
     mode: "midseason",
     ...baseWindow,
+    endTimestampMs: Date.now() + secondsUntilNextPrep * 1000,
     cutoffTimestampMs:
       Date.now() + getSecondsUntilDayStart(waitingStatus, MIDSEASON_CUTOFF_DAY) * 1000,
   };
@@ -150,7 +145,9 @@ function resolveJoinErrorMessage(error: unknown) {
 }
 
 export default function LocationSelectPage() {
-  const [locationSelectionDeadlineMs] = useState(createLocationSelectionDeadline);
+  const guardContext = useOutletContext<GameGuardContext>();
+  // 서버 시간 기반: 현재 페이즈 종료까지 남은 시간
+  const [locationSelectionDeadlineMs] = useState(() => guardContext.phaseEndTimestamp);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [selectionWindow, setSelectionWindow] = useState<SelectionWindowState | null>(null);
   const [isJoining, setIsJoining] = useState(false);
@@ -259,6 +256,8 @@ export default function LocationSelectPage() {
         locationId: selectedDistrict.id,
         storeName: brandName,
       });
+      // join 응답의 playableFromDay를 store에 저장 (GameGuard에서 참조)
+      useGameStore.getState().setPlayableFromDay(joinResponse.playableFromDay);
       const nextPrepPath = `/game/${joinResponse.playableFromDay ?? DEFAULT_PREP_DAY}/prep`;
       const remainingSelectionSeconds = Math.max(
         0,
@@ -308,12 +307,10 @@ export default function LocationSelectPage() {
       return;
     }
 
-    if (selectionWindow.mode === "midseason") {
-      return;
-    }
-
     clearLocationSelectionDeadline();
-    navigate(`/game/${DEFAULT_PREP_DAY}/prep`);
+    // 시간 끝나면 새로고침 → GameGuard가 새 페이즈에 맞게 리다이렉트
+    // 6~7일차면 joinEnabled=false → GameGuard가 홈으로 보냄
+    navigate(0);
   };
 
   if (isAccessChecking || !selectionWindow) {

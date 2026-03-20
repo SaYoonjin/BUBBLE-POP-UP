@@ -1,6 +1,7 @@
 import axios from "axios";
 import { useEffect, useMemo, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useOutletContext, useParams } from "react-router-dom";
+import type { GameGuardContext } from "../router/GameGuard";
 import AppHeader from "../components/common/AppHeader";
 import CountdownTimer from "../components/common/CountdownTimer";
 import MenuSelector from "../components/game/MenuSelector";
@@ -159,7 +160,7 @@ function mapTodayNews(items: { newsId: number; newsTitle: string; newsContent: s
 }
 
 function getRecommendedPrice(costPrice: number) {
-  return roundToHundreds(costPrice * 1.6);
+  return roundToHundreds(costPrice * 2.5);
 }
 
 function getSellingPriceDefault(
@@ -233,6 +234,7 @@ function mapStoreMenusToPrepMenus(menus: StoreMenuResponse[]) {
 
 export default function PrepPage() {
   const { day: dayParam } = useParams<{ day: string }>();
+  const guardContext = useOutletContext<GameGuardContext>();
   const parsedDay = Number(dayParam);
   const day = Number.isNaN(parsedDay) ? 0 : parsedDay;
   const isRegularOrderRouteDay = isRegularOrderDay(day);
@@ -575,8 +577,7 @@ export default function PrepPage() {
                   </div>
                   <CountdownTimer
                     key={prepEndTimestampMs ?? `prep-${day}`}
-                    endTimestampMs={prepEndTimestampMs}
-                    initialSeconds={prepEndTimestampMs ? undefined : 50}
+                    endTimestampMs={prepEndTimestampMs ?? guardContext.phaseEndTimestamp}
                     label="준비 시간"
                   />
                 </div>

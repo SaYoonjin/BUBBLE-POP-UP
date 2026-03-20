@@ -1,46 +1,65 @@
+import axios from "axios";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useOutletContext, useParams } from "react-router-dom";
+import type { GameGuardContext } from "../router/GameGuard";
 import PlayHeader from "../components/play/PlayHeader";
 import EventSidebar, { type GameAlert } from "../components/play/EventSidebar";
 import RankingSidebar, { type RankEntry } from "../components/play/RankingSidebar";
 import ActionBar, { type ActionType } from "../components/play/ActionBar";
 import DiscountModal from "../components/play/modals/DiscountModal";
 import EmergencyOrderModal, {
-  type DeliveryTrafficLevel,
+  type CurrentMenuPricing,
+  type EmergencyMenuItem,
 } from "../components/play/modals/EmergencyOrderModal";
-import PromotionModal from "../components/play/modals/PromotionModal";
+import PromotionModal, {
+  type PromotionOption,
+} from "../components/play/modals/PromotionModal";
 import ShareModal from "../components/play/modals/ShareModal";
-import MoveModal from "../components/play/modals/MoveModal";
-import { PLAY_SESSION_DEADLINE_STORAGE_KEY_PREFIX } from "../constants";
+import MoveModal, { type MoveRegion } from "../components/play/modals/MoveModal";
+import {
+  getPromotionPrice,
+  postDiscount,
+  postDonation,
+  postEmergencyOrder,
+  postPromotion,
+  type PromotionType,
+} from "../api/action";
+import {
+  getGameDayState,
+  startGameDay,
+  type GameStateResponse,
+  type GameTrafficStatus,
+} from "../api/game";
+import { getCurrentOrder, type CurrentOrderResponse } from "../api/order";
+import {
+  getLocationList,
+  getStore,
+  getStoreMenus,
+  updateStoreLocation,
+  type LocationItem,
+  type StoreMenuResponse,
+} from "../api/store";
 import useBrandName from "../hooks/useBrandName";
 import { useUserStore } from "../stores/useUserStore";
+import { normalizeDiscountMultiplier } from "../utils/dashboardItems";
+
+interface ApiErrorResponse {
+  message?: string;
+}
 
 const MOCK = {
   location: "성수",
-  storeName: "버블스토리",
+  storeName: "버블티 스토리",
   menuName: "버블티",
   congestion: "crowded" as const,
-  deliveryTraffic: "crowded" as DeliveryTrafficLevel,
   guests: 24,
   stock: 85,
   balance: 4_500_000,
   currentPrice: 4_100,
-  menuItems: [
-    { name: "빵", price: 1_800, emoji: "🍞" },
-    { name: "마라꼬치", price: 2_200, emoji: "🍢" },
-    { name: "젤리", price: 900, emoji: "🍬" },
-    { name: "떡볶이", price: 2_500, emoji: "🍽️" },
-    { name: "햄버거", price: 3_100, emoji: "🍔" },
-    { name: "아이스크림", price: 1_400, emoji: "🍦" },
-    { name: "닭강정", price: 2_800, emoji: "🍗" },
-    { name: "타코", price: 2_600, emoji: "🌮" },
-    { name: "핫도그", price: 1_700, emoji: "🌭" },
-    { name: "버블티", price: 2_300, emoji: "🧋" },
-  ],
   moveRegions: [
     {
       id: 1,
-      name: "강남역",
+      name: "강남구",
       icon: "🏙️",
       iconBg: "bg-blue-100",
       population: "매우 많음",
@@ -49,8 +68,8 @@ const MOCK = {
     },
     {
       id: 2,
-      name: "서울숲",
-      icon: "🌲",
+      name: "성수동",
+      icon: "🧋",
       iconBg: "bg-green-100",
       population: "보통",
       populationColor: "text-green-600",
@@ -58,8 +77,8 @@ const MOCK = {
     },
     {
       id: 3,
-      name: "홍대입구",
-      icon: "🎓",
+      name: "해운대구",
+      icon: "🌊",
       iconBg: "bg-purple-100",
       population: "많음",
       populationColor: "text-purple-500",
@@ -68,19 +87,45 @@ const MOCK = {
   ],
 };
 
+const MENU_EMOJI_MAP: Record<number, string> = {
+  1: "🍞",
+  2: "🍢",
+  3: "🍬",
+  4: "🍽️",
+  5: "🍔",
+  6: "🍨",
+  7: "🍗",
+  8: "🌮",
+  9: "🌭",
+  10: "🧋",
+};
+
+const MENU_EMOJI_BY_NAME: Record<string, string> = {
+  빵: "🍞",
+  마라꼬치: "🍢",
+  젤리: "🍬",
+  떡볶이: "🍽️",
+  햄버거: "🍔",
+  아이스크림: "🍨",
+  닭강정: "🍗",
+  타코: "🌮",
+  핫도그: "🌭",
+  버블티: "🧋",
+};
+
 function getInitialAlerts(): GameAlert[] {
   return [
     {
       id: 1,
       type: "event",
       title: "SNS에서 입소문 확산",
-      description: "손님 유입률이 15% 증가했습니다.",
+      description: "손님 유입률이 15% 증가하고 있습니다.",
       time: "방금 전",
     },
     {
       id: 2,
       type: "event",
-      title: "주말 축제 개막",
+      title: "주변 축제 개최",
       description: "유동인구가 20% 증가할 예정입니다.",
       time: "5분 전",
     },
@@ -88,9 +133,9 @@ function getInitialAlerts(): GameAlert[] {
 }
 
 const baseRankings: RankEntry[] = [
-  { id: "kim-boss", name: "김사장", storeName: "쿠키팩토리", revenue: 12_400_000, roi: 42.8 },
-  { id: "lee-ceo", name: "이대표", storeName: "버블티하우스", revenue: 11_800_000, roi: 38.4 },
-  { id: "me", name: "나", storeName: "버블스토리", revenue: 10_200_000, roi: 34.2, isMe: true },
+  { id: "kim-boss", name: "김사장", storeName: "쿠키 팩토리", revenue: 12_400_000, roi: 42.8 },
+  { id: "lee-ceo", name: "이대표", storeName: "버블티 하우스", revenue: 11_800_000, roi: 38.4 },
+  { id: "me", name: "나", storeName: "버블티 스토리", revenue: 10_200_000, roi: 34.2, isMe: true },
   { id: "park-manager", name: "박점장", storeName: "핫도그랩", revenue: 9_700_000, roi: 27.5 },
   { id: "choi-owner", name: "최사장", storeName: "붕어빵연구소", revenue: 830_000, roi: 18.7 },
 ];
@@ -103,41 +148,178 @@ const promotionLabels: Record<string, string> = {
 };
 
 const persistentActionTypes = new Set<ActionType>(["discount", "promotion", "share"]);
-const PLAY_DURATION_SECONDS = 120;
-const PLAY_DURATION_MS = PLAY_DURATION_SECONDS * 1000;
 
-function getPlaySessionStorageKey(dayNumber: number) {
-  return `${PLAY_SESSION_DEADLINE_STORAGE_KEY_PREFIX}:${dayNumber}`;
+const PROMOTION_OPTION_META: Record<
+  PromotionType,
+  Omit<PromotionOption, "id" | "price">
+> = {
+  INFLUENCER: { icon: "📣", name: "인플루언서 홍보", multiplier: 1.2 },
+  SNS: { icon: "📱", name: "SNS 홍보", multiplier: 1.15 },
+  LEAFLET: { icon: "📰", name: "전단지 배포", multiplier: 1.1 },
+  FRIEND: { icon: "🫶", name: "지인 소개", multiplier: 1.05 },
+};
+
+const DEFAULT_PROMOTION_PRICES: Record<PromotionType, number> = {
+  INFLUENCER: 50_000,
+  SNS: 30_000,
+  LEAFLET: 10_000,
+  FRIEND: 0,
+};
+
+const PROMOTION_LABELS: Record<PromotionType, string> = {
+  INFLUENCER: "인플루언서 홍보",
+  SNS: "SNS 홍보",
+  LEAFLET: "전단지 배포",
+  FRIEND: "지인 소개",
+};
+
+promotionLabels.INFLUENCER = PROMOTION_LABELS.INFLUENCER;
+promotionLabels.SNS = PROMOTION_LABELS.SNS;
+promotionLabels.LEAFLET = PROMOTION_LABELS.LEAFLET;
+promotionLabels.FRIEND = PROMOTION_LABELS.FRIEND;
+
+function buildPromotionOptions(prices?: Partial<Record<PromotionType, number>>): PromotionOption[] {
+  return (Object.keys(PROMOTION_OPTION_META) as PromotionType[]).map((type) => ({
+    id: type,
+    ...PROMOTION_OPTION_META[type],
+    price: prices?.[type] ?? DEFAULT_PROMOTION_PRICES[type],
+  }));
 }
 
-function resolvePlaySessionEndTimestamp(dayNumber: number) {
-  if (typeof window === "undefined") {
-    return Date.now() + PLAY_DURATION_MS;
+function isPromotionUsed(actionStatus: GameStateResponse["actionStatus"]) {
+  return (
+    actionStatus.influencerUsed ||
+    actionStatus.snsUsed ||
+    actionStatus.leafletUsed ||
+    actionStatus.friendUsed
+  );
+}
+
+const LOCATION_ICON_MAP: Record<string, string> = {
+  홍대: "🎨",
+  성수: "🧋",
+  명동: "🛍️",
+  이태원: "🌃",
+  건대: "🎓",
+  강남: "🏙️",
+  여의도: "🏢",
+  사의동: "🍽️",
+};
+
+function getMoveCost(rent: number) {
+  return Math.round(rent * 7 * 0.1);
+}
+
+function mapLocationToMoveRegion(location: LocationItem): MoveRegion {
+  return {
+    id: location.locationId,
+    name: location.locationName,
+    rent: location.rent,
+    moveCost: getMoveCost(location.rent),
+    congestionLabel: "연동 예정",
+    icon: LOCATION_ICON_MAP[location.locationName] ?? "📍",
+  };
+}
+
+function resolveMenuEmoji(menuId: number, menuName: string) {
+  return MENU_EMOJI_MAP[menuId] ?? MENU_EMOJI_BY_NAME[menuName.trim()] ?? "🍽️";
+}
+
+function mapStoreMenusToEmergencyMenus(menus: StoreMenuResponse[]): EmergencyMenuItem[] {
+  return menus.map((menu) => ({
+    menuId: menu.menuId,
+    name: menu.menuName,
+    ingredientPrice: menu.ingredientPrice,
+    ingredientDiscountMultiplier: normalizeDiscountMultiplier(menu.discount),
+    emoji: resolveMenuEmoji(menu.menuId, menu.menuName),
+  }));
+}
+
+function getErrorMessage(error: unknown, fallbackMessage: string) {
+  if (axios.isAxiosError<ApiErrorResponse>(error)) {
+    return error.response?.data?.message ?? fallbackMessage;
   }
 
-  const storageKey = getPlaySessionStorageKey(dayNumber);
-  const storedValue = window.sessionStorage.getItem(storageKey);
-  const parsedTimestamp = Number(storedValue);
+  return fallbackMessage;
+}
 
-  if (Number.isFinite(parsedTimestamp) && parsedTimestamp > 0) {
-    return parsedTimestamp;
+function formatEmergencyArrivalTime(arrivedTime: string) {
+  const parsed = new Date(arrivedTime);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return "";
   }
 
-  const nextTimestamp = Date.now() + PLAY_DURATION_MS;
-  window.sessionStorage.setItem(storageKey, String(nextTimestamp));
+  return parsed.toLocaleTimeString("ko-KR", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
 
-  return nextTimestamp;
+function getEstimatedEmergencyArrivalTime(
+  serverTime: string | null | undefined,
+  delaySeconds: number | null | undefined,
+) {
+  if (!serverTime || typeof delaySeconds !== "number" || delaySeconds < 0) {
+    return null;
+  }
+
+  const parsedServerTime = new Date(serverTime);
+
+  if (Number.isNaN(parsedServerTime.getTime())) {
+    return null;
+  }
+
+  return new Date(parsedServerTime.getTime() + delaySeconds * 1000).toISOString();
+}
+
+function getDiscountedPrice(
+  currentPrice: number,
+  _minimumPrice: number,
+  discountRate: number,
+) {
+  return Math.max(0, Math.round(currentPrice * (1 - discountRate / 100)));
+}
+
+function getTrafficStatusLabel(status: GameTrafficStatus | null | undefined) {
+  switch (status) {
+    case "VERY_SMOOTH":
+      return "매우 원활";
+    case "SMOOTH":
+      return "원활";
+    case "NORMAL":
+      return "보통";
+    case "CONGESTED":
+      return "혼잡";
+    case "VERY_CONGESTED":
+      return "매우 혼잡";
+    default:
+      return null;
+  }
 }
 
 export default function PlayPage() {
   const { day } = useParams<{ day: string }>();
+  const guardContext = useOutletContext<GameGuardContext>();
   const dayNumber = useMemo(() => Number(day) || 1, [day]);
 
-  return <PlayPageSession key={dayNumber} dayNumber={dayNumber} />;
+  return (
+    <PlayPageSession
+      key={dayNumber}
+      dayNumber={dayNumber}
+      phaseEndTimestamp={guardContext.phaseEndTimestamp}
+    />
+  );
 }
 
-function PlayPageSession({ dayNumber }: { dayNumber: number }) {
-  const nickname = useUserStore((s) => s.nickname) ?? "버블킹";
+function PlayPageSession({
+  dayNumber,
+  phaseEndTimestamp,
+}: {
+  dayNumber: number;
+  phaseEndTimestamp: number;
+}) {
+  const nickname = useUserStore((s) => s.nickname) ?? "버블티";
   const { brandName } = useBrandName();
   const [activeModal, setActiveModal] = useState<ActionType | null>(null);
   const [usedActions, setUsedActions] = useState<Set<ActionType>>(new Set());
@@ -145,15 +327,94 @@ function PlayPageSession({ dayNumber }: { dayNumber: number }) {
   const [alerts, setAlerts] = useState<GameAlert[]>(() => getInitialAlerts());
   const [balance, setBalance] = useState(MOCK.balance);
   const [stock, setStock] = useState(MOCK.stock);
-  const [playEndTimestampMs] = useState(() =>
-    resolvePlaySessionEndTimestamp(dayNumber),
+  const [guests, setGuests] = useState(MOCK.guests);
+  const [currentLocationName, setCurrentLocationName] = useState(MOCK.location);
+  const [currentOrder, setCurrentOrder] = useState<CurrentOrderResponse | null>(null);
+  const [menuItems, setMenuItems] = useState<EmergencyMenuItem[]>([]);
+  const [moveRegions, setMoveRegions] = useState<MoveRegion[]>([]);
+  const [promotionOptions, setPromotionOptions] = useState<PromotionOption[]>(() =>
+    buildPromotionOptions(),
   );
+  const [deliveryTrafficLabel, setDeliveryTrafficLabel] = useState<string | null>(null);
+  const [emergencyArriveAt, setEmergencyArriveAt] = useState<string | null>(null);
+  const [isEmergencyDataLoading, setIsEmergencyDataLoading] = useState(true);
+  const [emergencyDataError, setEmergencyDataError] = useState<string | null>(null);
+  const [isMoveDataLoading, setIsMoveDataLoading] = useState(true);
+  const [moveDataError, setMoveDataError] = useState<string | null>(null);
+  const playEndTimestampMs = phaseEndTimestamp;
   const [nowMs, setNowMs] = useState(() => Date.now());
   const hasDeadlineAlertRef = useRef(false);
   const hasLowStockAlertRef = useRef(false);
   const remainingMilliseconds = Math.max(0, playEndTimestampMs - nowMs);
   const remainingSeconds = Math.max(0, Math.ceil(remainingMilliseconds / 1000));
   const playStoreName = brandName || MOCK.storeName;
+  const currentMenuName = currentOrder?.menuName ?? MOCK.menuName;
+  const currentMenuPricing: CurrentMenuPricing | null = currentOrder
+    ? {
+        costPrice: currentOrder.costPrice,
+        recommendedPrice: currentOrder.recommendedPrice,
+        maxSellingPrice: currentOrder.maxSellingPrice,
+        sellingPrice: currentOrder.sellingPrice,
+      }
+    : null;
+  const discountCurrentPrice = currentOrder?.sellingPrice ?? MOCK.currentPrice;
+  const discountMinimumPrice = currentOrder?.costPrice ?? discountCurrentPrice;
+
+  const syncPersistentActionState = (
+    action: Extract<ActionType, "discount" | "promotion" | "share">,
+    isUsed: boolean,
+  ) => {
+    setUsedActions((prev) => {
+      const next = new Set(prev);
+
+      if (isUsed) {
+        next.add(action);
+      } else {
+        next.delete(action);
+      }
+
+      return next;
+    });
+
+    setActiveEffects((prev) => {
+      const next = new Set(prev);
+
+      if (isUsed) {
+        next.add(action);
+      } else {
+        next.delete(action);
+      }
+
+      return next;
+    });
+  };
+
+  const syncDiscountActionState = (discountUsed: boolean) => {
+    syncPersistentActionState("discount", discountUsed);
+  };
+
+  const syncPromotionActionState = (promotionUsed: boolean) => {
+    syncPersistentActionState("promotion", promotionUsed);
+  };
+
+  const syncShareActionState = (donationUsed: boolean) => {
+    syncPersistentActionState("share", donationUsed);
+  };
+
+  const applyGameState = (state: GameStateResponse) => {
+    setBalance(state.cash);
+    setStock(state.inventory.totalStock);
+    setGuests(state.customerCount);
+    setDeliveryTrafficLabel(getTrafficStatusLabel(state.traffic?.status));
+    setEmergencyArriveAt(
+      state.actionStatus.emergencyOrderArriveAt ??
+        getEstimatedEmergencyArrivalTime(state.serverTime, state.traffic?.delaySeconds),
+    );
+    syncDiscountActionState(state.actionStatus.discountUsed);
+    syncPromotionActionState(isPromotionUsed(state.actionStatus));
+    syncShareActionState(state.actionStatus.donationUsed);
+  };
+
   const rankings = useMemo(
     () =>
       baseRankings.map((entry) =>
@@ -169,6 +430,128 @@ function PlayPageSession({ dayNumber }: { dayNumber: number }) {
   );
 
   useEffect(() => {
+    let isActive = true;
+
+    const loadEmergencyOrderData = async () => {
+      setIsEmergencyDataLoading(true);
+      setEmergencyDataError(null);
+      setIsMoveDataLoading(true);
+      setMoveDataError(null);
+
+      let startErrorMessage: string | null = null;
+
+      try {
+        await startGameDay();
+      } catch (error) {
+        startErrorMessage = getErrorMessage(error, "영업 상태를 준비하지 못했습니다.");
+      }
+
+      const [
+        stateResult,
+        orderResult,
+        menuResult,
+        promotionPriceResult,
+        storeResult,
+        locationResult,
+      ] = await Promise.allSettled([
+        getGameDayState(),
+        getCurrentOrder(),
+        getStoreMenus(),
+        getPromotionPrice(),
+        getStore(),
+        getLocationList(),
+      ]);
+
+      if (!isActive) {
+        return;
+      }
+
+      if (stateResult.status === "fulfilled") {
+        applyGameState(stateResult.value);
+      } else {
+        setDeliveryTrafficLabel(null);
+        setEmergencyArriveAt(null);
+        syncDiscountActionState(false);
+        syncPromotionActionState(false);
+        syncShareActionState(false);
+      }
+
+      if (orderResult.status === "fulfilled") {
+        setCurrentOrder(orderResult.value);
+      } else {
+        setCurrentOrder(null);
+      }
+
+      if (menuResult.status === "fulfilled") {
+        setMenuItems(mapStoreMenusToEmergencyMenus(menuResult.value.menus));
+      } else {
+        setMenuItems([]);
+      }
+
+      if (promotionPriceResult.status === "fulfilled") {
+        const nextPrices = Object.fromEntries(
+          promotionPriceResult.value.promotion.map((item) => [
+            item.promotionType,
+            item.promotionPrice,
+          ]),
+        ) as Partial<Record<PromotionType, number>>;
+
+        setPromotionOptions(buildPromotionOptions(nextPrices));
+      } else {
+        setPromotionOptions(buildPromotionOptions());
+      }
+
+      const nextCurrentLocationName =
+        storeResult.status === "fulfilled" ? storeResult.value.location : currentLocationName;
+
+      if (storeResult.status === "fulfilled") {
+        setCurrentLocationName(storeResult.value.location);
+      }
+
+      if (locationResult.status === "fulfilled") {
+        setMoveRegions(locationResult.value.locations.map(mapLocationToMoveRegion));
+      } else {
+        setMoveRegions([]);
+      }
+
+      const nextError =
+        stateResult.status === "rejected"
+          ? getErrorMessage(
+              stateResult.reason,
+              startErrorMessage ?? "현재 게임 상태를 불러오지 못했습니다.",
+            )
+          : orderResult.status === "rejected"
+            ? getErrorMessage(orderResult.reason, "현재 판매 메뉴 정보를 불러오지 못했습니다.")
+            : menuResult.status === "rejected"
+              ? getErrorMessage(menuResult.reason, "메뉴 목록을 불러오지 못했습니다.")
+              : null;
+
+      setEmergencyDataError(nextError);
+      setIsEmergencyDataLoading(false);
+
+      const nextMoveError =
+        storeResult.status === "rejected"
+          ? getErrorMessage(storeResult.reason, "현재 매장 위치를 불러오지 못했습니다.")
+          : locationResult.status === "rejected"
+            ? getErrorMessage(locationResult.reason, "지역 목록을 불러오지 못했습니다.")
+            : null;
+
+      if (storeResult.status !== "fulfilled") {
+        setCurrentLocationName(nextCurrentLocationName);
+      }
+
+      setMoveDataError(nextMoveError);
+      setIsMoveDataLoading(false);
+    };
+
+    void loadEmergencyOrderData();
+
+    return () => {
+      isActive = false;
+    };
+  }, [dayNumber]);
+
+  useEffect(() => {
     if (Date.now() >= playEndTimestampMs) {
       return;
     }
@@ -178,7 +561,11 @@ function PlayPageSession({ dayNumber }: { dayNumber: number }) {
       const nextRemainingMilliseconds = Math.max(0, playEndTimestampMs - nextNowMs);
       const nextRemainingSeconds = Math.max(0, Math.ceil(nextRemainingMilliseconds / 1000));
 
-      if (nextRemainingSeconds <= 60 && nextRemainingSeconds > 0 && !hasDeadlineAlertRef.current) {
+      if (
+        nextRemainingSeconds <= 60 &&
+        nextRemainingSeconds > 0 &&
+        !hasDeadlineAlertRef.current
+      ) {
         hasDeadlineAlertRef.current = true;
         setAlerts((prev) => [
           {
@@ -275,16 +662,16 @@ function PlayPageSession({ dayNumber }: { dayNumber: number }) {
   };
 
   return (
-    <div className="flex h-screen w-full flex-col overflow-hidden font-display text-slate-900 selection:bg-primary selection:text-white">
+    <div className="selection:bg-primary selection:text-white flex h-screen w-full flex-col overflow-hidden font-display text-slate-900">
       <PlayHeader
-        location={MOCK.location}
+        location={currentLocationName}
         storeName={playStoreName}
-        menuName={MOCK.menuName}
+        menuName={currentMenuName}
         day={dayNumber}
         remainingSeconds={remainingSeconds}
         remainingMilliseconds={remainingMilliseconds}
         congestion={MOCK.congestion}
-        guests={MOCK.guests}
+        guests={guests}
         stock={stock}
         balance={balance}
       />
@@ -300,12 +687,49 @@ function PlayPageSession({ dayNumber }: { dayNumber: number }) {
 
       {activeModal === "discount" && (
         <DiscountModal
-          currentPrice={MOCK.currentPrice}
+          currentPrice={discountCurrentPrice}
+          minimumPrice={discountMinimumPrice}
           onClose={closeModal}
-          onSubmit={(rate) => {
+          onSubmit={async (rate) => {
+            const discountedPrice = getDiscountedPrice(
+              discountCurrentPrice,
+              discountMinimumPrice,
+              rate,
+            );
+            const discountValue = discountCurrentPrice - discountedPrice;
+
+            if (discountValue <= 0) {
+              return;
+            }
+
+            const response = await postDiscount(discountValue);
+
+            setCurrentOrder((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    sellingPrice: response.newPrice,
+                  }
+                : prev,
+            );
+            syncDiscountActionState(true);
+
+            const [stateResult, orderResult] = await Promise.allSettled([
+              getGameDayState(),
+              getCurrentOrder(),
+            ]);
+
+            if (stateResult.status === "fulfilled") {
+              applyGameState(stateResult.value);
+            }
+
+            if (orderResult.status === "fulfilled") {
+              setCurrentOrder(orderResult.value);
+            }
+
             completeAction("discount", {
               alert: {
-                title: "할인 이벤트 적용됨",
+                title: "할인 이벤트 적용",
                 description: `${rate}% 할인이 적용되었습니다.`,
               },
             });
@@ -316,21 +740,29 @@ function PlayPageSession({ dayNumber }: { dayNumber: number }) {
       {activeModal === "emergency" && (
         <EmergencyOrderModal
           currentBalance={balance}
-          menuItems={MOCK.menuItems}
-          currentMenuName={MOCK.menuName}
-          deliveryTraffic={MOCK.deliveryTraffic}
+          menuItems={menuItems}
+          currentMenuId={currentOrder?.menuId ?? null}
+          currentMenuPricing={currentMenuPricing}
+          deliveryTrafficLabel={deliveryTrafficLabel}
+          estimatedArrivalTime={emergencyArriveAt}
+          isInitializing={isEmergencyDataLoading}
+          initializationError={emergencyDataError}
           onClose={closeModal}
-          onSubmit={({ menuIndex, quantity, totalCost }) => {
-            const selectedMenu = MOCK.menuItems[menuIndex];
-            const isNewMenuOrder = selectedMenu.name !== MOCK.menuName;
+          onSubmit={async ({ menuId, menuName, quantity, salePrice }) => {
+            const response = await postEmergencyOrder(menuId, quantity, salePrice);
+            const isNewMenuOrder = menuId !== currentOrder?.menuId;
+            const arrivalLabel = formatEmergencyArrivalTime(response.arrivedTime);
+            const arrivalText = arrivalLabel ? ` ${arrivalLabel} 도착 예정입니다.` : "";
+
+            setEmergencyArriveAt(response.arrivedTime);
 
             completeAction("emergency", {
-              cost: totalCost,
+              cost: response.totalCost,
               alert: {
                 title: "긴급 발주 완료",
                 description: isNewMenuOrder
-                  ? `${selectedMenu.name} ${quantity}개를 긴급 발주했습니다. 새 메뉴 주문입니다.`
-                  : `${selectedMenu.name} ${quantity}개를 긴급 발주했습니다.`,
+                  ? `${menuName} ${quantity}개를 긴급 발주했습니다.${arrivalText} 새 메뉴 주문입니다.`
+                  : `${menuName} ${quantity}개를 긴급 발주했습니다.${arrivalText}`,
               },
             });
           }}
@@ -340,12 +772,25 @@ function PlayPageSession({ dayNumber }: { dayNumber: number }) {
       {activeModal === "promotion" && (
         <PromotionModal
           currentBalance={balance}
+          options={promotionOptions}
           onClose={closeModal}
-          onSubmit={({ promotionId, cost }) => {
+          onSubmit={async ({ promotionId, cost }) => {
+            const promotionType = promotionId as PromotionType;
+            const response = await postPromotion(promotionType);
+
+            syncPromotionActionState(true);
+
+            const [stateSyncResult] = await Promise.allSettled([getGameDayState()]);
+            const hasSyncedState = stateSyncResult.status === "fulfilled";
+
+            if (hasSyncedState) {
+              applyGameState(stateSyncResult.value);
+            }
+
             completeAction("promotion", {
-              cost,
+              cost: hasSyncedState ? undefined : response.cost || cost,
               alert: {
-                title: "홍보 시작됨",
+                title: "홍보 시작",
                 description: `${promotionLabels[promotionId] ?? "홍보"}를 시작했습니다.`,
               },
             });
@@ -357,9 +802,20 @@ function PlayPageSession({ dayNumber }: { dayNumber: number }) {
         <ShareModal
           currentStock={stock}
           onClose={closeModal}
-          onSubmit={(quantity) => {
+          onSubmit={async (quantity) => {
+            const response = await postDonation(quantity);
+
+            syncShareActionState(true);
+
+            const [stateSyncResult] = await Promise.allSettled([getGameDayState()]);
+            const hasSyncedState = stateSyncResult.status === "fulfilled";
+
+            if (hasSyncedState) {
+              applyGameState(stateSyncResult.value);
+            }
+
             completeAction("share", {
-              stockDelta: -quantity,
+              stockDelta: hasSyncedState ? undefined : -response.quantity,
               alert: {
                 title: "나눔 이벤트 진행",
                 description: `재고 ${quantity}개 나눔을 시작했습니다.`,
@@ -372,16 +828,36 @@ function PlayPageSession({ dayNumber }: { dayNumber: number }) {
       {activeModal === "move" && (
         <MoveModal
           currentBalance={balance}
-          currentRegionName={MOCK.location}
+          currentRegionName={currentLocationName}
+          regions={moveRegions}
+          isInitializing={isMoveDataLoading}
+          initializationError={moveDataError}
           onClose={closeModal}
-          onSubmit={({ regionName, cost }) => {
-            const destination = { name: regionName };
+          onSubmit={async ({ regionId, regionName }) => {
+            const response = await updateStoreLocation(regionId);
+
+            const [stateSyncResult, storeSyncResult] = await Promise.allSettled([
+              getGameDayState(),
+              getStore(),
+            ]);
+            const hasSyncedState = stateSyncResult.status === "fulfilled";
+
+            if (hasSyncedState) {
+              applyGameState(stateSyncResult.value);
+            } else {
+              setBalance(response.balance);
+            }
+
+            if (storeSyncResult.status === "fulfilled") {
+              setCurrentLocationName(storeSyncResult.value.location);
+            } else {
+              setCurrentLocationName(regionName);
+            }
 
             completeAction("move", {
-              cost,
               alert: {
                 title: "영업 지역 이전 예약",
-                description: `${destination?.name ?? "선택한 지역"}으로 다음 영업부터 이동합니다.`,
+                description: `${regionName}으로 다음 영업부터 이동합니다.`,
               },
             });
           }}

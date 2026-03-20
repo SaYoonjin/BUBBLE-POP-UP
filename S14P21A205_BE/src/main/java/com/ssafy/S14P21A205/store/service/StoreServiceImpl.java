@@ -53,7 +53,8 @@ public class StoreServiceImpl implements StoreService {
                 store.getLocation().getLocationName(),
                 store.getStoreName(),
                 store.getMenu().getMenuName(),
-                resolveCurrentDay(store, now)
+                resolveCurrentDay(store, now),
+                resolvePlayableDay(store)
         );
     }
 
@@ -82,7 +83,7 @@ public class StoreServiceImpl implements StoreService {
 
         Integer updatedBalance = deductBalance(storeId, currentDay, location.getInteriorCost());
         recordLocationChangeCost(storeId, currentDay, location.getInteriorCost());
-        store.reserveLocationChange(location, currentDay, currentDay + 1);
+        store.reserveLocationChange(location, currentDay + 1);
 
         return new UpdateStoreLocationResponse(
                 location.getId(),
@@ -92,7 +93,6 @@ public class StoreServiceImpl implements StoreService {
 
     @Override
     public LocationListResponse getLocations(Integer userId) {
-        getStoreByUserId(userId);
         float discount = getDisplayedRentDiscountRate(userId).floatValue();
 
         return new LocationListResponse(
@@ -175,6 +175,11 @@ public class StoreServiceImpl implements StoreService {
         }
         Integer fallbackDay = store.getSeason().getCurrentDay();
         return fallbackDay == null || fallbackDay == 0 ? 1 : fallbackDay;
+    }
+
+    private int resolvePlayableDay(Store store) {
+        Integer playableFromDay = store.getPlayableFromDay();
+        return playableFromDay == null || playableFromDay <= 0 ? 1 : playableFromDay;
     }
 
     private Store getStoreByUserId(Integer userId) {

@@ -203,8 +203,6 @@ class GameDayStartServiceTests {
         ));
         when(dailyEventRepository.findBySeasonIdAndDayBetweenOrderByDayAscIdAsc(9L, 1, 1))
                 .thenReturn(List.of(globalEvent, locationEvent, ignoredMenuEvent));
-        when(purchaseListGenerator.generate(any(), eq(111L), eq(0))).thenReturn(fixedPurchaseList);
-
         GameDayStartResponse response = gameDayStartService.startDay(mock(Authentication.class));
 
         assertThat(response.startTime()).isEqualTo("10:00");
@@ -230,13 +228,7 @@ class GameDayStartServiceTests {
         assertThat(response.openingSummary().interiorCost()).isEqualTo(200_000);
         assertThat(response.openingSummary().appliedUnitCost()).isEqualTo(2_400);
 
-        ArgumentCaptor<GameDayLiveState> stateCaptor = ArgumentCaptor.forClass(GameDayLiveState.class);
-        verify(gameDayStoreStateRedisRepository).save(org.mockito.ArgumentMatchers.eq(15L), org.mockito.ArgumentMatchers.eq(1), stateCaptor.capture());
-        assertThat(stateCaptor.getValue().purchaseCursor()).isZero();
-        assertThat(stateCaptor.getValue().purchaseList()).isEqualTo(fixedPurchaseList);
-        assertThat(stateCaptor.getValue().startedAt()).isEqualTo(LocalDateTime.of(2026, 3, 9, 14, 32, 10));
-        assertThat(stateCaptor.getValue().startResponse()).isEqualTo(response);
-        assertThat(stateCaptor.getValue().cumulativeTotalCost()).isEqualTo(330_000L);
+        verify(gameDayStoreStateRedisRepository, never()).save(any(), any(), any());
     }
 
     @Test
@@ -267,6 +259,7 @@ class GameDayStartServiceTests {
                 BigDecimal.ZERO,
                 5_000,
                 0,
+                List.of(),
                 0,
                 0L,
                 0,
@@ -319,8 +312,6 @@ class GameDayStartServiceTests {
         ));
         when(dailyReportRepository.findByStoreIdAndDay(15L, 1)).thenReturn(Optional.empty());
         when(dailyEventRepository.findBySeasonIdAndDayBetweenOrderByDayAscIdAsc(9L, 1, 2)).thenReturn(List.of());
-        when(purchaseListGenerator.generate(any(), eq(111L), eq(0))).thenReturn(List.of(1, 1, 1));
-
         GameDayStartResponse response = gameDayStartService.startDay(mock(Authentication.class));
 
         assertThat(response.initialBalance()).isEqualTo(9_570_000);
@@ -369,21 +360,13 @@ class GameDayStartServiceTests {
         ));
         when(dailyReportRepository.findByStoreIdAndDay(15L, 1)).thenReturn(Optional.of(previousDailyReport(store, 9_000_000, 10)));
         when(dailyEventRepository.findBySeasonIdAndDayBetweenOrderByDayAscIdAsc(9L, 1, 2)).thenReturn(List.of());
-        when(purchaseListGenerator.generate(any(), eq(111L), eq(0))).thenReturn(List.of(1, 1, 1));
 
         GameDayStartResponse response = gameDayStartService.startDay(mock(Authentication.class));
 
         assertThat(response.initialStock()).isEqualTo(30);
         assertThat(store.getPrice()).isEqualTo(6_000);
 
-        ArgumentCaptor<GameDayLiveState> stateCaptor = ArgumentCaptor.forClass(GameDayLiveState.class);
-        verify(gameDayStoreStateRedisRepository).save(
-                org.mockito.ArgumentMatchers.eq(15L),
-                org.mockito.ArgumentMatchers.eq(2),
-                stateCaptor.capture()
-        );
-        assertThat(stateCaptor.getValue().stock()).isEqualTo(30);
-        assertThat(stateCaptor.getValue().salePrice()).isEqualTo(6_000);
+        verify(gameDayStoreStateRedisRepository, never()).save(any(), any(), any());
     }
 
     @Test
@@ -427,22 +410,13 @@ class GameDayStartServiceTests {
         when(dailyReportRepository.findByStoreIdAndDay(15L, 1))
                 .thenReturn(Optional.of(previousDailyReport(store, 9_000_000, 10)));
         when(dailyEventRepository.findBySeasonIdAndDayBetweenOrderByDayAscIdAsc(9L, 1, 2)).thenReturn(List.of());
-        when(purchaseListGenerator.generate(any(), eq(111L), eq(0))).thenReturn(List.of(1, 1, 1));
-
         GameDayStartResponse response = gameDayStartService.startDay(mock(Authentication.class));
 
         assertThat(response.initialStock()).isEqualTo(20);
         assertThat(store.getMenu().getId()).isEqualTo(8L);
         assertThat(store.getPrice()).isEqualTo(6_500);
 
-        ArgumentCaptor<GameDayLiveState> stateCaptor = ArgumentCaptor.forClass(GameDayLiveState.class);
-        verify(gameDayStoreStateRedisRepository).save(
-                org.mockito.ArgumentMatchers.eq(15L),
-                org.mockito.ArgumentMatchers.eq(2),
-                stateCaptor.capture()
-        );
-        assertThat(stateCaptor.getValue().stock()).isEqualTo(20);
-        assertThat(stateCaptor.getValue().salePrice()).isEqualTo(6_500);
+        verify(gameDayStoreStateRedisRepository, never()).save(any(), any(), any());
     }
 
     @Test
@@ -471,8 +445,6 @@ class GameDayStartServiceTests {
                 traffic(store.getLocation(), LocalDateTime.of(2026, 3, 9, 10, 0), TrafficStatus.NORMAL)
         ));
         when(dailyEventRepository.findBySeasonIdAndDayBetweenOrderByDayAscIdAsc(9L, 1, 1)).thenReturn(List.of());
-        when(purchaseListGenerator.generate(any(), eq(111L), eq(0))).thenReturn(List.of(1, 1, 1));
-
         GameDayStartResponse response = gameDayStartService.startDay(mock(Authentication.class));
 
         assertThat(response.initialBalance()).isEqualTo(9_372_000);
@@ -523,8 +495,6 @@ class GameDayStartServiceTests {
                 """
         )));
         when(dailyEventRepository.findBySeasonIdAndDayBetweenOrderByDayAscIdAsc(9L, 1, 2)).thenReturn(List.of());
-        when(purchaseListGenerator.generate(any(), eq(111L), eq(0))).thenReturn(List.of(1, 1, 1));
-
         NewsRankingResolver.PreviousDayRanking previousDayRanking =
                 new NewsRankingResolver(newsReportRepository, new ObjectMapper()).resolve(store, 2);
         assertThat(previousDayRanking.areaEntryRank()).isEqualTo(2);
@@ -634,6 +604,7 @@ class GameDayStartServiceTests {
                 new BigDecimal("0.10"),
                 5_000,
                 0,
+                List.of(),
                 0,
                 0L,
                 0,

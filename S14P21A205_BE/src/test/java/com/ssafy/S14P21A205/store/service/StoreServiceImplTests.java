@@ -2,6 +2,7 @@ package com.ssafy.S14P21A205.store.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -11,19 +12,25 @@ import com.ssafy.S14P21A205.game.day.state.GameDayLiveState;
 import com.ssafy.S14P21A205.game.day.state.repository.GameDayStoreStateRedisRepository;
 import com.ssafy.S14P21A205.game.season.entity.Season;
 import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
+import com.ssafy.S14P21A205.shop.entity.ItemCategory;
 import com.ssafy.S14P21A205.shop.repository.ItemUserRepository;
+import com.ssafy.S14P21A205.store.dto.LocationListResponse;
+import com.ssafy.S14P21A205.store.dto.StoreResponse;
 import com.ssafy.S14P21A205.store.dto.UpdateStoreLocationRequest;
 import com.ssafy.S14P21A205.store.dto.UpdateStoreLocationResponse;
 import com.ssafy.S14P21A205.store.entity.Location;
 import com.ssafy.S14P21A205.store.entity.Store;
+import com.ssafy.S14P21A205.shop.entity.Menu;
 import com.ssafy.S14P21A205.store.repository.LocationRepository;
 import com.ssafy.S14P21A205.store.repository.MenuRepository;
 import com.ssafy.S14P21A205.store.repository.StoreRepository;
 import java.lang.reflect.Constructor;
+import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -92,7 +99,6 @@ class StoreServiceImplTests {
     void updateStoreLocationRejectsWhenNextDayMoveIsAlreadyReserved() {
         Store store = store(15L, 3L, 2, 7);
         ReflectionTestUtils.setField(store, "pendingLocation", location(4L, "Gangnam", 200_000, 120_000));
-        ReflectionTestUtils.setField(store, "pendingLocationReservedDay", 2);
         ReflectionTestUtils.setField(store, "pendingLocationApplyDay", 3);
 
         when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
@@ -104,8 +110,46 @@ class StoreServiceImplTests {
                         .isEqualTo(ErrorCode.INVALID_INPUT_VALUE));
     }
 
+    @Test
+    void getStoreReturnsPlayableDay() {
+        Store store = store(15L, 3L, 3, 7);
+        ReflectionTestUtils.setField(store, "storeName", "PulsePop Kitchen");
+        ReflectionTestUtils.setField(store, "menu", menu(5L, "치킨 타코"));
+        ReflectionTestUtils.setField(store, "playableFromDay", 3);
+
+        when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
+                .thenReturn(Optional.of(store));
+
+        StoreResponse response = storeService.getStore(1);
+
+        assertThat(response.location()).isEqualTo("Seongsu");
+        assertThat(response.popupName()).isEqualTo("PulsePop Kitchen");
+        assertThat(response.menu()).isEqualTo("치킨 타코");
+        assertThat(response.day()).isEqualTo(3);
+        assertThat(response.playableDay()).isEqualTo(3);
+    }
+
+    @Test
+    void getLocationsReturnsListWithoutCurrentSeasonStore() {
+        when(itemUserRepository.findPurchasedDiscountRateByUserIdAndCategory(1, ItemCategory.RENT))
+                .thenReturn(Optional.of(new BigDecimal("0.80")));
+        when(locationRepository.findAllByOrderByIdAsc()).thenReturn(List.of(
+                location(3L, "Seongsu", 100_000, 150_000),
+                location(4L, "Gangnam", 200_000, 120_000)
+        ));
+
+        LocationListResponse response = storeService.getLocations(1);
+
+        assertThat(response.locations()).hasSize(2);
+        assertThat(response.locations().get(0).locationId()).isEqualTo(3L);
+        assertThat(response.locations().get(0).locationName()).isEqualTo("Seongsu");
+        assertThat(response.locations().get(0).discount()).isEqualTo(0.8f);
+        verify(storeRepository, never()).findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS);
+    }
+
     private Store store(Long storeId, Long locationId, int currentDay, int totalDays) {
         Location location = location(locationId, "Seongsu", 100_000, 150_000);
+        Menu menu = menu(5L, "Cookie");
 
         Season season = instantiate(Season.class);
         ReflectionTestUtils.setField(season, "id", 9L);
@@ -120,8 +164,18 @@ class StoreServiceImplTests {
         Store store = instantiate(Store.class);
         ReflectionTestUtils.setField(store, "id", storeId);
         ReflectionTestUtils.setField(store, "location", location);
+        ReflectionTestUtils.setField(store, "menu", menu);
         ReflectionTestUtils.setField(store, "season", season);
+        ReflectionTestUtils.setField(store, "storeName", "Default Store");
+        ReflectionTestUtils.setField(store, "playableFromDay", 1);
         return store;
+    }
+
+    private Menu menu(Long id, String name) {
+        Menu menu = instantiate(Menu.class);
+        ReflectionTestUtils.setField(menu, "id", id);
+        ReflectionTestUtils.setField(menu, "menuName", name);
+        return menu;
     }
 
     private Location location(Long id, String name, int interiorCost, int rent) {

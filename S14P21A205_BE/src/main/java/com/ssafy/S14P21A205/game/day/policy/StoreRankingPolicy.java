@@ -16,7 +16,6 @@ import org.springframework.stereotype.Component;
 public class StoreRankingPolicy {
 
     private static final BigDecimal DECIMAL_ONE = new BigDecimal("1.00");
-    private static final BigDecimal REPUTATION_MULTIPLIER = new BigDecimal("1.00");
     private static final BigDecimal RENT_MULTIPLIER_FIRST = new BigDecimal("1.30");
     private static final BigDecimal RENT_MULTIPLIER_SECOND = new BigDecimal("1.20");
     private static final BigDecimal RENT_MULTIPLIER_THIRD = new BigDecimal("1.10");
@@ -79,7 +78,6 @@ public class StoreRankingPolicy {
                 priceBand.label(),
                 priceBand.multiplier(),
                 trendMultiplier,
-                REPUTATION_MULTIPLIER,
                 festivalName,
                 festivalMultiplier == null ? null : normalizeScale(festivalMultiplier)
         );

@@ -11,13 +11,13 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.ssafy.S14P21A205.game.day.policy.ProfitPolicy;
-import com.ssafy.S14P21A205.game.day.policy.ReputationPolicy;
 import com.ssafy.S14P21A205.game.day.service.GameDayReportService;
 import com.ssafy.S14P21A205.game.season.entity.DailyReport;
 import com.ssafy.S14P21A205.game.season.entity.Season;
 import com.ssafy.S14P21A205.game.season.entity.SeasonRankingRecord;
 import com.ssafy.S14P21A205.game.season.repository.DailyReportRepository;
 import com.ssafy.S14P21A205.game.season.repository.SeasonRankingRecordRepository;
+import com.ssafy.S14P21A205.shop.service.ShopService;
 import com.ssafy.S14P21A205.shop.entity.Menu;
 import com.ssafy.S14P21A205.store.entity.Location;
 import com.ssafy.S14P21A205.store.entity.Store;
@@ -41,8 +41,8 @@ class SeasonFinalRankingServiceTests {
     private final SeasonRankingRecordRepository seasonRankingRecordRepository = org.mockito.Mockito.mock(SeasonRankingRecordRepository.class);
     private final GameDayReportService gameDayReportService = org.mockito.Mockito.mock(GameDayReportService.class);
     private final ProfitPolicy profitPolicy = new ProfitPolicy();
-    private final ReputationPolicy reputationPolicy = new ReputationPolicy();
     private final UserRepository userRepository = org.mockito.Mockito.mock(UserRepository.class);
+    private final ShopService shopService = org.mockito.Mockito.mock(ShopService.class);
 
     private final SeasonFinalRankingService seasonFinalRankingService = new SeasonFinalRankingService(
             storeRepository,
@@ -50,8 +50,8 @@ class SeasonFinalRankingServiceTests {
             seasonRankingRecordRepository,
             gameDayReportService,
             profitPolicy,
-            reputationPolicy,
-            userRepository
+            userRepository,
+            shopService
     );
 
     @Test
@@ -106,6 +106,9 @@ class SeasonFinalRankingServiceTests {
         assertThat(usersById.get(10).getPoint()).isEqualTo(5);
         assertThat(usersById.get(11).getPoint()).isZero();
         assertThat(usersById.get(12).getPoint()).isEqualTo(5);
+        verify(shopService, times(12)).resetPurchasedItems(anyInt());
+        verify(shopService).resetPurchasedItems(1);
+        verify(shopService).resetPurchasedItems(12);
     }
 
     @Test
