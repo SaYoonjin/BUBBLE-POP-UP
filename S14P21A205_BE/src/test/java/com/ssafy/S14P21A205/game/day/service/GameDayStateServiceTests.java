@@ -600,6 +600,7 @@ class GameDayStateServiceTests {
                 new BigDecimal("0.10"),
                 salePrice,
                 0,
+                List.of(),
                 0,
                 0L,
                 0,

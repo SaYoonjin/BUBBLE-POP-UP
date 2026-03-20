@@ -51,6 +51,7 @@ import com.ssafy.S14P21A205.order.service.OrderService;
 import com.ssafy.S14P21A205.shop.repository.ItemUserRepository;
 import com.ssafy.S14P21A205.shop.service.ShopService;
 import com.ssafy.S14P21A205.store.repository.StoreRepository;
+import com.ssafy.S14P21A205.user.entity.User;
 import com.ssafy.S14P21A205.store.service.StoreService;
 import com.ssafy.S14P21A205.user.service.UserService;
 import java.math.BigDecimal;
@@ -231,6 +232,15 @@ class SecurityConfigTests {
     void startDayRejectsUnauthenticatedRequest() throws Exception {
         mockMvc.perform(get("/game/day/start"))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void getUserAllowsAuthenticatedRequest() throws Exception {
+        when(userService.getUser(any())).thenReturn(new User("test@example.com", "tester"));
+
+        mockMvc.perform(get("/users")
+                        .with(jwt().jwt(jwt -> jwt.subject("1"))))
+                .andExpect(status().isOk());
     }
 
     @Test
