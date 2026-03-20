@@ -81,7 +81,6 @@ public record GameDayStartResponse(
             String priceBand,
             BigDecimal priceBandMultiplier,
             BigDecimal trendMultiplier,
-            BigDecimal reputationMultiplier,
             String festivalName,
             BigDecimal festivalMultiplier
     ) {

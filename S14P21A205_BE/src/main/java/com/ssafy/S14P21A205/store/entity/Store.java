@@ -64,9 +64,6 @@ public class Store {
     @Column(name = "purchase_cursor")
     private Integer purchaseCursor = 0;
 
-    @Column(name = "pending_location_reserved_day")
-    private Integer pendingLocationReservedDay;
-
     @Column(name = "pending_location_apply_day")
     private Integer pendingLocationApplyDay;
 
@@ -108,9 +105,8 @@ public class Store {
         this.location = location;
     }
 
-    public void reserveLocationChange(Location location, Integer reservedDay, Integer applyDay) {
+    public void reserveLocationChange(Location location, Integer applyDay) {
         this.pendingLocation = location;
-        this.pendingLocationReservedDay = reservedDay;
         this.pendingLocationApplyDay = applyDay;
     }
 

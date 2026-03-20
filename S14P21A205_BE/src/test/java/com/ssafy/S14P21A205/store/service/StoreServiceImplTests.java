@@ -92,7 +92,6 @@ class StoreServiceImplTests {
     void updateStoreLocationRejectsWhenNextDayMoveIsAlreadyReserved() {
         Store store = store(15L, 3L, 2, 7);
         ReflectionTestUtils.setField(store, "pendingLocation", location(4L, "Gangnam", 200_000, 120_000));
-        ReflectionTestUtils.setField(store, "pendingLocationReservedDay", 2);
         ReflectionTestUtils.setField(store, "pendingLocationApplyDay", 3);
 
         when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
