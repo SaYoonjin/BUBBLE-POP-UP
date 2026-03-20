@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useOutletContext } from "react-router-dom";
 import type { GameGuardContext } from "../router/GameGuard";
 import { getGameWaitingStatus, joinCurrentSeason, type GameWaitingResponse } from "../api/game";
+import { getLocationList } from "../api/store";
 import CountdownTimer from "../components/common/CountdownTimer";
 import DistrictDetailPanel from "../components/game/DistrictDetailPanel";
 import SeoulMap3D from "../components/game/SeoulMap3D";
@@ -144,9 +145,20 @@ function resolveJoinErrorMessage(error: unknown) {
   return "시즌 참여 요청을 완료하지 못했습니다. 입력한 정보와 시즌 상태를 다시 확인해주세요.";
 }
 
+/** seoulDistricts의 name과 서버 locationName을 매칭하는 맵 */
+const LOCATION_NAME_MAP: Record<string, string> = {
+  "홍대": "홍대",
+  "여의도": "여의도",
+  "명동": "명동",
+  "이태원": "이태원",
+  "성수": "서울숲/성수",
+  "건대": "건대",
+  "강남": "강남",
+  "잠실": "잠실",
+};
+
 export default function LocationSelectPage() {
   const guardContext = useOutletContext<GameGuardContext>();
-  // 서버 시간 기반: 현재 페이즈 종료까지 남은 시간
   const [locationSelectionDeadlineMs] = useState(() => guardContext.phaseEndTimestamp);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [selectionWindow, setSelectionWindow] = useState<SelectionWindowState | null>(null);
@@ -154,9 +166,40 @@ export default function LocationSelectPage() {
   const [isAccessChecking, setIsAccessChecking] = useState(true);
   const [joinError, setJoinError] = useState<string | null>(null);
   const [selectedDashboardItems] = useState(getStoredSelectedDashboardItems);
+  const [serverLocations, setServerLocations] = useState<Array<{locationId: number; locationName: string; rent: number; interiorCost: number; discount: number}>>([]);
   const navigate = useNavigate();
 
-  const selectedDistrict = seoulDistricts.find((district) => district.id === selectedId);
+  // 서버 지역 데이터 로드
+  useEffect(() => {
+    getLocationList()
+      .then((data) => setServerLocations(data.locations))
+      .catch(() => {});
+  }, []);
+
+  // seoulDistricts에 서버 rent 반영 (id는 FE 유지, join 시 서버 id로 변환)
+  const mergedDistricts = useMemo(() => {
+    if (serverLocations.length === 0) return seoulDistricts;
+    return seoulDistricts.map((district) => {
+      const serverName = LOCATION_NAME_MAP[district.name] ?? district.name;
+      const serverLoc = serverLocations.find((s) => s.locationName === serverName);
+      if (!serverLoc) return district;
+      return {
+        ...district,
+        // id는 FE 유지 (3D 맵과 동기화), rent만 서버 값 반영
+        rent: `₩${serverLoc.rent.toLocaleString()}`,
+      };
+    });
+  }, [serverLocations]);
+
+  // FE district name → 서버 locationId 변환 (서버 데이터 없으면 FE id fallback)
+  const getServerLocationId = (feDistrict: { id: number; name: string }): number => {
+    if (serverLocations.length === 0) return feDistrict.id;
+    const serverName = LOCATION_NAME_MAP[feDistrict.name] ?? feDistrict.name;
+    const serverLoc = serverLocations.find((s) => s.locationName === serverName);
+    return serverLoc?.locationId ?? feDistrict.id;
+  };
+
+  const selectedDistrict = mergedDistricts.find((district) => district.id === selectedId);
   const selectedInteriorCost = selectedDistrict
     ? Math.round(parseCurrency(selectedDistrict.rent) * 7 * 0.1)
     : null;
@@ -252,8 +295,10 @@ export default function LocationSelectPage() {
     setStoredBrandName(brandName);
 
     try {
+      const serverLocationId = getServerLocationId(selectedDistrict);
+
       const joinResponse = await joinCurrentSeason({
-        locationId: selectedDistrict.id,
+        locationId: serverLocationId,
         storeName: brandName,
       });
       // join 응답의 playableFromDay를 store에 저장 (GameGuard에서 참조)
