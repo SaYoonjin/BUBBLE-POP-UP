@@ -14,7 +14,12 @@ interface RankingItem {
 interface RankingSection {
   title: string;
   eyebrow: string;
-  items: RankingItem[];
+  items?: RankingItem[];
+  imageSrc?: string;
+  imageAlt?: string;
+  caption?: string;
+  captionDetail?: string;
+  meta?: string[];
 }
 
 interface CozyNewspaperProps {
@@ -104,51 +109,109 @@ export default function CozyNewspaper({ items, expandedId, onToggle, day, rankin
 
           {rankings.length > 0 && (
             <aside className="lg:col-span-5 lg:border-l border-cozy-ink/10 lg:pl-8 flex flex-col gap-8">
-              {rankings.map((section, index) => (
-                <section key={section.title} className="pb-6 border-b border-dashed border-cozy-ink/10 last:border-b-0 last:pb-0">
-                  <div className="flex items-end justify-between gap-4 mb-4">
-                    <div>
-                      <p className="text-[10px] uppercase tracking-[0.3em] text-cozy-ink/35 font-bold">
-                        {section.eyebrow}
-                      </p>
-                      <h4 className="font-display text-[22px] font-bold tracking-tight text-slate-800">
-                        {section.title}
-                      </h4>
+              {rankings.map((section, index) => {
+                const isImageOnlySection = Boolean(section.imageSrc) && !(section.items?.length);
+
+                return (
+                <section
+                  key={section.title || section.imageSrc || `section-${index}`}
+                  className="pb-6 border-b border-dashed border-cozy-ink/10 last:border-b-0 last:pb-0"
+                >
+                  {!isImageOnlySection && (
+                    <div className="flex items-end justify-between gap-4 mb-4">
+                      <div>
+                        <p className="text-[10px] uppercase tracking-[0.3em] text-cozy-ink/35 font-bold">
+                          {section.eyebrow}
+                        </p>
+                        <h4 className="font-display text-[22px] font-bold tracking-tight text-slate-800">
+                          {section.title}
+                        </h4>
+                      </div>
+                      <span className="font-mono text-xs text-cozy-ink/35">0{index + 1}</span>
                     </div>
-                    <span className="font-mono text-xs text-cozy-ink/35">0{index + 1}</span>
-                  </div>
+                  )}
 
-                  <ul className="flex flex-col gap-3">
-                    {section.items.map((item) => {
-                      const isNeutral = item.change === "-" || item.change === "0%" || item.change === "0.0%";
-
-                      return (
-                      <li key={`${section.title}-${item.rank}-${item.name}`} className="flex items-center gap-3 border-b border-cozy-ink/10 pb-3 last:border-b-0 last:pb-0">
-                        <span className="font-mono text-lg font-bold text-slate-500 w-7 shrink-0">
-                          {item.rank}.
-                        </span>
-                        <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
-                          <span className="font-body text-[15px] font-semibold text-slate-800 truncate">
-                            {item.name}
-                          </span>
-                          <div className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-bold ${
-                            isNeutral
-                              ? "border-slate-200 bg-slate-100 text-slate-500"
-                              : item.positive
-                                ? "border-primary/30 bg-primary/12 text-primary-dark"
-                                : "border-red-200 bg-red-50 text-red-500"
-                          }`}>
-                            <span className="material-symbols-outlined text-[14px] leading-none">
-                              {isNeutral ? "trending_flat" : item.positive ? "north_east" : "south_east"}
-                            </span>
-                            <span className="font-mono">{item.change}</span>
-                          </div>
+                  {section.imageSrc ? (
+                    <div className="flex flex-col gap-4">
+                      <div className="overflow-hidden rounded-sm border border-cozy-ink/15 bg-[#e4d8c6] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]">
+                        <img
+                          src={section.imageSrc}
+                          alt={section.imageAlt ?? section.title}
+                          className="h-full w-full object-cover"
+                        />
+                      </div>
+                      {(section.caption || section.captionDetail || (section.meta?.length ?? 0) > 0) && (
+                        <div>
+                          {section.caption && (
+                            <p className="font-cozy-serif text-xl font-bold leading-tight text-cozy-ink tracking-tight">
+                              {section.caption}
+                            </p>
+                          )}
+                          {section.captionDetail && (
+                            <p className="mt-3 border-l-2 border-cozy-sage pl-4 text-sm leading-relaxed text-cozy-ink/60">
+                              {section.captionDetail}
+                            </p>
+                          )}
+                          {section.meta && section.meta.length > 0 && (
+                            <div className="mt-4 flex w-full flex-wrap items-center justify-end gap-x-3 gap-y-1 text-right text-[10px] font-bold uppercase tracking-[0.3em] text-cozy-ink/35">
+                              {section.meta.map((metaItem, metaIndex) => (
+                                <span
+                                  key={`${section.imageSrc}-${metaItem}`}
+                                  className="inline-flex items-center gap-3"
+                                >
+                                  {metaIndex > 0 && <span className="text-cozy-ink/20">/</span>}
+                                  <span>{metaItem}</span>
+                                </span>
+                              ))}
+                            </div>
+                          )}
                         </div>
-                      </li>
-                    )})}
-                  </ul>
+                      )}
+                    </div>
+                  ) : (
+                    <ul className="flex flex-col gap-3">
+                      {(section.items ?? []).map((item) => {
+                        const isNeutral =
+                          item.change === "-" || item.change === "0%" || item.change === "0.0%";
+
+                        return (
+                          <li
+                            key={`${section.title}-${item.rank}-${item.name}`}
+                            className="flex items-center gap-3 border-b border-cozy-ink/10 pb-3 last:border-b-0 last:pb-0"
+                          >
+                            <span className="font-mono text-lg font-bold text-slate-500 w-7 shrink-0">
+                              {item.rank}.
+                            </span>
+                            <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
+                              <span className="font-body text-[15px] font-semibold text-slate-800 truncate">
+                                {item.name}
+                              </span>
+                              <div
+                                className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-bold ${
+                                  isNeutral
+                                    ? "border-slate-200 bg-slate-100 text-slate-500"
+                                    : item.positive
+                                      ? "border-primary/30 bg-primary/12 text-primary-dark"
+                                      : "border-red-200 bg-red-50 text-red-500"
+                                }`}
+                              >
+                                <span className="material-symbols-outlined text-[14px] leading-none">
+                                  {isNeutral
+                                    ? "trending_flat"
+                                    : item.positive
+                                      ? "north_east"
+                                      : "south_east"}
+                                </span>
+                                <span className="font-mono">{item.change}</span>
+                              </div>
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
                 </section>
-              ))}
+              )})}
             </aside>
           )}
         </div>
