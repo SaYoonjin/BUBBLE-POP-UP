@@ -3,8 +3,10 @@ package com.ssafy.S14P21A205.game.season.service;
 import com.ssafy.S14P21A205.exception.BaseException;
 import com.ssafy.S14P21A205.exception.ErrorCode;
 import com.ssafy.S14P21A205.game.day.scheduler.SeasonDayClosingScheduler;
+import com.ssafy.S14P21A205.game.news.repository.NewsReportRepository;
 import com.ssafy.S14P21A205.game.news.service.NewsService;
 import com.ssafy.S14P21A205.game.news.service.SparkNewsDataService;
+import com.ssafy.S14P21A205.game.scheduler.SparkEtlScheduler;
 import com.ssafy.S14P21A205.game.environment.entity.Festival;
 import com.ssafy.S14P21A205.game.environment.entity.Population;
 import com.ssafy.S14P21A205.game.environment.entity.Traffic;
@@ -52,6 +54,7 @@ import java.util.function.Function;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
@@ -83,8 +86,10 @@ public class SeasonLifecycleService {
     private final LocationRepository locationRepository;
     private final MenuRepository menuRepository;
     private final FestivalRepository festivalRepository;
+    private final NewsReportRepository newsReportRepository;
     private final NewsService newsService;
     private final SparkNewsDataService sparkNewsDataService;
+    private final SparkEtlScheduler sparkEtlScheduler;
 
     private final SeasonTimelineService seasonTimelineService = new SeasonTimelineService();
     private final Clock clock;
@@ -123,7 +128,7 @@ public class SeasonLifecycleService {
                     "BEFORE_START",
                     null
             );
-            prepareScheduledSeason(scheduledSeason);
+            // 준비(ETL+뉴스)는 prepareScheduledSeasonIfNeeded()에서 트랜잭션 밖으로 처리
             return;
         }
 
@@ -140,7 +145,7 @@ public class SeasonLifecycleService {
             return;
         }
 
-        scheduledSeason.start(sourceBatchKey);
+        scheduledSeason.startAt(now, sourceBatchKey);
         List<Menu> menus = requireMenus();
         Random random = new Random(resolveSeed(scheduledSeason));
 
@@ -153,7 +158,9 @@ public class SeasonLifecycleService {
         scheduledSeason.updateEndTime(resolveSeasonEndAt(scheduledSeason));
 
         try {
-            newsService.generateSeasonNews(scheduledSeason.getId());
+            if (!newsReportRepository.existsBySeasonId(scheduledSeason.getId())) {
+                newsService.generateSeasonNews(scheduledSeason.getId());
+            }
             newsService.generateEventPreviewNewsIfMissing(scheduledSeason.getId());
         } catch (Exception e) {
             log.error("Failed to generate season news. seasonId={}", scheduledSeason.getId(), e);
@@ -163,13 +170,27 @@ public class SeasonLifecycleService {
     }
 
     /**
-     * Prepares a scheduled season before its start time by warming source data and news.
+     * Spark ETL + 뉴스 생성을 트랜잭션 밖에서 실행.
+     * Spark TRUNCATE TABLE(DDL)이 REPEATABLE READ 스냅샷을 깨뜨리므로,
+     * synchronize()의 @Transactional 범위 밖에서 호출해야 한다.
+     * existsBySeasonId 가드로 중복 실행(10초 tick 재진입)을 방지.
      */
-    private void prepareScheduledSeason(Season scheduledSeason) {
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    public void prepareScheduledSeasonIfNeeded() {
+        Season scheduledSeason = seasonRepository
+                .findFirstByStatusOrderByStartTimeAscIdAsc(SeasonStatus.SCHEDULED).orElse(null);
+        if (scheduledSeason == null) return;
+        if (scheduledSeason.getStartTime() == null) return;
+        if (!scheduledSeason.getStartTime().isAfter(LocalDateTime.now(clock))) return;
+
+        // 이미 뉴스가 생성된 시즌이면 스킵 (재진입 방지)
+        if (newsReportRepository.existsBySeasonId(scheduledSeason.getId())) return;
+
         try {
-            // ETL: 유동인구·교통량 미리 준비
+            if (scheduledSeason.getSourceBatchKey() == null) {
+                sparkEtlScheduler.runEtl();
+            }
             sparkNewsDataService.runNewsEtl();
-            // 트렌드 뉴스 미리 생성 (이벤트 없으므로 축제 예고는 건너뜀)
             newsService.generateSeasonNews(scheduledSeason.getId());
         } catch (Exception e) {
             log.error("Failed to prepare scheduled season. seasonId={}", scheduledSeason.getId(), e);
@@ -587,20 +608,7 @@ public class SeasonLifecycleService {
             return null;
         }
 
-        String sourceBatchKey = populationBatchKey;
-        boolean alreadyConsumed = seasonRepository.findFirstBySourceBatchKeyIsNotNullOrderByIdDesc()
-                .map(Season::getSourceBatchKey)
-                .filter(sourceBatchKey::equals)
-                .isPresent();
-        if (alreadyConsumed) {
-            log.info(
-                    "Season {} is waiting for a new spark batch. reusedBatchKey={}",
-                    scheduledSeason.getId(),
-                    sourceBatchKey
-            );
-            return null;
-        }
-        return sourceBatchKey;
+        return populationBatchKey;
     }
 
     private Map<WeatherType, Weather> loadWeatherByType() {
@@ -936,7 +944,7 @@ public class SeasonLifecycleService {
         String normalized = menuName == null ? "" : menuName.trim().toLowerCase().replace(" ", "");
         return switch (normalized) {
             case "빵", "bread" -> down ? EventCategory.BREAD_PRICE_DOWN : EventCategory.BREAD_PRICE_UP;
-            case "말라스케워", "malaskewer", "mala_skewer" -> down ? EventCategory.MALA_SKEWER_PRICE_DOWN : EventCategory.MALA_SKEWER_PRICE_UP;
+            case "마라꼬치", "malaskewer", "mala_skewer" -> down ? EventCategory.MALA_SKEWER_PRICE_DOWN : EventCategory.MALA_SKEWER_PRICE_UP;
             case "젤리", "jelly" -> down ? EventCategory.JELLY_PRICE_DOWN : EventCategory.JELLY_PRICE_UP;
             case "떡볶이", "tteokbokki" -> down ? EventCategory.TTEOKBOKKI_PRICE_DOWN : EventCategory.TTEOKBOKKI_PRICE_UP;
             case "햄버거", "hamburger", "burger" -> down ? EventCategory.HAMBURGER_PRICE_DOWN : EventCategory.HAMBURGER_PRICE_UP;

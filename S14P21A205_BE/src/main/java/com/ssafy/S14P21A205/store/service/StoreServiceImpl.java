@@ -2,6 +2,7 @@ package com.ssafy.S14P21A205.store.service;
 
 import com.ssafy.S14P21A205.exception.BaseException;
 import com.ssafy.S14P21A205.exception.ErrorCode;
+import com.ssafy.S14P21A205.game.day.state.GameDayLiveState;
 import com.ssafy.S14P21A205.game.day.state.repository.GameDayStoreStateRedisRepository;
 import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
 import com.ssafy.S14P21A205.shop.entity.ItemCategory;
@@ -32,6 +33,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class StoreServiceImpl implements StoreService {
 
+    private static final StoreLocationTransitionSupport STORE_LOCATION_TRANSITION_SUPPORT = new StoreLocationTransitionSupport();
+
     private final StoreRepository storeRepository;
     private final LocationRepository locationRepository;
     private final MenuRepository menuRepository;
@@ -44,12 +47,13 @@ public class StoreServiceImpl implements StoreService {
     @Override
     public StoreResponse getStore(Integer userId) {
         Store store = getStoreByUserId(userId);
+        LocalDateTime now = LocalDateTime.now(clock);
 
         return new StoreResponse(
                 store.getLocation().getLocationName(),
                 store.getStoreName(),
                 store.getMenu().getMenuName(),
-                resolveCurrentDay(store)
+                resolveCurrentDay(store, now)
         );
     }
 
@@ -57,18 +61,28 @@ public class StoreServiceImpl implements StoreService {
     @Transactional
     public UpdateStoreLocationResponse updateStoreLocation(Integer userId, UpdateStoreLocationRequest request) {
         Store store = getStoreByUserId(userId);
+        LocalDateTime now = LocalDateTime.now(clock);
+        STORE_LOCATION_TRANSITION_SUPPORT.applyPendingLocationIfDue(store, now);
         Long storeId = store.getId();
-        int currentDay = resolveCurrentDay(store);
+        int currentDay = resolveCurrentDay(store, now);
+
+        if (currentDay >= store.getSeason().getTotalDays()) {
+            throw new BaseException(ErrorCode.INVALID_INPUT_VALUE, "Location changes are unavailable on the last day.");
+        }
+        if (STORE_LOCATION_TRANSITION_SUPPORT.hasFuturePendingLocationChange(store, currentDay)) {
+            throw new BaseException(ErrorCode.INVALID_INPUT_VALUE, "A location change is already reserved for the next day.");
+        }
 
         Location location = locationRepository.findById(request.locationId())
-                .orElseThrow(() -> new RuntimeException("Location was not found."));
+                .orElseThrow(() -> new BaseException(ErrorCode.RESOURCE_NOT_FOUND));
 
         if (store.getLocation().getId().equals(location.getId())) {
-            throw new RuntimeException("The store is already using this location.");
+            throw new BaseException(ErrorCode.INVALID_INPUT_VALUE, "The store is already using this location.");
         }
 
         Integer updatedBalance = deductBalance(storeId, currentDay, location.getInteriorCost());
-        store.changeLocation(location);
+        recordLocationChangeCost(storeId, currentDay, location.getInteriorCost());
+        store.reserveLocationChange(location, currentDay, currentDay + 1);
 
         return new UpdateStoreLocationResponse(
                 location.getId(),
@@ -115,15 +129,32 @@ public class StoreServiceImpl implements StoreService {
 
     private Integer deductBalance(Long storeId, int day, Integer amount) {
         long currentBalance = gameDayStoreStateRedisRepository.findBalance(storeId, day)
-                .orElseThrow(() -> new RuntimeException("Balance information was not found."));
+                .orElseThrow(() -> new BaseException(ErrorCode.GAME_STATE_NOT_FOUND));
 
         if (currentBalance < amount) {
-            throw new RuntimeException("Balance is insufficient.");
+            throw new BaseException(ErrorCode.INSUFFICIENT_BALANCE);
         }
 
         long updatedBalance = currentBalance - amount;
         gameDayStoreStateRedisRepository.saveBalance(storeId, day, updatedBalance);
         return Math.toIntExact(updatedBalance);
+    }
+
+    private void recordLocationChangeCost(Long storeId, int day, Integer amount) {
+        long normalizedAmount = amount == null ? 0L : amount.longValue();
+        if (normalizedAmount <= 0L) {
+            return;
+        }
+
+        GameDayLiveState state = gameDayStoreStateRedisRepository.find(storeId, day)
+                .orElseThrow(() -> new BaseException(ErrorCode.GAME_STATE_NOT_FOUND));
+        long currentCost = state.locationChangeCost() == null ? 0L : state.locationChangeCost();
+        gameDayStoreStateRedisRepository.updateField(
+                storeId,
+                day,
+                "location_change_cost",
+                String.valueOf(currentCost + normalizedAmount)
+        );
     }
 
     private BigDecimal getDisplayedRentDiscountRate(Integer userId) {
@@ -136,8 +167,8 @@ public class StoreServiceImpl implements StoreService {
                 .orElse(BigDecimal.ONE);
     }
 
-        private int resolveCurrentDay(Store store) {
-        SeasonTimePoint seasonTimePoint = seasonTimelineService.resolve(store.getSeason(), LocalDateTime.now(clock));
+    private int resolveCurrentDay(Store store, LocalDateTime now) {
+        SeasonTimePoint seasonTimePoint = seasonTimelineService.resolve(store.getSeason(), now);
         Integer currentDay = seasonTimePoint.currentDay();
         if (currentDay != null && currentDay >= 1 && currentDay <= store.getSeason().getTotalDays()) {
             return currentDay;
@@ -147,8 +178,10 @@ public class StoreServiceImpl implements StoreService {
     }
 
     private Store getStoreByUserId(Integer userId) {
-        return storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(userId, SeasonStatus.IN_PROGRESS)
+        Store store = storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(userId, SeasonStatus.IN_PROGRESS)
                 .orElseThrow(() -> new BaseException(ErrorCode.STORE_NOT_FOUND));
+        STORE_LOCATION_TRANSITION_SUPPORT.applyPendingLocationIfDue(store, LocalDateTime.now(clock));
+        return store;
     }
 }
 

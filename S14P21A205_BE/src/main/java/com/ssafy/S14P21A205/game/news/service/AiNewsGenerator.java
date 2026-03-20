@@ -3,6 +3,7 @@ package com.ssafy.S14P21A205.game.news.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ssafy.S14P21A205.game.news.dto.MenuMentionCount;
+import java.util.Collections;
 import java.util.List;
 import java.util.HashMap;
 import java.util.Map;
@@ -32,19 +33,11 @@ public class AiNewsGenerator {
     );
 
     private static final String SYSTEM_PROMPT =
-            "당신은 '버블팝업' 음식 게임 세계관의 기자입니다. "
-            + "출력 규칙: 반드시 아래 형식의 순수 JSON 한 줄만 출력하세요. "
-            + "{\"title\":\"제목\",\"content\":\"본문\"} "
-            + "이것 외에 다른 텍스트, 코드블록(```), 설명, 수정본, 대안 등 일체 금지. "
-            + "title과 content 키 이름을 반드시 포함해야 합니다. "
-            + "제목: 한국어 15~25자. '무엇이 어떻게 됐다' 형태로 구체적 작성. 메뉴명이나 지역명 등 고유명사 반드시 포함. "
-            + "예시: '강남 타코 매장 급증, 원재료비 상승 우려', '홍대 버블티 열풍 속 줄서기 행렬'. "
-            + "본문: 한국어 300~400자. "
-            + "언어 규칙: 반드시 순수 한국어만 사용. "
-            + "영어·중국어·일본어·한자·알파벳·외국어 한 글자도 절대 포함 금지. "
-            + "SNS는 '온라인', hashtag는 '꼬리표', trend는 '유행', resurgence는 '재부상'으로 대체. "
-            + "숫자를 직접 쓰지 말고 간접 표현으로 암시. "
-            + "괄호(), **, #, 이모지 사용 금지.";
+            "버블팝업 음식게임 기자. "
+            + "출력: {\"title\":\"제목\",\"content\":\"본문\"} JSON만. 다른 텍스트 금지. "
+            + "제목 15~25자, 고유명사 포함. 본문 300~400자. "
+            + "순수 한국어만(영어·한자·외국어 금지, SNS→온라인). "
+            + "숫자 직접 쓰지 말고 간접 표현. 괄호·이모지 금지.";
 
     private final RestClient restClient;
     private final String model;
@@ -57,7 +50,7 @@ public class AiNewsGenerator {
         log.info("GMS AI base-url={}, model={}", baseUrl, model);
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(Duration.ofSeconds(10));
-        factory.setReadTimeout(Duration.ofSeconds(300));
+        factory.setReadTimeout(Duration.ofSeconds(60));
         this.restClient = RestClient.builder()
                 .baseUrl(baseUrl)
                 .requestFactory(factory)
@@ -78,7 +71,7 @@ public class AiNewsGenerator {
                 .mapToObj(i -> (i + 1) + "위 " + rankedMenus.get(i).menuName())
                 .collect(Collectors.joining(", "));
 
-        String prompt = "인기 메뉴 순서: %s. 어떤 메뉴가 뜨는지 자연스럽게 암시하는 트렌드 뉴스 작성. 순위나 등수를 직접 언급하지 말고 인기도를 간접적으로 표현. 상위 메뉴 모두 언급. 본문 300~400자. 스타일: %s"
+        String prompt = "인기메뉴: %s. 순위 직접 언급 말고 인기도 간접 표현. 상위 메뉴 모두 언급. 스타일: %s"
                 .formatted(rankingText, style);
         try {
             return callAi(prompt);
@@ -105,7 +98,7 @@ public class AiNewsGenerator {
                 .map(item -> item.get("name") + " " + item.get("storeCount") + "개")
                 .collect(Collectors.joining(", "));
 
-        String prompt = "메뉴별 매장수: %s. 매장 많은 메뉴는 원재료비 상승, 적은 메뉴는 틈새 기회. 상위·하위 대비하여 기사 작성. 본문 400~500자. 스타일: %s"
+        String prompt = "메뉴별 매장수: %s. 많은 메뉴는 원재료비 상승, 적은 메뉴는 틈새 기회. 상위·하위 대비. 스타일: %s"
                 .formatted(rankingText, style);
         try {
             return callAi(prompt);
@@ -127,7 +120,7 @@ public class AiNewsGenerator {
                 .map(item -> item.get("name") + " " + item.get("storeCount") + "개")
                 .collect(Collectors.joining(", "));
 
-        String prompt = "지역별 매장수: %s. 밀집 지역은 임대료 폭등, 한산한 지역은 안정. 상위·하위 대비하여 기사 작성. 본문 400~500자. 스타일: %s"
+        String prompt = "지역별 매장수: %s. 밀집 지역은 임대료 폭등, 한산한 지역은 안정. 상위·하위 대비. 스타일: %s"
                 .formatted(rankingText, style);
         try {
             return callAi(prompt);
@@ -150,10 +143,10 @@ public class AiNewsGenerator {
 
         String prompt;
         if (locationName != null && !locationName.isEmpty()) {
-            prompt = "내일 '%s' 지역에서 '%s' 축제 개최. 축제 지역과 축제명을 명확히 언급하고 유동인구·매출 증가 기대감을 담은 예고 기사 작성. 스타일: %s"
+            prompt = "내일 %s에서 '%s' 축제. 축제지역·명칭 언급, 유동인구·매출 기대감. 스타일: %s"
                     .formatted(locationName, festivalName, style);
         } else {
-            prompt = "내일 '%s' 축제 개최. 축제명을 명확히 언급하고 유동인구·매출 증가 기대감을 담은 예고 기사 작성. 스타일: %s"
+            prompt = "내일 '%s' 축제. 축제명 언급, 유동인구·매출 기대감. 스타일: %s"
                     .formatted(festivalName, style);
         }
         try {
@@ -172,7 +165,7 @@ public class AiNewsGenerator {
     public NewsGenerationResult generateTopStoreNews(long seasonId, int day, String storeName, String menuName,
             int revenue, int salesCount) {
         String style = getRandomStyle();
-        String prompt = "오늘 매출 1위 매장: %s, 메뉴: %s, 매출 %d원, %d개 판매. 사장님 가상 인터뷰 포함. 숫자 직접 쓰지 말 것. 스타일: %s"
+        String prompt = "매출1위: %s(%s), 매출%d원, %d개. 사장님 인터뷰 포함. 스타일: %s"
                 .formatted(storeName, menuName, revenue, salesCount, style);
         try {
             return callAi(prompt);
@@ -190,7 +183,7 @@ public class AiNewsGenerator {
     public NewsGenerationResult generateCumulativeSalesNews(long seasonId, int day, String storeName, String menuName,
             long totalSales, int milestone) {
         String style = getRandomStyle();
-        String prompt = "'%s' 매장 %s 누적 %d개 판매 달성(마일스톤: %d개). 단골 손님 가상 코멘트 포함. 숫자 직접 쓰지 말 것. 스타일: %s"
+        String prompt = "%s 매장 %s 누적%d개(마일스톤:%d개). 단골 코멘트 포함. 스타일: %s"
                 .formatted(storeName, menuName, totalSales, milestone, style);
         try {
             return callAi(prompt);
@@ -214,7 +207,7 @@ public class AiNewsGenerator {
                 })
                 .collect(Collectors.joining(", "));
 
-        String prompt = "지역별 매장 이동: %s (양수=유입, 음수=유출). 유입 지역은 경쟁 심화, 유출 지역은 기회. 스타일: %s"
+        String prompt = "지역별 매장이동: %s(+유입,-유출). 유입=경쟁심화, 유출=기회. 스타일: %s"
                 .formatted(changesText, style);
         try {
             return callAi(prompt);
@@ -227,12 +220,99 @@ public class AiNewsGenerator {
         }
     }
 
+    // ---- Day 1 Guide News ----
+
+    public NewsGenerationResult generateIntroNews(long seasonId) {
+        String style = getRandomStyle();
+        String prompt = "버블팝업 팝업스토어 주간 개막. 홍대·강남·성수·여의도·잠실·이태원·명동·건대입구 8곳 상권. 경쟁과 설렘 분위기. 스타일: %s"
+                .formatted(style);
+        try {
+            return callAi(prompt);
+        } catch (Exception e) {
+            log.error("AI intro news failed for season {}", seasonId, e);
+            return new NewsGenerationResult(
+                    "서울 팝업 주간 개막, 버블팝업 축제의 막이 오르다",
+                    "서울 전역에 팝업스토어 열풍이 불고 있다. 홍대, 강남, 성수, 여의도 등 주요 상권에 야심 찬 점주들이 속속 모여들며 저마다의 개성을 담은 매장을 준비하고 있다. "
+                    + "업계 관계자는 \"올 시즌은 그 어느 때보다 치열한 경쟁이 예상된다\"며 \"트렌드를 읽고 발 빠르게 대응하는 점주가 살아남을 것\"이라고 전망했다. "
+                    + "거리마다 풍기는 다양한 음식 냄새와 설렘 가득한 분위기 속에서, 과연 누가 이번 시즌의 주인공이 될지 귀추가 주목된다.");
+        }
+    }
+
+    private static final List<TipTemplate> TIP_TEMPLATES = List.of(
+            new TipTemplate(
+                    "선배→신규 조언톤. 지역마다 임대료·유동인구 다르니 여러곳 둘러보라. 번화가는 경쟁치열, 한적한곳은 여유. 스타일: %s",
+                    "선배 점주의 한마디, 발품을 팔아보는 건 어떨까요",
+                    "한 선배 점주가 이제 막 문을 연 신규 점주들에게 따뜻한 조언을 건넸다. \"지역마다 분위기가 정말 다르더라고요. "
+                    + "번화한 곳은 손님이 많은 대신 경쟁도 만만치 않고, 조용한 곳은 나름의 매력이 있어요. "
+                    + "매장을 열기 전에 여러 곳을 둘러보면서 자기 스타일에 맞는 동네를 찾아보는 건 어떨까요?\""
+            ),
+            new TipTemplate(
+                    "관계자→신규 조언톤. 매일 뉴스에 인기메뉴·활기지역 정보 있으니 챙겨보면 도움. 스타일: %s",
+                    "오늘의 뉴스, 한번 챙겨 보시는 건 어떨까요",
+                    "한 관계자가 신규 점주들에게 귀띔했다. \"매일 나오는 뉴스에 요즘 어떤 메뉴가 뜨고 있는지, 어느 동네가 활기찬지 정보가 담겨 있어요. "
+                    + "바쁘시겠지만 시간 날 때 한번 훑어보시면 흐름을 읽는 데 도움이 될 수도 있습니다. "
+                    + "지난 시즌에 잘된 점주들도 뉴스를 꼼꼼히 챙겨 봤다는 이야기가 있더라고요.\""
+            ),
+            new TipTemplate(
+                    "선배→신규 조언톤. 할인 걸면 손님 유인 가능. 너무 깎으면 손해니 적당히. 스타일: %s",
+                    "할인을 한번 걸어보는 건 어떨까요",
+                    "한 선배 점주가 넌지시 조언했다. \"손님이 뜸할 때 할인을 한번 걸어보는 것도 방법이에요. "
+                    + "가격이 내려가면 지나가던 분들도 한번쯤 들러보거든요. "
+                    + "다만 너무 많이 깎으면 남는 게 없으니, 적당한 선에서 조절해 보시는 게 좋을 것 같아요.\""
+            ),
+            new TipTemplate(
+                    "선배→신규 조언톤. 홍보하면 매장 알리기 좋다. 방법마다 비용·효과 다르니 상황맞게. 스타일: %s",
+                    "매장을 알리고 싶다면 홍보를 해보시는 건 어떨까요",
+                    "한 선배 점주가 경험을 나눴다. \"처음엔 손님이 매장을 모르니까 홍보를 해보는 것도 나쁘지 않아요. "
+                    + "여러 가지 방법이 있는데 각각 느낌이 다르더라고요. "
+                    + "자기 상황에 맞는 걸 골라서 한번 시도해 보시면 어떨까요?\""
+            ),
+            new TipTemplate(
+                    "선배→신규 조언톤. 재고 떨어지면 긴급발주 가능. 비용 더 들지만 손님 몰릴때 유용. 스타일: %s",
+                    "재고가 떨어졌을 때, 긴급 발주라는 방법도 있어요",
+                    "한 선배 점주가 귀띔했다. \"영업 중에 재고가 바닥나면 당황스럽잖아요. 그럴 때 긴급 발주라는 게 있어요. "
+                    + "비용이 좀 더 들긴 하지만, 예상 밖으로 손님이 몰릴 때 알아두면 쓸모가 있더라고요. "
+                    + "이런 방법도 있다는 걸 미리 알아두시면 좋을 것 같아요.\""
+            ),
+            new TipTemplate(
+                    "선배→신규 조언톤. 나눔하면 수익 줄지만 평판 오름. 장기적으로 손님 늘어남. 스타일: %s",
+                    "나눔 활동, 관심 있으시면 한번 해보시는 건 어떨까요",
+                    "한 선배 점주가 경험담을 전했다. \"나눔 활동을 하면 당장은 좀 아깝게 느껴질 수 있는데, 매장 평판이 올라가더라고요. "
+                    + "평판이 좋아지니까 찾아오는 분들이 조금씩 늘었어요. "
+                    + "관심이 있으시면 한번 해보시는 것도 괜찮을 것 같아요.\""
+            )
+    );
+
+    private record TipTemplate(String promptTemplate, String fallbackTitle, String fallbackContent) {}
+
+    /**
+     * 6개 팁 후보 중 랜덤 2개를 뽑아 AI로 뉴스 생성.
+     */
+    public List<NewsGenerationResult> generateRandomTipNews(long seasonId) {
+        List<TipTemplate> shuffled = new java.util.ArrayList<>(TIP_TEMPLATES);
+        Collections.shuffle(shuffled);
+        List<TipTemplate> picked = shuffled.subList(0, 2);
+
+        List<NewsGenerationResult> results = new java.util.ArrayList<>();
+        for (TipTemplate tip : picked) {
+            String style = getRandomStyle();
+            String prompt = tip.promptTemplate().formatted(style);
+            try {
+                results.add(callAi(prompt));
+            } catch (Exception e) {
+                log.error("AI tip news failed for season {}", seasonId, e);
+                results.add(new NewsGenerationResult(tip.fallbackTitle(), tip.fallbackContent()));
+            }
+        }
+        return results;
+    }
+
     // ---- Common AI call ----
 
     private NewsGenerationResult callAi(String promptText) throws Exception {
         Map<String, Object> requestBody = new HashMap<>();
         requestBody.put("model", model);
-        requestBody.put("max_tokens", 1024);
+        requestBody.put("max_tokens", 512);
         requestBody.put("messages", List.of(
                 Map.of("role", "system", "content", SYSTEM_PROMPT),
                 Map.of("role", "user", "content", promptText)));
@@ -334,12 +414,36 @@ public class AiNewsGenerator {
         result = tryRegexExtract(text);
         if (result != null) return result;
 
-        // JSON 파싱 실패 시: 텍스트 자체를 content로 사용
-        log.warn("Using raw text as news content (first 100 chars): {}",
+        // JSON 파싱 실패 시: 첫 문장을 제목, 나머지를 본문으로 분리
+        log.warn("JSON parse failed, splitting raw text (first 100 chars): {}",
                 text.length() > 100 ? text.substring(0, 100) + "..." : text);
-        String title = text.length() > 50 ? text.substring(0, 50) : text;
-        title = title.replaceAll("[\\r\\n]", " ").trim();
-        return new NewsGenerationResult(sanitize(title), sanitize(text));
+        String plain = text.replaceAll("[\\r\\n]+", " ").trim();
+        // 첫 마침표/느낌표/물음표 기준으로 제목·본문 분리
+        int splitIdx = -1;
+        for (int i = 0; i < Math.min(plain.length(), 80); i++) {
+            char c = plain.charAt(i);
+            if (c == '.' || c == '!' || c == '?' || c == '。') {
+                splitIdx = i;
+                break;
+            }
+        }
+        String title;
+        String content;
+        if (splitIdx > 0 && splitIdx < plain.length() - 1) {
+            title = plain.substring(0, splitIdx + 1).trim();
+            content = plain.substring(splitIdx + 1).trim();
+        } else if (plain.length() > 25) {
+            title = plain.substring(0, 25).trim();
+            content = plain;
+        } else {
+            title = plain;
+            content = plain;
+        }
+        // 제목이 25자 넘으면 자르기
+        if (title.length() > 25) {
+            title = title.substring(0, 25);
+        }
+        return new NewsGenerationResult(sanitize(title), sanitize(content));
     }
 
     private NewsGenerationResult tryParseJson(String jsonStr) {

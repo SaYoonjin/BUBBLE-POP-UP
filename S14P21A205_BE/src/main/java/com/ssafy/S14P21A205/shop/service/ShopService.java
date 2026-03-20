@@ -2,6 +2,11 @@ package com.ssafy.S14P21A205.shop.service;
 
 import com.ssafy.S14P21A205.exception.BaseException;
 import com.ssafy.S14P21A205.exception.ErrorCode;
+import com.ssafy.S14P21A205.game.season.entity.Season;
+import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
+import com.ssafy.S14P21A205.game.season.repository.SeasonRepository;
+import com.ssafy.S14P21A205.game.time.model.SeasonTimePoint;
+import com.ssafy.S14P21A205.game.time.service.SeasonTimelineService;
 import com.ssafy.S14P21A205.shop.dto.PurchaseItemResponse;
 import com.ssafy.S14P21A205.shop.dto.PurchaseItemsResponse;
 import com.ssafy.S14P21A205.shop.dto.PurchasedItemListResponse;
@@ -15,6 +20,8 @@ import com.ssafy.S14P21A205.shop.repository.ItemRepository;
 import com.ssafy.S14P21A205.shop.repository.ItemUserRepository;
 import com.ssafy.S14P21A205.user.entity.User;
 import com.ssafy.S14P21A205.user.repository.UserRepository;
+import java.time.Clock;
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -22,17 +29,25 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
+@Slf4j
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class ShopService {
 
+    private static final String PURCHASE_AVAILABLE_MESSAGE = "Item purchase for the current season is available only through day 5.";
+
     private final ItemRepository itemRepository;
     private final ItemUserRepository itemUserRepository;
     private final UserRepository userRepository;
+    private final SeasonRepository seasonRepository;
+    private final Clock clock;
+
+    private final SeasonTimelineService seasonTimelineService = new SeasonTimelineService();
 
     public ShopItemListResponse getShopItems() {
         List<Item> items = itemRepository.findAllByOrderByIdAsc();
@@ -59,11 +74,14 @@ public class ShopService {
 
     @Transactional
     public PurchaseItemsResponse purchaseItems(Integer userId, List<Long> itemIds) {
+        Season currentSeason = requirePurchasableSeason(userId, itemIds);
         User user = userRepository.findByIdForUpdate(userId)
                 .orElseThrow(() -> new BaseException(ErrorCode.UNAUTHORIZED));
 
         if (itemIds == null || itemIds.isEmpty()) {
-            return PurchaseItemsResponse.of(List.of(), 0, user.getPoint());
+            PurchaseItemsResponse emptyResponse = PurchaseItemsResponse.of(List.of(), 0, user.getPoint());
+            logPurchaseResult("SUCCESS", userId, currentSeason, itemIds, emptyResponse);
+            return emptyResponse;
         }
 
         List<Item> items = getOrderedItems(itemIds);
@@ -84,16 +102,81 @@ public class ShopService {
                 .map(item -> PurchaseItemResponse.of(item, item.getDiscountRate()))
                 .toList();
 
-        return PurchaseItemsResponse.of(
+        PurchaseItemsResponse response = PurchaseItemsResponse.of(
                 purchasedItems,
                 totalUsedPoints,
                 user.getPoint()
         );
+        logPurchaseResult("SUCCESS", userId, currentSeason, itemIds, response);
+        return response;
     }
 
     @Transactional
     public void resetPurchasedItems(Integer userId) {
         itemUserRepository.resetPurchasedByUserId(userId);
+    }
+
+    private Season requirePurchasableSeason(Integer userId, List<Long> itemIds) {
+        Season currentSeason = seasonRepository.findFirstByStatusOrderByIdDesc(SeasonStatus.IN_PROGRESS)
+                .orElseThrow(() -> new BaseException(ErrorCode.SEASON_NOT_FOUND));
+
+        LocalDateTime now = LocalDateTime.now(clock);
+        Integer playableFromDay = seasonTimelineService.resolveJoinPlayableFromDay(currentSeason, now);
+        if (playableFromDay == null) {
+            logPurchaseBlocked(userId, itemIds, currentSeason, now);
+            throw new BaseException(ErrorCode.INVALID_INPUT_VALUE, PURCHASE_AVAILABLE_MESSAGE);
+        }
+        return currentSeason;
+    }
+
+    private void logPurchaseBlocked(Integer userId, List<Long> itemIds, Season season, LocalDateTime now) {
+        SeasonTimePoint timePoint = seasonTimelineService.resolve(season, now);
+        log.info(
+                "\n================ SHOP PURCHASE ================\n"
+                        + "now={} userId={} result=BLOCKED\n"
+                        + "seasonId={} phase={} day={}\n"
+                        + "joinEnabled={} joinPlayableFromDay={}\n"
+                        + "itemIds={} usedPoints=- remainingPoints=-\n"
+                        + "==================================================",
+                now,
+                userId,
+                season.getId(),
+                timePoint.phase(),
+                formatDay(timePoint.currentDay()),
+                timePoint.joinEnabled(),
+                formatValue(timePoint.joinPlayableFromDay()),
+                itemIds == null ? List.of() : itemIds
+        );
+    }
+
+    private void logPurchaseResult(
+            String result,
+            Integer userId,
+            Season season,
+            List<Long> itemIds,
+            PurchaseItemsResponse response
+    ) {
+        LocalDateTime now = LocalDateTime.now(clock);
+        SeasonTimePoint timePoint = seasonTimelineService.resolve(season, now);
+        log.info(
+                "\n================ SHOP PURCHASE ================\n"
+                        + "now={} userId={} result={}\n"
+                        + "seasonId={} phase={} day={}\n"
+                        + "joinEnabled={} joinPlayableFromDay={}\n"
+                        + "itemIds={} usedPoints={} remainingPoints={}\n"
+                        + "==================================================",
+                now,
+                userId,
+                result,
+                season.getId(),
+                timePoint.phase(),
+                formatDay(timePoint.currentDay()),
+                timePoint.joinEnabled(),
+                formatValue(timePoint.joinPlayableFromDay()),
+                itemIds == null ? List.of() : itemIds,
+                formatValue(response.usedPoints()),
+                formatValue(response.remainingPoints())
+        );
     }
 
     private List<Item> getOrderedItems(List<Long> itemIds) {
@@ -149,5 +232,13 @@ public class ShopService {
                 );
             }
         }
+    }
+
+    private String formatDay(Integer day) {
+        return day == null ? "-" : "DAY " + day;
+    }
+
+    private String formatValue(Object value) {
+        return value == null ? "-" : value.toString();
     }
 }

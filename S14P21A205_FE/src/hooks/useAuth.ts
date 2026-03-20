@@ -7,6 +7,7 @@ export function isAuthenticated() {
 export function clearAuthSession() {
   localStorage.removeItem("accessToken");
   localStorage.removeItem("tokenType");
+  localStorage.removeItem("profileNickname");
 }
 
 export default function useAuth() {

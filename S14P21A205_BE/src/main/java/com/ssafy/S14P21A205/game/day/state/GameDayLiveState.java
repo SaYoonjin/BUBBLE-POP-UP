@@ -22,10 +22,55 @@ public record GameDayLiveState(
         Integer cumulativePurchaseCount,
         Long cumulativeSales,
         Long cumulativeTotalCost,
+        Long locationChangeCost,
         Long balance,
         Integer stock,
         LocalDateTime lastCalculatedAt
 ) {
+
+    public GameDayLiveState(
+            LocalDateTime startedAt,
+            List<Integer> purchaseList,
+            Integer purchaseCursor,
+            GameDayStartResponse startResponse,
+            Integer tick,
+            Integer populationPerStore,
+            BigDecimal captureRate,
+            Integer salePrice,
+            Integer tickCustomerCount,
+            Integer tickPurchaseCount,
+            Long tickSales,
+            Integer cumulativeCustomerCount,
+            Integer cumulativePurchaseCount,
+            Long cumulativeSales,
+            Long cumulativeTotalCost,
+            Long balance,
+            Integer stock,
+            LocalDateTime lastCalculatedAt
+    ) {
+        this(
+                startedAt,
+                purchaseList,
+                purchaseCursor,
+                startResponse,
+                tick,
+                null,
+                populationPerStore,
+                captureRate,
+                salePrice,
+                tickCustomerCount,
+                tickPurchaseCount,
+                tickSales,
+                cumulativeCustomerCount,
+                cumulativePurchaseCount,
+                cumulativeSales,
+                cumulativeTotalCost,
+                0L,
+                balance,
+                stock,
+                lastCalculatedAt
+        );
+    }
 
     public GameDayLiveState(
             Long cumulativeSales,
@@ -50,6 +95,7 @@ public record GameDayLiveState(
                 null,
                 cumulativeSales,
                 cumulativeTotalCost,
+                0L,
                 null,
                 stock,
                 lastCalculatedAt

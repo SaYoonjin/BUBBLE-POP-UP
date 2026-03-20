@@ -13,7 +13,11 @@ interface DistrictInfo {
 interface DistrictDetailPanelProps {
   district: DistrictInfo;
   interiorCost: string | null;
-  onComplete: (brandName: string) => void;
+  discountedRent?: string | null;
+  rentDiscountLabel?: string | null;
+  isSubmitting?: boolean;
+  submitError?: string | null;
+  onComplete: (brandName: string) => void | Promise<void>;
   onClose: () => void;
 }
 
@@ -26,27 +30,33 @@ const congestionTone: Record<string, { label: string; text: string }> = {
 };
 
 const gradeTone: Record<string, string> = {
-  S: "bg-accent-rose text-white border-accent-rose",
-  A: "bg-amber-100 text-amber-800 border-amber-200",
-  B: "bg-primary/15 text-primary-dark border-primary/20",
+  S: "border-accent-rose bg-accent-rose text-white",
+  A: "border-amber-200 bg-amber-100 text-amber-800",
+  B: "border-primary/20 bg-primary/15 text-primary-dark",
 };
 
 export default function DistrictDetailPanel({
   district,
   interiorCost,
+  discountedRent,
+  rentDiscountLabel,
+  isSubmitting = false,
+  submitError,
   onComplete,
   onClose,
 }: DistrictDetailPanelProps) {
   const [brandName, setBrandName] = useState("");
   const [visible, setVisible] = useState(false);
-  const congestionMeta = congestionTone[district.congestion] ?? congestionTone["보통"];
+  const congestionMeta = congestionTone[district.congestion] ?? congestionTone.보통;
   const grade = district.grade.charAt(0);
+  const hasRentDiscount =
+    Boolean(discountedRent) && discountedRent !== district.rent && Boolean(rentDiscountLabel);
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => setVisible(true));
 
     const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
+      if (event.key === "Escape" && !isSubmitting) {
         onClose();
       }
     };
@@ -57,17 +67,17 @@ export default function DistrictDetailPanel({
       window.cancelAnimationFrame(frame);
       window.removeEventListener("keydown", handleEscape);
     };
-  }, [onClose]);
+  }, [isSubmitting, onClose]);
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const trimmedBrandName = brandName.trim();
 
-    if (!trimmedBrandName) {
+    if (!trimmedBrandName || isSubmitting) {
       return;
     }
 
-    onComplete(trimmedBrandName);
+    void onComplete(trimmedBrandName);
   };
 
   return (
@@ -76,22 +86,27 @@ export default function DistrictDetailPanel({
         className={`fixed inset-0 bg-slate-900/38 backdrop-blur-sm transition-opacity duration-200 ${
           visible ? "opacity-100" : "opacity-0"
         }`}
-        onClick={onClose}
+        onClick={() => {
+          if (!isSubmitting) {
+            onClose();
+          }
+        }}
       />
 
       <div className="relative z-10 flex min-h-full items-start justify-center sm:items-center">
         <div
-          className={`relative w-full max-w-2xl overflow-y-auto rounded-[30px] border border-white/70 bg-white shadow-premium transition-all duration-300 ease-out custom-scrollbar ${
+          className={`custom-scrollbar relative max-h-[calc(100vh-3rem)] w-full max-w-2xl overflow-y-auto rounded-[30px] border border-white/70 bg-white shadow-premium transition-all duration-300 ease-out ${
             visible ? "translate-y-0 scale-100 opacity-100" : "translate-y-4 scale-95 opacity-0"
-          } max-h-[calc(100vh-3rem)]`}
+          }`}
         >
           <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-primary via-primary-dark to-accent-rose" />
 
           <button
             type="button"
             onClick={onClose}
-            className="absolute right-5 top-5 z-30 flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-soft transition-colors hover:border-slate-300 hover:text-slate-800"
+            className="absolute right-5 top-5 z-30 flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-soft transition-colors hover:border-slate-300 hover:text-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
             aria-label="닫기"
+            disabled={isSubmitting}
           >
             <span className="material-symbols-outlined text-[22px]">close</span>
           </button>
@@ -111,7 +126,9 @@ export default function DistrictDetailPanel({
               <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-slate-400">
                 Selected District
               </p>
-              <h2 className="mt-2 text-3xl font-black tracking-tight text-slate-900">{district.name}</h2>
+              <h2 className="mt-2 text-3xl font-black tracking-tight text-slate-900">
+                {district.name}
+              </h2>
             </div>
           </div>
 
@@ -134,46 +151,75 @@ export default function DistrictDetailPanel({
                 <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-400">
                   일일 임대료
                 </span>
-                <span className="font-mono text-lg font-bold text-slate-900">{district.rent}</span>
+                {hasRentDiscount ? (
+                  <div className="flex flex-col gap-1">
+                    <span className="font-mono text-sm font-semibold text-rose-300 line-through decoration-2">
+                      {district.rent}
+                    </span>
+                    <span className="font-mono text-lg font-bold text-rose-500">
+                      {discountedRent}
+                    </span>
+                    <span className="text-[11px] font-semibold text-rose-400">
+                      {rentDiscountLabel}
+                    </span>
+                  </div>
+                ) : (
+                  <span className="font-mono text-lg font-bold text-slate-900">
+                    {district.rent}
+                  </span>
+                )}
               </div>
 
               <div className="rounded-2xl border border-slate-200 bg-slate-50/90 p-4">
                 <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-400">
                   혼잡도
                 </span>
-                <span className={`text-lg font-bold ${congestionMeta.text}`}>{congestionMeta.label}</span>
+                <span className={`text-lg font-bold ${congestionMeta.text}`}>
+                  {congestionMeta.label}
+                </span>
               </div>
 
               <div className="rounded-2xl border border-slate-200 bg-slate-50/90 p-4">
                 <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-400">
                   인테리어 비용
                 </span>
-                <span className="font-mono text-lg font-bold text-slate-900">{interiorCost ?? "-"}</span>
+                <span className="font-mono text-lg font-bold text-slate-900">
+                  {interiorCost ?? "-"}
+                </span>
               </div>
             </div>
 
             <p className="mt-4 text-xs text-slate-400">
-              인테리어 비용은 선택 지역의 7일치 임대료를 기준으로 자동 계산됩니다.
+              인테리어 비용은 선택 지역의 기본 임대료를 기준으로 계산됩니다.
             </p>
 
             <form className="mt-6" onSubmit={handleSubmit}>
-              <label className="mb-2 block text-sm font-semibold text-slate-600">팝업 브랜드명</label>
+              <label className="mb-2 block text-sm font-semibold text-slate-600">
+                팝업 브랜드명
+              </label>
               <input
                 type="text"
                 value={brandName}
                 onChange={(event) => setBrandName(event.target.value)}
-                className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-base font-medium text-slate-800 placeholder:text-slate-300 transition-all focus:border-primary focus:ring-2 focus:ring-primary/15"
-                placeholder="브랜드 이름을 입력하세요"
+                className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-base font-medium text-slate-800 transition-all placeholder:text-slate-300 focus:border-primary focus:ring-2 focus:ring-primary/15"
+                placeholder="브랜드 이름을 입력해주세요"
                 autoFocus
+                disabled={isSubmitting}
               />
+
+              {submitError && (
+                <p className="mt-3 text-sm text-rose-500">{submitError}</p>
+              )}
 
               <button
                 type="submit"
-                disabled={!brandName.trim()}
+                disabled={!brandName.trim() || isSubmitting}
                 className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-primary font-bold text-slate-900 shadow-lg shadow-primary/20 transition-all hover:bg-primary-dark hover:text-white active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-40"
               >
-                <span>{district.name}에 오픈하기</span>
-                <span className="material-symbols-outlined text-lg">arrow_forward</span>
+                <span>{isSubmitting ? "시즌 참여 중..." : `${district.name}에서 시작하기`}</span>
+                {!isSubmitting && (
+                  <span className="material-symbols-outlined text-lg">arrow_forward</span>
+                )}
               </button>
             </form>
           </div>

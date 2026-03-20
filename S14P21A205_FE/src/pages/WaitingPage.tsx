@@ -23,10 +23,14 @@ export default function WaitingPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const routeState = isWaitingRouteState(location.state) ? location.state : null;
-  const locationSelectHref =
+  const backHref =
     routeState?.mode === "next_business_day"
-      ? "/game/setup/location?entry=midseason"
+      ? "/"
       : "/game/setup/location";
+  const backLabel =
+    routeState?.mode === "next_business_day"
+      ? "대시보드로 돌아가기"
+      : "지역 선택으로 돌아가기";
 
   const content = useMemo(() => {
     if (!routeState) {
@@ -173,10 +177,10 @@ export default function WaitingPage() {
               진행 상태를 유지하려면 이 화면을 닫지 마세요.
             </p>
             <Link
-              to={locationSelectHref}
+              to={backHref}
               className="inline-flex h-11 items-center justify-center rounded-2xl border border-slate-200 px-4 text-sm font-semibold text-slate-600 transition-colors hover:border-slate-300 hover:text-slate-900"
             >
-              지역 선택으로 돌아가기
+              {backLabel}
             </Link>
           </div>
         </div>

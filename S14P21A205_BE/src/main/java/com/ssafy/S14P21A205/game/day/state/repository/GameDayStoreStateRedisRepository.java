@@ -41,6 +41,7 @@ public class GameDayStoreStateRedisRepository {
     private static final String FIELD_CUMULATIVE_PURCHASE_COUNT = "cumulative_purchase_count";
     private static final String FIELD_CUMULATIVE_SALES = "cumulative_sales";
     private static final String FIELD_CUMULATIVE_TOTAL_COST = "cumulative_total_cost";
+    private static final String FIELD_LOCATION_CHANGE_COST = "location_change_cost";
     private static final String FIELD_BALANCE = "balance";
     private static final String FIELD_STOCK = "stock";
     private static final String FIELD_TICK = "tick";
@@ -73,6 +74,7 @@ public class GameDayStoreStateRedisRepository {
                     parseInteger(entries.get(FIELD_CUMULATIVE_PURCHASE_COUNT)),
                     parseLongObject(entries.get(FIELD_CUMULATIVE_SALES)),
                     parseLongObject(entries.get(FIELD_CUMULATIVE_TOTAL_COST)),
+                    parseLongObject(entries.get(FIELD_LOCATION_CHANGE_COST)),
                     parseLongObject(entries.get(FIELD_BALANCE)),
                     parseInteger(entries.get(FIELD_STOCK)),
                     parseLocalDateTime(entries.get(FIELD_LAST_CALCULATED_AT))
@@ -204,6 +206,7 @@ public class GameDayStoreStateRedisRepository {
         put(entries, FIELD_CUMULATIVE_PURCHASE_COUNT, state.cumulativePurchaseCount());
         put(entries, FIELD_CUMULATIVE_SALES, state.cumulativeSales());
         put(entries, FIELD_CUMULATIVE_TOTAL_COST, state.cumulativeTotalCost());
+        put(entries, FIELD_LOCATION_CHANGE_COST, state.locationChangeCost());
         put(entries, FIELD_BALANCE, state.balance());
         put(entries, FIELD_STOCK, state.stock());
         put(entries, FIELD_LAST_CALCULATED_AT, state.lastCalculatedAt());
@@ -224,6 +227,7 @@ public class GameDayStoreStateRedisRepository {
         put(entries, prefix + "cumulative_purchase_count", state.cumulativePurchaseCount());
         put(entries, prefix + "cumulative_sales", state.cumulativeSales());
         put(entries, prefix + "cumulative_total_cost", state.cumulativeTotalCost());
+        put(entries, prefix + "location_change_cost", state.locationChangeCost());
         put(entries, prefix + "balance", state.balance());
         put(entries, prefix + "stock", state.stock());
         return entries;

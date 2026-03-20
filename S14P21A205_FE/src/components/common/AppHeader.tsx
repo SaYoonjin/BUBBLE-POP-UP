@@ -1,16 +1,12 @@
 import { Link } from "react-router-dom";
 import ProfileDropdown from "./ProfileDropdown";
 import useAuth from "../../hooks/useAuth";
-import useNickname from "../../hooks/useNickname";
+import { useUserStore } from "../../stores/useUserStore";
 
-interface AppHeaderProps {
-  nickname?: string;
-}
-
-export default function AppHeader({ nickname = "Owner" }: AppHeaderProps) {
+export default function AppHeader() {
   const { isLoggedIn } = useAuth();
-  const { nickname: storedNickname } = useNickname();
-  const displayNickname = isLoggedIn ? storedNickname || nickname : nickname;
+  const nickname = useUserStore((s) => s.nickname);
+  const displayNickname = nickname || "Owner";
 
   return (
     <header

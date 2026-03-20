@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.ssafy.S14P21A205.action.service.ActionService;
+import com.ssafy.S14P21A205.action.repository.ActionRepository;
 import com.ssafy.S14P21A205.auth.service.AuthService;
 import com.ssafy.S14P21A205.auth.service.JwtTokenService;
 import com.ssafy.S14P21A205.game.day.dto.GameDayStartResponse;
@@ -28,6 +29,11 @@ import com.ssafy.S14P21A205.game.day.state.repository.GameDayStoreStateRedisRepo
 import com.ssafy.S14P21A205.game.environment.repository.SeasonWeatherRedisRepository;
 import com.ssafy.S14P21A205.game.environment.repository.WeatherRepository;
 import com.ssafy.S14P21A205.game.news.repository.NewsReportRepository;
+import com.ssafy.S14P21A205.game.news.repository.NewsArticleRepository;
+import com.ssafy.S14P21A205.game.news.service.AiNewsGenerator;
+import com.ssafy.S14P21A205.game.news.service.NewsDataSaver;
+import com.ssafy.S14P21A205.game.news.service.NewsService;
+import com.ssafy.S14P21A205.game.news.service.SparkNewsDataService;
 import com.ssafy.S14P21A205.game.season.dto.GameWaitingResponse;
 import com.ssafy.S14P21A205.game.season.dto.GameWaitingStatus;
 import com.ssafy.S14P21A205.game.season.dto.SeasonJoinResponse;
@@ -80,6 +86,9 @@ class SecurityConfigTests {
 
     @MockitoBean
     private ActionService actionService;
+
+    @MockitoBean
+    private ActionRepository actionRepository;
 
     @MockitoBean
     private GameDayStartService gameDayStartService;
@@ -179,6 +188,21 @@ class SecurityConfigTests {
 
     @MockitoBean
     private NewsReportRepository newsReportRepository;
+
+    @MockitoBean
+    private NewsArticleRepository newsArticleRepository;
+
+    @MockitoBean
+    private NewsService newsService;
+
+    @MockitoBean
+    private NewsDataSaver newsDataSaver;
+
+    @MockitoBean
+    private SparkNewsDataService sparkNewsDataService;
+
+    @MockitoBean
+    private AiNewsGenerator aiNewsGenerator;
 
     @Test
     void startDayAllowsAuthenticatedRequest() throws Exception {

@@ -133,7 +133,6 @@ class SeasonLifecycleServiceTests {
         when(seasonRepository.findFirstByStatusOrderByIdDesc(SeasonStatus.IN_PROGRESS)).thenReturn(Optional.empty());
         when(seasonRepository.findFirstByStatusOrderByStartTimeAscIdAsc(SeasonStatus.SCHEDULED))
                 .thenReturn(Optional.of(scheduledSeason));
-        when(seasonRepository.findFirstBySourceBatchKeyIsNotNullOrderByIdDesc()).thenReturn(Optional.empty());
         when(locationRepository.findAllByOrderByIdAsc()).thenReturn(List.of(location));
         when(menuRepository.findAllByOrderByIdAsc()).thenReturn(List.of(menu));
         when(weatherRepository.findAllByOrderByIdAsc()).thenReturn(allWeatherMasters());
@@ -148,6 +147,7 @@ class SeasonLifecycleServiceTests {
         assertThat(scheduledSeason.getStatus()).isEqualTo(SeasonStatus.IN_PROGRESS);
         assertThat(scheduledSeason.getCurrentDay()).isEqualTo(1);
         assertThat(scheduledSeason.getSourceBatchKey()).isEqualTo(batchKey);
+        assertThat(scheduledSeason.getStartTime()).isEqualTo(now);
         verify(weatherDayRedisRepository).saveDay(eq(11L), eq(1), any());
         verify(trafficDayRedisRepository).saveDay(eq(11L), eq(3L), eq(1), any());
         verify(seasonDayClosingScheduler).synchronize(scheduledSeason);

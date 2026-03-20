@@ -54,10 +54,10 @@ public class NewsDataSaver {
     @Transactional
     public void saveNewsData(Long seasonId, Season season, int totalDays,
                              Map<Integer, List<MenuMentionCount>> dayMentions) {
-        if (newsReportRepository.existsBySeasonId(seasonId)) {
-            log.info("News already generated for season {} (race check)", seasonId);
-            return;
-        }
+        // 기존 뉴스 전체 삭제 (FK child → parent 순서)
+        newsArticleRepository.deleteAllInBatch();
+        newsReportRepository.deleteAllInBatch();
+        log.info("Cleared all news before regeneration for season {}", seasonId);
 
         String trafficRanking = buildAreaTrafficRanking();
         log.info("[NEWS] Step 3/4: Generating news for {} days via AI", totalDays);
@@ -77,6 +77,14 @@ public class NewsDataSaver {
                         report, day, NewsCategory.TREND, result.title(), result.content());
                 newsArticleRepository.save(article);
                 log.info("[NEWS] Generated trend news for season {} day {}: {}", seasonId, day, result.title());
+            }
+
+            if (day == 1) {
+                try {
+                    generateDay1GuideNews(report, seasonId);
+                } catch (Exception e) {
+                    log.error("Failed to generate day 1 guide news. seasonId={}", seasonId, e);
+                }
             }
 
             try {
@@ -196,6 +204,26 @@ public class NewsDataSaver {
                 report, day, NewsCategory.AREA_ENTRY, result.title(), result.content());
         newsArticleRepository.save(article);
         log.info("Generated area entry news for season {} day {}", seasonId, day);
+    }
+
+    private void generateDay1GuideNews(NewsReport report, long seasonId) {
+        try {
+            NewsGenerationResult intro = aiNewsGenerator.generateIntroNews(seasonId);
+            newsArticleRepository.save(NewsArticle.create(report, 1, NewsCategory.GUIDE, intro.title(), intro.content()));
+        } catch (Exception e) {
+            log.error("Failed to generate intro news. seasonId={}", seasonId, e);
+        }
+
+        try {
+            List<NewsGenerationResult> tips = aiNewsGenerator.generateRandomTipNews(seasonId);
+            for (NewsGenerationResult tip : tips) {
+                newsArticleRepository.save(NewsArticle.create(report, 1, NewsCategory.GUIDE, tip.title(), tip.content()));
+            }
+        } catch (Exception e) {
+            log.error("Failed to generate tip news. seasonId={}", seasonId, e);
+        }
+
+        log.info("[NEWS] Generated day 1 guide news (intro + 2 random tips) for season {}", seasonId);
     }
 
     private void generateEventPreviewNews(NewsReport report, Long seasonId, int day, int totalDays) {

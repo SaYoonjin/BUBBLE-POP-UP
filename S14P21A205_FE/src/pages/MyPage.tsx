@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import AppHeader from "../components/common/AppHeader";
 import Badge from "../components/common/Badge";
 import NicknameEditModal from "../components/mypage/NicknameEditModal";
@@ -6,7 +6,8 @@ import ProfileSummaryCard from "../components/mypage/ProfileSummaryCard";
 import SeasonHistoryCard from "../components/mypage/SeasonHistoryCard";
 import SeasonHistoryEmptyState from "../components/mypage/SeasonHistoryEmptyState";
 import SeasonSortDropdown from "../components/mypage/SeasonSortDropdown";
-import useNickname from "../hooks/useNickname";
+import { getUserRecords, type UserRecord } from "../api/user";
+import { useUserStore } from "../stores/useUserStore";
 import { matchesHangulSearch } from "../utils/hangulSearch";
 
 type RankVariant = "gold" | "gray" | "rose";
@@ -26,80 +27,23 @@ interface SeasonHistoryItem {
   rewardPoints: string;
 }
 
-const seasonHistory: SeasonHistoryItem[] = [
-  {
-    id: "season-5-bankrupt",
-    season: 5,
-    rank: "파산",
-    rankValue: null,
-    rankVariant: "rose",
-    status: "bankrupt",
-    location: "강남",
-    storeName: "디저트 팝업 스토어",
-    revenue: "₩0",
-    rewardPoints: "0P",
-  },
-  {
-    id: "season-5-comeback",
-    season: 5,
-    rank: "2위",
-    rankValue: 2,
-    rankVariant: "gray",
-    status: "comeback",
-    location: "강남",
-    storeName: "디저트 팝업 스토어",
-    revenue: "₩1,120,000",
-    rewardPoints: "420P",
-  },
-  {
-    id: "season-4-bankrupt",
-    season: 4,
-    rank: "파산",
-    rankValue: null,
-    rankVariant: "rose",
-    status: "bankrupt",
-    location: "성수",
-    storeName: "수제 맥주 팝업",
-    revenue: "₩0",
-    rewardPoints: "0P",
-  },
-  {
-    id: "season-3-default",
-    season: 3,
-    rank: "1위",
-    rankValue: 1,
-    rankVariant: "gold",
-    status: "default",
-    location: "홍대",
-    storeName: "패션 악세사리 팝업",
-    revenue: "₩1,340,000",
-    rewardPoints: "500P",
-  },
-  {
-    id: "season-2-default",
-    season: 2,
-    rank: "4위",
-    rankValue: 4,
-    rankVariant: "gray",
-    status: "default",
-    location: "이태원",
-    storeName: "비건 베이커리",
-    revenue: "₩780,000",
-    rewardPoints: "180P",
-  },
-  {
-    id: "season-1-default",
-    season: 1,
-    rank: "8위",
-    rankValue: 8,
-    rankVariant: "gray",
-    status: "default",
-    location: "명동",
-    storeName: "타코야끼 팝업",
-    revenue: "₩320,000",
-    rewardPoints: "30P",
-  },
-];
+function toSeasonHistoryItem(record: UserRecord): SeasonHistoryItem {
+  const isBankrupt = record.rank === 0 || record.profit <= 0;
+  const rankVariant: RankVariant = record.rank === 1 ? "gold" : isBankrupt ? "rose" : "gray";
+
+  return {
+    id: `season-${record.seasonNumber}-${record.rank}`,
+    season: record.seasonNumber,
+    rank: isBankrupt ? "파산" : `${record.rank}위`,
+    rankValue: isBankrupt ? null : record.rank,
+    rankVariant,
+    status: isBankrupt ? "bankrupt" : "default",
+    location: record.location,
+    storeName: record.popupName,
+    revenue: `₩${record.profit.toLocaleString()}`,
+    rewardPoints: `${record.rewardPoint.toLocaleString()}P`,
+  };
+}
 
 const latestSeasonStatusPriority: Record<SeasonStatus, number> = {
   comeback: 0,
@@ -129,13 +73,25 @@ function parseRevenue(value: string) {
 }
 
 export default function MyPage() {
-  const { nickname, setNickname } = useNickname();
+  const nickname = useUserStore((s) => s.nickname) ?? "버블킹";
+  const email = useUserStore((s) => s.email) ?? "";
+  const updateNickname = useUserStore((s) => s.updateNickname);
+
+  const [seasonHistory, setSeasonHistory] = useState<SeasonHistoryItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [isNicknameModalOpen, setIsNicknameModalOpen] = useState(false);
   const [draftNickname, setDraftNickname] = useState(nickname);
   const [nicknameError, setNicknameError] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [sortOption, setSortOption] = useState<SeasonSortOption>("latest");
   const [sortAnimationCycle, setSortAnimationCycle] = useState(0);
+
+  useEffect(() => {
+    getUserRecords()
+      .then((res) => setSeasonHistory(res.data.records.map(toSeasonHistoryItem)))
+      .catch(() => {})
+      .finally(() => setIsLoading(false));
+  }, []);
 
   const uniqueSeasonCount = new Set(seasonHistory.map((record) => record.season)).size;
   const rankedSeasons = seasonHistory.filter(
@@ -223,7 +179,7 @@ export default function MyPage() {
     setIsNicknameModalOpen(false);
   };
 
-  const saveNickname = () => {
+  const saveNickname = async () => {
     const nextNickname = draftNickname.trim();
 
     if (!nextNickname) {
@@ -231,10 +187,13 @@ export default function MyPage() {
       return;
     }
 
-    const savedNickname = setNickname(nextNickname);
-    setDraftNickname(savedNickname);
-    setNicknameError("");
-    setIsNicknameModalOpen(false);
+    try {
+      await updateNickname(nextNickname);
+      setNicknameError("");
+      setIsNicknameModalOpen(false);
+    } catch {
+      setNicknameError("닉네임 변경에 실패했어요. 다시 시도해 주세요.");
+    }
   };
 
   return (
@@ -246,7 +205,7 @@ export default function MyPage() {
           <section className="lg:sticky lg:top-24">
             <ProfileSummaryCard
               nickname={nickname}
-              email="user@ssafy.com"
+              email={email}
               summaryBadges={summaryBadges}
               onEditNickname={openNicknameModal}
             />
@@ -291,7 +250,11 @@ export default function MyPage() {
               />
             </div>
 
-            {seasonHistory.length === 0 ? (
+            {isLoading ? (
+              <div className="flex justify-center py-16">
+                <p className="text-slate-400 font-medium">기록을 불러오는 중...</p>
+              </div>
+            ) : seasonHistory.length === 0 ? (
               <SeasonHistoryEmptyState nickname={nickname} />
             ) : filteredSeasonHistory.length > 0 ? (
               <div className="space-y-4">

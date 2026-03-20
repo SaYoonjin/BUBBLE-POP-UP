@@ -15,14 +15,14 @@ interface LocationSpot {
 }
 
 const avatarColors = [
-  "bg-primary/30",
+  "bg-primary",
+  "bg-primary/70",
   "bg-primary/50",
-  "bg-primary/40",
-  "bg-slate-300",
-  "bg-primary/60",
   "bg-slate-400",
-  "bg-primary/45",
-  "bg-slate-350",
+  "bg-primary/60",
+  "bg-slate-500",
+  "bg-primary/80",
+  "bg-slate-400",
 ];
 
 interface AnimatedAvatar {
@@ -113,14 +113,6 @@ function LocationSlide() {
             {isA && <div className="absolute w-12 h-12 rounded-xl bg-primary/20 animate-ping" style={{ animationDuration:"2s" }} />}
             <div className={`w-9 h-9 rounded-xl ${gc[s.grade]} flex items-center justify-center text-white text-[11px] font-black shadow-lg transition-transform duration-200 ${isH||isA?"scale-125":""}`}>{s.grade}</div>
             <span className={`mt-1 text-[10px] font-bold px-2 py-0.5 rounded-md transition-all ${isA?"bg-slate-800 text-white shadow-lg":isH?"bg-white text-slate-800 shadow-md":"bg-white/80 text-slate-500 shadow-sm"}`}>{s.name}</span>
-            {(isA||isH) && (
-              <div className={`absolute -top-[44px] bg-white rounded-lg shadow-lg border border-slate-100 px-2.5 py-1.5 whitespace-nowrap ${isA?"":"animate-[fadeUp_.2s_ease-out]"}`}
-                style={isA?{animation:"floatBadge 2s ease-in-out infinite"}:undefined}>
-                <p className="text-[10px] font-bold text-primary">{isA?"✨ 팝업 성지":s.name}</p>
-                <p className="text-[9px] text-slate-400">{isA?"유동인구 최다 지역":`등급 ${s.grade}`}</p>
-                <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-white border-r border-b border-slate-100 rotate-45" />
-              </div>
-            )}
           </div>
         );
       })}
@@ -255,20 +247,36 @@ export default function HeroCarousel() {
 }
 
 /* ─── CTA ─── */
-export function HeroCTA() {
+export function HeroCTA({ seasonNumber, status }: { seasonNumber: number | null; status: "WAITING" | "IN_PROGRESS" | null }) {
+  const isActive = status === "IN_PROGRESS" && seasonNumber != null;
+  const label = seasonNumber ? `Season ${seasonNumber}` : "Season";
+
   return (
     <div className="bg-white/90 backdrop-blur-sm rounded-[32px] shadow-xl p-10 lg:p-12 border border-white flex flex-col gap-8 relative overflow-hidden">
       <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-bl-full opacity-50 -mr-8 -mt-8" />
       <div className="space-y-4 z-10">
-        <span className="text-primary font-bold tracking-wider text-sm uppercase">Season 3 Open</span>
-        <h2 className="text-4xl md:text-5xl font-bold leading-[1.15]">지금 바로<br />시작하세요!</h2>
-        <p className="text-gray-500 text-lg font-light leading-relaxed">나만의 전략으로 최고의 수익을 달성하고<br />실시간 랭킹에 도전해보세요.</p>
+        <span className="text-primary font-bold tracking-wider text-sm uppercase">
+          {isActive ? `${label} Open` : "Coming Soon"}
+        </span>
+        <h2 className="text-4xl md:text-5xl font-bold leading-[1.15]">
+          {isActive ? <>지금 바로<br />시작하세요!</> : <>다음 시즌을<br />준비 중이에요</>}
+        </h2>
+        <p className="text-gray-500 text-lg font-light leading-relaxed">
+          {isActive
+            ? <>나만의 전략으로 최고의 수익을 달성하고<br />실시간 랭킹에 도전해보세요.</>
+            : <>곧 새로운 시즌이 시작됩니다.<br />잠시만 기다려 주세요!</>}
+        </p>
       </div>
       <div className="space-y-5 z-10 pt-4">
-        <Link to="/login" className="w-full h-[72px] bg-primary hover:bg-primary-dark text-white text-xl font-bold rounded-2xl shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-1 flex items-center justify-center gap-3 group">
-          게임 참여하러 가기 <span className="text-2xl group-hover:translate-x-1 transition-transform">→</span>
+        <Link to="/login" className={`w-full h-[72px] text-white text-xl font-bold rounded-2xl shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-1 flex items-center justify-center gap-3 group ${
+          isActive ? "bg-primary hover:bg-primary-dark" : "bg-slate-400 hover:bg-slate-500"
+        }`}>
+          {isActive ? "게임 참여하러 가기" : "로그인하고 대기하기"}
+          <span className="text-2xl group-hover:translate-x-1 transition-transform">→</span>
         </Link>
-        <p className="text-center text-sm text-slate-400 font-medium">Season 3 진행 중</p>
+        <p className="text-center text-sm text-slate-400 font-medium">
+          {isActive ? `${label} 진행 중` : "다음 시즌 대기 중"}
+        </p>
       </div>
     </div>
   );
@@ -277,9 +285,9 @@ export function HeroCTA() {
 /* ─── Animated Avatars ─── */
 export function AnimatedParticipants({ count }: { count: number }) {
   const [items, setItems] = useState<AnimatedAvatar[]>(() =>
-    avatarColors.slice(0, 4).map((color, index) => ({ id: index, color })),
+    avatarColors.slice(0, 5).map((color, index) => ({ id: index, color })),
   );
-  const nextItemId = useRef(4);
+  const nextItemId = useRef(5);
 
   useEffect(() => {
     const t = setInterval(() => {
@@ -295,19 +303,22 @@ export function AnimatedParticipants({ count }: { count: number }) {
 
   return (
     <div className="flex items-center justify-center gap-4 opacity-70">
-      <div className="flex -space-x-2.5 relative h-8 overflow-hidden w-[90px]">
+      <div className="relative h-8 w-[140px] overflow-visible">
         <style>{`
-          @keyframes avatarSlide {
-            0% { transform: translateX(24px); opacity: 0; }
-            15% { transform: translateX(0); opacity: 1; }
-            85% { transform: translateX(0); opacity: 1; }
-            100% { transform: translateX(-24px); opacity: 0; }
+          @keyframes avatarEnter {
+            from { transform: translateX(12px); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
           }
         `}</style>
         {items.map((item, i) => (
           <div key={item.id}
-            className={`w-7 h-7 rounded-full ${item.color} border-2 border-white shrink-0`}
-            style={{ zIndex: 4-i, animation: i === items.length - 1 ? "avatarSlide 2.2s ease-in-out" : undefined }}
+            className={`absolute w-7 h-7 rounded-full ${item.color} border-2 border-white`}
+            style={{
+              left: i * 22,
+              zIndex: 5 - i,
+              transition: "left 0.5s ease-out",
+              animation: i === items.length - 1 ? "avatarEnter 0.5s ease-out" : undefined,
+            }}
           />
         ))}
       </div>

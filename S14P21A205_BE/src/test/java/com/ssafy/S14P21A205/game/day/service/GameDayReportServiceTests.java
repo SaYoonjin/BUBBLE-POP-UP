@@ -220,6 +220,48 @@ class GameDayReportServiceTests {
     }
 
     @Test
+    void getDayReportUsesReservedLocationForTomorrowWeather() {
+        User user = user(1);
+        Store store = store(15L, 9L, 2, 7, "Current Location", "Current Menu", 300);
+        Location reservedLocation = location(9L, "Reserved Location", 500);
+        ReflectionTestUtils.setField(store, "pendingLocation", reservedLocation);
+        ReflectionTestUtils.setField(store, "pendingLocationReservedDay", 2);
+        ReflectionTestUtils.setField(store, "pendingLocationApplyDay", 3);
+
+        DailyReport dayTwo = dailyReport(
+                store,
+                2,
+                "Current Location",
+                "Current Menu",
+                5_000,
+                1_300,
+                3_700,
+                42,
+                20,
+                12,
+                2,
+                false,
+                15_000,
+                new BigDecimal("0.10")
+        );
+
+        when(userService.getCurrentUser(any())).thenReturn(user);
+        when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
+                .thenReturn(Optional.of(store));
+        when(dailyReportRepository.findByStoreIdAndDay(15L, 2)).thenReturn(Optional.of(dayTwo));
+        when(dailyReportRepository.findByStoreIdAndDay(15L, 1)).thenReturn(Optional.empty());
+        when(weatherLocationRepository.findByDayOrderByLocation_IdAsc(3)).thenReturn(List.of(
+                weatherLocation(store.getLocation(), 3, weather(WeatherType.SNOW)),
+                weatherLocation(reservedLocation, 3, weather(WeatherType.RAIN))
+        ));
+
+        GameDayReportResponse response = gameDayReportService.getDayReport(mock(Authentication.class), 2);
+
+        assertThat(response.tomorrowWeather()).isNotNull();
+        assertThat(response.tomorrowWeather().condition()).isEqualTo("RAIN");
+    }
+
+    @Test
     void getDayReportThrowsWhenDayIsOutOfRange() {
         User user = user(1);
         Store store = store(15L, 9L, 2, 7, "Seongsu", "Cookie", 300);
@@ -276,6 +318,14 @@ class GameDayReportServiceTests {
         ReflectionTestUtils.setField(store, "storeName", "Ignored Store Name");
         ReflectionTestUtils.setField(store, "purchaseCursor", 4);
         return store;
+    }
+
+    private Location location(Long id, String locationName, int rent) {
+        Location location = instantiate(Location.class);
+        ReflectionTestUtils.setField(location, "id", id);
+        ReflectionTestUtils.setField(location, "locationName", locationName);
+        ReflectionTestUtils.setField(location, "rent", rent);
+        return location;
     }
 
     private GameDayLiveState state(

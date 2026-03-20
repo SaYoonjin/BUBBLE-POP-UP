@@ -1,6 +1,10 @@
 import { useState } from "react";
-import { DASHBOARD_SELECTED_ITEMS_STORAGE_KEY } from "../../../constants";
 import ModalWrapper from "./ModalWrapper";
+import {
+  applyDiscount,
+  getSelectedDiscountMultiplier,
+  getStoredSelectedDashboardItems,
+} from "../../../utils/dashboardItems";
 
 interface MenuItem {
   name: string;
@@ -29,7 +33,6 @@ interface EmergencyOrderModalProps {
 }
 
 const SURCHARGE_RATE = 0.5;
-const ITEM_DISCOUNT_RATE = 10;
 
 const deliveryTrafficMap: Record<
   DeliveryTrafficLevel,
@@ -67,23 +70,6 @@ const deliveryTrafficMap: Record<
   },
 };
 
-function getSelectedDashboardItemIds() {
-  try {
-    const stored = localStorage.getItem(DASHBOARD_SELECTED_ITEMS_STORAGE_KEY);
-
-    if (!stored) {
-      return [];
-    }
-
-    const parsed = JSON.parse(stored);
-    return Array.isArray(parsed)
-      ? parsed.filter((value): value is number => typeof value === "number")
-      : [];
-  } catch {
-    return [];
-  }
-}
-
 function formatWon(amount: number) {
   return `₩${amount.toLocaleString()}`;
 }
@@ -105,17 +91,22 @@ export default function EmergencyOrderModal({
     menuItems.findIndex((menu) => menu.name === currentMenuName),
   );
   const [selectedMenuIndex, setSelectedMenuIndex] = useState(initialMenuIndex);
-  const [selectedDashboardItemIds] = useState<number[]>(
-    getSelectedDashboardItemIds,
+  const [selectedDashboardItems] = useState(
+    getStoredSelectedDashboardItems,
   );
   const [quantity, setQuantity] = useState(120);
   const [showWarningTooltip, setShowWarningTooltip] = useState(false);
 
   const selectedMenu = menuItems[selectedMenuIndex];
-  const hasItemDiscount = selectedDashboardItemIds.length > 0;
-  const discountedUnitPrice = hasItemDiscount
-    ? Math.round(selectedMenu.price * (1 - ITEM_DISCOUNT_RATE / 100))
-    : selectedMenu.price;
+  const ingredientDiscountMultiplier = getSelectedDiscountMultiplier(
+    selectedDashboardItems,
+    "INGREDIENT",
+  );
+  const hasItemDiscount = ingredientDiscountMultiplier < 1;
+  const discountedUnitPrice = applyDiscount(
+    selectedMenu.price,
+    ingredientDiscountMultiplier,
+  );
   const materialsCost = discountedUnitPrice * quantity;
   const surcharge = Math.round(materialsCost * SURCHARGE_RATE);
   const totalCost = materialsCost + surcharge;
@@ -173,9 +164,10 @@ export default function EmergencyOrderModal({
             {menuItems.map((menu, index) => {
               const isSelected = selectedMenuIndex === index;
               const isCurrentMenu = menu.name === currentMenuName;
-              const listDiscountedPrice = hasItemDiscount
-                ? Math.round(menu.price * (1 - ITEM_DISCOUNT_RATE / 100))
-                : menu.price;
+              const listDiscountedPrice = applyDiscount(
+                menu.price,
+                ingredientDiscountMultiplier,
+              );
               const isSelectedNewMenu = isSelected && !isCurrentMenu;
 
               return (
