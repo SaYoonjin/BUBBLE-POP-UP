@@ -163,6 +163,23 @@ function formatEmergencyArrivalTime(arrivedTime: string) {
   });
 }
 
+function getEstimatedEmergencyArrivalTime(
+  serverTime: string | null | undefined,
+  delaySeconds: number | null | undefined,
+) {
+  if (!serverTime || typeof delaySeconds !== "number" || delaySeconds < 0) {
+    return null;
+  }
+
+  const parsedServerTime = new Date(serverTime);
+
+  if (Number.isNaN(parsedServerTime.getTime())) {
+    return null;
+  }
+
+  return new Date(parsedServerTime.getTime() + delaySeconds * 1000).toISOString();
+}
+
 function getTrafficStatusLabel(status: GameTrafficStatus | null | undefined) {
   switch (status) {
     case "VERY_SMOOTH":
@@ -277,9 +294,16 @@ function PlayPageSession({
         setStock(stateResult.value.inventory.totalStock);
         setGuests(stateResult.value.customerCount);
         setDeliveryTrafficLabel(getTrafficStatusLabel(stateResult.value.traffic?.status));
-        setEmergencyArriveAt(stateResult.value.actionStatus.emergencyOrderArriveAt);
+        setEmergencyArriveAt(
+          stateResult.value.actionStatus.emergencyOrderArriveAt ??
+            getEstimatedEmergencyArrivalTime(
+              stateResult.value.serverTime,
+              stateResult.value.traffic?.delaySeconds,
+            ),
+        );
       } else {
         setDeliveryTrafficLabel(null);
+        setEmergencyArriveAt(null);
       }
 
       if (orderResult.status === "fulfilled") {
