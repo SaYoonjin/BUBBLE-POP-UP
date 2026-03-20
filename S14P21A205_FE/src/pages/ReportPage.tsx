@@ -11,10 +11,22 @@ import BankruptModal from "../components/report/BankruptModal";
 import { getAllDayReports, type GameDayReportResponse } from "../api/game";
 import useBrandName from "../hooks/useBrandName";
 
+function getNetProfit(r: GameDayReportResponse) {
+  return (r.revenue ?? 0) - (r.totalCost ?? 0);
+}
+
+function getIsBankrupt(r: GameDayReportResponse) {
+  return (r.consecutiveDeficitDays ?? 0) >= 3;
+}
+
+function getReputation(r: GameDayReportResponse) {
+  return ((r.capture_rate ?? 0) / 2);
+}
+
 function buildChartData(reports: GameDayReportResponse[], currentDay: number) {
   const result = reports.map((r) => ({
     day: r.day,
-    value: r.netProfit,
+    value: getNetProfit(r),
     isCurrent: r.day === currentDay,
     isFuture: false,
   }));
@@ -89,9 +101,11 @@ export default function ReportPage() {
   }
 
   const chartData = buildChartData(allReports, report.day);
-  const todayProfit = report.netProfit;
-  const isBankrupt = report.isBankrupt;
+  const todayProfit = getNetProfit(report);
+  const isBankrupt = getIsBankrupt(report);
   const disposal = isStockDisposalDay(report.day);
+  const reputation = getReputation(report);
+  const reputationChange = (report.reputationChange ?? 0) / 2;
 
   const fmt = (v: number) => v < 0 ? `-₩${Math.abs(v).toLocaleString()}` : `₩${v.toLocaleString()}`;
 
@@ -182,8 +196,8 @@ export default function ReportPage() {
               highlight={todayProfit < 0}
             />
             <StatCard label="방문객 수" value={`${report.visitors}명`} icon="groups" iconBg="bg-slate-100" iconColor="text-slate-600" />
-            <StatCard label="평판" value={String(report.reputationScore)}
-              change={{ value: `${report.reputationChange >= 0 ? "+" : ""}${report.reputationChange}`, positive: report.reputationChange >= 0 }}
+            <StatCard label="평판" value={reputation.toFixed(1)}
+              change={{ value: `${reputationChange >= 0 ? "+" : ""}${reputationChange.toFixed(1)}`, positive: reputationChange >= 0 }}
               icon="star" iconBg="bg-yellow-100" iconColor="text-yellow-600" />
             <StatCard label="판매 수량" value={`${report.salesCount}개`} subtext={report.menuName} icon="shopping_bag" iconBg="bg-blue-100" iconColor="text-blue-600" />
             <StatCard label="남은 재고" value={`${report.stockRemaining}개`} subtext={stockSubtext}

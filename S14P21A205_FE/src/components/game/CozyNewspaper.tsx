@@ -40,8 +40,6 @@ export default function CozyNewspaper({ items, expandedId, onToggle, day, rankin
         className="absolute inset-0 opacity-40 mix-blend-multiply pointer-events-none"
         style={{ backgroundImage: "url('https://www.transparenttextures.com/patterns/cream-paper.png')" }}
       />
-      {/* Fold line */}
-      <div className="absolute top-1/2 left-0 w-full h-px bg-gradient-to-r from-transparent via-gray-300 to-transparent z-20" />
 
       <div className="p-8 relative z-10">
         {/* Masthead */}

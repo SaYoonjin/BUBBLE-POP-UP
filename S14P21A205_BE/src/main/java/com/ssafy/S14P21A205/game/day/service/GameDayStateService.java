@@ -31,6 +31,7 @@ import com.ssafy.S14P21A205.store.repository.StoreRepository;
 import com.ssafy.S14P21A205.store.service.StoreLocationTransitionSupport;
 import com.ssafy.S14P21A205.user.entity.User;
 import com.ssafy.S14P21A205.user.service.UserService;
+import java.util.ArrayList;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Clock;
@@ -187,6 +188,8 @@ public class GameDayStateService {
                 new GameStateResponse.CustomerTick(
                         calculatedState.liveState().tick(),
                         calculatedState.tickCustomerCount(),
+                        calculatedState.liveState().salePrice(),
+                        calculatedState.liveState().tickSoldUnits() == null ? List.of() : calculatedState.liveState().tickSoldUnits(),
                         calculatedState.baseFloatingPopulation(),
                         calculatedState.populationGrowthRate(),
                         calculatedState.currentFloatingPopulation(),
@@ -289,6 +292,7 @@ public class GameDayStateService {
                 state.captureRate(),
                 state.salePrice() == null ? 0 : state.salePrice(),
                 state.tickCustomerCount() == null ? 0 : state.tickCustomerCount(),
+                state.tickSoldUnits() == null ? List.of() : state.tickSoldUnits(),
                 state.tickPurchaseCount() == null ? 0 : state.tickPurchaseCount(),
                 state.tickSales() == null ? 0L : state.tickSales(),
                 state.cumulativeCustomerCount() == null ? 0 : state.cumulativeCustomerCount(),
@@ -426,6 +430,7 @@ public class GameDayStateService {
                         captureRate,
                         progressionState.salePrice(),
                         progressionState.tickCustomerCount(),
+                        progressionState.tickSoldUnits(),
                         progressionState.tickPurchaseCount(),
                         progressionState.tickSales(),
                         progressionState.cumulativeCustomerCount(),
@@ -454,6 +459,7 @@ public class GameDayStateService {
         int processedTick = state.tick() == null ? 0 : state.tick();
         int purchaseCursor = state.purchaseCursor() == null ? 0 : state.purchaseCursor();
         int tickCustomerCount = state.tickCustomerCount() == null ? 0 : state.tickCustomerCount();
+        List<Integer> tickSoldUnits = state.tickSoldUnits() == null ? List.of() : state.tickSoldUnits();
         int tickPurchaseCount = state.tickPurchaseCount() == null ? 0 : state.tickPurchaseCount();
         long tickSales = state.tickSales() == null ? 0L : state.tickSales();
         int cumulativeCustomerCount = state.cumulativeCustomerCount() == null ? 0 : state.cumulativeCustomerCount();
@@ -501,14 +507,20 @@ public class GameDayStateService {
             int desiredCustomerCount = customerScore.customerCount();
             int nextCursor = stockEngine.advancePurchaseCursor(state.purchaseList(), purchaseCursor, desiredCustomerCount);
             int actualCustomerCount = Math.max(0, nextCursor - purchaseCursor);
-            long demandUnits = stockEngine.calculateDemandUnits(state.purchaseList(), purchaseCursor, nextCursor);
             int availableStock = Math.max(
                     0,
                     tickInventory.stock() + applyStockEventDelta(tickInventory.stock(), baselineEffect, tickEffect)
             );
-            int soldUnits = safeToInt(Math.min(demandUnits, availableStock));
+            TickSoldUnitsManifest tickManifest = buildTickSoldUnitsManifest(
+                    state.purchaseList(),
+                    purchaseCursor,
+                    nextCursor,
+                    availableStock
+            );
+            int soldUnits = tickManifest.totalSoldUnits();
 
             tickCustomerCount = actualCustomerCount;
+            tickSoldUnits = tickManifest.soldUnits();
             tickPurchaseCount = soldUnits;
             tickSales = Math.multiplyExact((long) soldUnits, valueOf(salePrice));
             cumulativeCustomerCount += actualCustomerCount;
@@ -556,6 +568,7 @@ public class GameDayStateService {
         return new ProgressionState(
                 purchaseCursor,
                 tickCustomerCount,
+                tickSoldUnits,
                 tickPurchaseCount,
                 tickSales,
                 cumulativeCustomerCount,
@@ -652,6 +665,38 @@ public class GameDayStateService {
         return adjustedStock - currentStock;
     }
 
+    private TickSoldUnitsManifest buildTickSoldUnitsManifest(
+            List<Integer> purchaseList,
+            int fromCursor,
+            int toCursor,
+            int availableStock
+    ) {
+        if (purchaseList == null || purchaseList.isEmpty() || toCursor <= fromCursor) {
+            return TickSoldUnitsManifest.empty();
+        }
+
+        int start = Math.max(0, Math.min(fromCursor, purchaseList.size()));
+        int end = Math.max(start, Math.min(toCursor, purchaseList.size()));
+        if (start >= end) {
+            return TickSoldUnitsManifest.empty();
+        }
+
+        int remainingStock = Math.max(0, availableStock);
+        int totalSoldUnits = 0;
+        List<Integer> soldUnits = new ArrayList<>(end - start);
+
+        for (int index = start; index < end; index++) {
+            Integer requestedUnits = purchaseList.get(index);
+            int requested = requestedUnits == null ? 0 : Math.max(0, requestedUnits);
+            int sold = Math.min(requested, remainingStock);
+            soldUnits.add(sold);
+            remainingStock -= sold;
+            totalSoldUnits += sold;
+        }
+
+        return new TickSoldUnitsManifest(List.copyOf(soldUnits), totalSoldUnits);
+    }
+
     private int initialStockOf(GameDayLiveState state) {
         return state.startResponse() == null || state.startResponse().initialStock() == null
                 ? 0
@@ -707,6 +752,7 @@ public class GameDayStateService {
     private record ProgressionState(
             int purchaseCursor,
             int tickCustomerCount,
+            List<Integer> tickSoldUnits,
             int tickPurchaseCount,
             long tickSales,
             int cumulativeCustomerCount,
@@ -721,5 +767,14 @@ public class GameDayStateService {
             EventEffectResolver.EventEffect currentEventEffect,
             EmergencyOrderState currentEmergencyOrderState
     ) {
+    }
+
+    private record TickSoldUnitsManifest(
+            List<Integer> soldUnits,
+            int totalSoldUnits
+    ) {
+        private static TickSoldUnitsManifest empty() {
+            return new TickSoldUnitsManifest(List.of(), 0);
+        }
     }
 }

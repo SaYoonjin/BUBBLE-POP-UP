@@ -313,6 +313,7 @@ public class GameDayStartService {
                         captureRatePolicy.normalizeCaptureRate(response.captureRate()),
                         openingSalePrice,
                         0,
+                        List.of(),
                         0,
                         0L,
                         0,
