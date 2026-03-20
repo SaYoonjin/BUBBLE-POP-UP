@@ -11,10 +11,18 @@ import EmergencyOrderModal, {
   type CurrentMenuPricing,
   type EmergencyMenuItem,
 } from "../components/play/modals/EmergencyOrderModal";
-import PromotionModal from "../components/play/modals/PromotionModal";
+import PromotionModal, {
+  type PromotionOption,
+} from "../components/play/modals/PromotionModal";
 import ShareModal from "../components/play/modals/ShareModal";
 import MoveModal from "../components/play/modals/MoveModal";
-import { postDiscount, postEmergencyOrder } from "../api/action";
+import {
+  getPromotionPrice,
+  postDiscount,
+  postEmergencyOrder,
+  postPromotion,
+  type PromotionType,
+} from "../api/action";
 import {
   getGameDayState,
   startGameDay,
@@ -133,6 +141,52 @@ const promotionLabels: Record<string, string> = {
 
 const persistentActionTypes = new Set<ActionType>(["discount", "promotion", "share"]);
 
+const PROMOTION_OPTION_META: Record<
+  PromotionType,
+  Omit<PromotionOption, "id" | "price">
+> = {
+  INFLUENCER: { icon: "📣", name: "인플루언서 홍보", multiplier: 1.2 },
+  SNS: { icon: "📱", name: "SNS 홍보", multiplier: 1.15 },
+  LEAFLET: { icon: "📰", name: "전단지 배포", multiplier: 1.1 },
+  FRIEND: { icon: "🫶", name: "지인 소개", multiplier: 1.05 },
+};
+
+const DEFAULT_PROMOTION_PRICES: Record<PromotionType, number> = {
+  INFLUENCER: 50_000,
+  SNS: 30_000,
+  LEAFLET: 10_000,
+  FRIEND: 0,
+};
+
+const PROMOTION_LABELS: Record<PromotionType, string> = {
+  INFLUENCER: "인플루언서 홍보",
+  SNS: "SNS 홍보",
+  LEAFLET: "전단지 배포",
+  FRIEND: "지인 소개",
+};
+
+promotionLabels.INFLUENCER = PROMOTION_LABELS.INFLUENCER;
+promotionLabels.SNS = PROMOTION_LABELS.SNS;
+promotionLabels.LEAFLET = PROMOTION_LABELS.LEAFLET;
+promotionLabels.FRIEND = PROMOTION_LABELS.FRIEND;
+
+function buildPromotionOptions(prices?: Partial<Record<PromotionType, number>>): PromotionOption[] {
+  return (Object.keys(PROMOTION_OPTION_META) as PromotionType[]).map((type) => ({
+    id: type,
+    ...PROMOTION_OPTION_META[type],
+    price: prices?.[type] ?? DEFAULT_PROMOTION_PRICES[type],
+  }));
+}
+
+function isPromotionUsed(actionStatus: GameStateResponse["actionStatus"]) {
+  return (
+    actionStatus.influencerUsed ||
+    actionStatus.snsUsed ||
+    actionStatus.leafletUsed ||
+    actionStatus.friendUsed
+  );
+}
+
 function resolveMenuEmoji(menuId: number, menuName: string) {
   return MENU_EMOJI_MAP[menuId] ?? MENU_EMOJI_BY_NAME[menuName.trim()] ?? "🍽️";
 }
@@ -187,10 +241,10 @@ function getEstimatedEmergencyArrivalTime(
 
 function getDiscountedPrice(
   currentPrice: number,
-  minimumPrice: number,
+  _minimumPrice: number,
   discountRate: number,
 ) {
-  return Math.max(minimumPrice, Math.round(currentPrice * (1 - discountRate / 100)));
+  return Math.max(0, Math.round(currentPrice * (1 - discountRate / 100)));
 }
 
 function getTrafficStatusLabel(status: GameTrafficStatus | null | undefined) {
@@ -242,6 +296,9 @@ function PlayPageSession({
   const [guests, setGuests] = useState(MOCK.guests);
   const [currentOrder, setCurrentOrder] = useState<CurrentOrderResponse | null>(null);
   const [menuItems, setMenuItems] = useState<EmergencyMenuItem[]>([]);
+  const [promotionOptions, setPromotionOptions] = useState<PromotionOption[]>(() =>
+    buildPromotionOptions(),
+  );
   const [deliveryTrafficLabel, setDeliveryTrafficLabel] = useState<string | null>(null);
   const [emergencyArriveAt, setEmergencyArriveAt] = useState<string | null>(null);
   const [isEmergencyDataLoading, setIsEmergencyDataLoading] = useState(true);
@@ -265,14 +322,17 @@ function PlayPageSession({
   const discountCurrentPrice = currentOrder?.sellingPrice ?? MOCK.currentPrice;
   const discountMinimumPrice = currentOrder?.costPrice ?? discountCurrentPrice;
 
-  const syncDiscountActionState = (discountUsed: boolean) => {
+  const syncPersistentActionState = (
+    action: Extract<ActionType, "discount" | "promotion">,
+    isUsed: boolean,
+  ) => {
     setUsedActions((prev) => {
       const next = new Set(prev);
 
-      if (discountUsed) {
-        next.add("discount");
+      if (isUsed) {
+        next.add(action);
       } else {
-        next.delete("discount");
+        next.delete(action);
       }
 
       return next;
@@ -281,14 +341,22 @@ function PlayPageSession({
     setActiveEffects((prev) => {
       const next = new Set(prev);
 
-      if (discountUsed) {
-        next.add("discount");
+      if (isUsed) {
+        next.add(action);
       } else {
-        next.delete("discount");
+        next.delete(action);
       }
 
       return next;
     });
+  };
+
+  const syncDiscountActionState = (discountUsed: boolean) => {
+    syncPersistentActionState("discount", discountUsed);
+  };
+
+  const syncPromotionActionState = (promotionUsed: boolean) => {
+    syncPersistentActionState("promotion", promotionUsed);
   };
 
   const applyGameState = (state: GameStateResponse) => {
@@ -301,6 +369,7 @@ function PlayPageSession({
         getEstimatedEmergencyArrivalTime(state.serverTime, state.traffic?.delaySeconds),
     );
     syncDiscountActionState(state.actionStatus.discountUsed);
+    syncPromotionActionState(isPromotionUsed(state.actionStatus));
   };
 
   const rankings = useMemo(
@@ -332,10 +401,11 @@ function PlayPageSession({
         startErrorMessage = getErrorMessage(error, "영업 상태를 준비하지 못했습니다.");
       }
 
-      const [stateResult, orderResult, menuResult] = await Promise.allSettled([
+      const [stateResult, orderResult, menuResult, promotionPriceResult] = await Promise.allSettled([
         getGameDayState(),
         getCurrentOrder(),
         getStoreMenus(),
+        getPromotionPrice(),
       ]);
 
       if (!isActive) {
@@ -348,6 +418,7 @@ function PlayPageSession({
         setDeliveryTrafficLabel(null);
         setEmergencyArriveAt(null);
         syncDiscountActionState(false);
+        syncPromotionActionState(false);
       }
 
       if (orderResult.status === "fulfilled") {
@@ -360,6 +431,19 @@ function PlayPageSession({
         setMenuItems(mapStoreMenusToEmergencyMenus(menuResult.value.menus));
       } else {
         setMenuItems([]);
+      }
+
+      if (promotionPriceResult.status === "fulfilled") {
+        const nextPrices = Object.fromEntries(
+          promotionPriceResult.value.promotion.map((item) => [
+            item.promotionType,
+            item.promotionPrice,
+          ]),
+        ) as Partial<Record<PromotionType, number>>;
+
+        setPromotionOptions(buildPromotionOptions(nextPrices));
+      } else {
+        setPromotionOptions(buildPromotionOptions());
       }
 
       const nextError =
@@ -606,10 +690,23 @@ function PlayPageSession({
       {activeModal === "promotion" && (
         <PromotionModal
           currentBalance={balance}
+          options={promotionOptions}
           onClose={closeModal}
-          onSubmit={({ promotionId, cost }) => {
+          onSubmit={async ({ promotionId, cost }) => {
+            const promotionType = promotionId as PromotionType;
+            const response = await postPromotion(promotionType);
+
+            syncPromotionActionState(true);
+
+            const [stateSyncResult] = await Promise.allSettled([getGameDayState()]);
+            const hasSyncedState = stateSyncResult.status === "fulfilled";
+
+            if (hasSyncedState) {
+              applyGameState(stateSyncResult.value);
+            }
+
             completeAction("promotion", {
-              cost,
+              cost: hasSyncedState ? undefined : response.cost || cost,
               alert: {
                 title: "홍보 시작",
                 description: `${promotionLabels[promotionId] ?? "홍보"}를 시작했습니다.`,

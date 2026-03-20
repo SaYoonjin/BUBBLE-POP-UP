@@ -13,17 +13,10 @@ interface DiscountModalProps {
   onSubmit: (discountRate: number) => Promise<void> | void;
 }
 
+const MAX_DISCOUNT_RATE = 100;
+
 function formatWon(value: number) {
   return `₩${value.toLocaleString()}`;
-}
-
-function getMaxDiscountRate(currentPrice: number, minimumPrice: number) {
-  if (currentPrice <= 0 || minimumPrice >= currentPrice) {
-    return 0;
-  }
-
-  const rawRate = ((currentPrice - minimumPrice) / currentPrice) * 100;
-  return Math.max(0, Math.floor(rawRate / 5) * 5);
 }
 
 export default function DiscountModal({
@@ -32,19 +25,18 @@ export default function DiscountModal({
   onClose,
   onSubmit,
 }: DiscountModalProps) {
-  const maxRate = getMaxDiscountRate(currentPrice, minimumPrice);
-  const [rate, setRate] = useState(() => Math.min(20, maxRate));
+  const [rate, setRate] = useState(20);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const discountedPrice = Math.max(minimumPrice, Math.round(currentPrice * (1 - rate / 100)));
+  const discountedPrice = Math.max(0, Math.round(currentPrice * (1 - rate / 100)));
 
   useEffect(() => {
-    setRate(Math.min(20, maxRate));
+    setRate(20);
     setSubmitError(null);
-  }, [maxRate, currentPrice, minimumPrice]);
+  }, [currentPrice, minimumPrice]);
 
   const handleSubmit = async () => {
-    if (rate === 0 || isSubmitting || maxRate === 0) {
+    if (rate === 0 || isSubmitting) {
       return;
     }
 
@@ -55,7 +47,9 @@ export default function DiscountModal({
       await Promise.resolve(onSubmit(rate));
     } catch (error) {
       if (axios.isAxiosError<ApiErrorResponse>(error)) {
-        setSubmitError(error.response?.data?.message ?? "할인 적용에 실패했습니다. 잠시 후 다시 시도해주세요.");
+        setSubmitError(
+          error.response?.data?.message ?? "할인 적용에 실패했습니다. 잠시 후 다시 시도해주세요.",
+        );
       } else {
         setSubmitError("할인 적용에 실패했습니다. 잠시 후 다시 시도해주세요.");
       }
@@ -88,7 +82,7 @@ export default function DiscountModal({
           <input
             type="range"
             min={0}
-            max={maxRate}
+            max={MAX_DISCOUNT_RATE}
             step={5}
             value={rate}
             onChange={(event) => setRate(Number(event.target.value))}
@@ -96,7 +90,7 @@ export default function DiscountModal({
           />
           <div className="flex justify-between px-1 text-xs font-medium text-slate-400">
             <span>0%</span>
-            <span>최대 {maxRate}%</span>
+            <span>최대 {MAX_DISCOUNT_RATE}%</span>
           </div>
         </div>
 
@@ -118,16 +112,10 @@ export default function DiscountModal({
             </div>
           </div>
           <div className="flex items-center justify-between text-xs text-slate-400">
-            <span>최소 허용 판매가</span>
+            <span>현재 원가 기준 참고값</span>
             <span>{formatWon(minimumPrice)}</span>
           </div>
         </div>
-
-        {maxRate === 0 && (
-          <div className="rounded-2xl border border-amber-200 bg-amber-50/80 px-4 py-3 text-sm text-amber-700">
-            현재 판매가는 이미 최소 허용가에 가까워서 추가 할인을 적용할 수 없습니다.
-          </div>
-        )}
 
         {submitError && (
           <div className="rounded-2xl border border-red-200 bg-red-50/80 px-4 py-3 text-sm text-red-600">
@@ -137,7 +125,7 @@ export default function DiscountModal({
 
         <div className="flex items-center justify-center gap-2 text-xs text-slate-400">
           <span className="material-symbols-outlined text-[16px]">info</span>
-          <span>할인 액션은 하루에 한 번만 사용할 수 있습니다.</span>
+          <span>원가 미만 할인은 서버에서 거절될 수 있습니다.</span>
         </div>
       </div>
 
@@ -145,7 +133,7 @@ export default function DiscountModal({
         <button
           type="button"
           onClick={() => void handleSubmit()}
-          disabled={rate === 0 || isSubmitting || maxRate === 0}
+          disabled={rate === 0 || isSubmitting}
           className="w-full rounded-xl bg-primary py-3 text-base font-bold text-white shadow-md shadow-primary/25 transition-all hover:bg-primary-dark active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
         >
           {isSubmitting ? "할인 적용중..." : "할인 시작하기"}
