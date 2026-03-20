@@ -16,7 +16,6 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @Slf4j
 @RequiredArgsConstructor
-@Transactional
 public class SeasonDayClosingService {
 
     private final SeasonRepository seasonRepository;
@@ -41,19 +40,20 @@ public class SeasonDayClosingService {
             return;
         }
 
+        // 각 store의 recordClosedDayReport는 자체 @Transactional로 즉시 커밋
         for (Store store : stores) {
             gameDayReportService.recordClosedDayReport(store, day);
         }
 
-        // 마감 뉴스: 랭킹 갱신 + 마감 뉴스 1건 생성
+        if (day == season.getTotalDays()) {
+            seasonFinalRankingService.saveFinalRankings(season);
+        }
+
+        // daily_report 커밋 완료 후 뉴스 생성 (AI 호출 포함, 별도 트랜잭션)
         try {
             newsService.updateDayRankings(seasonId, day);
         } catch (Exception e) {
             log.error("Failed to generate closing news. seasonId={} day={}", seasonId, day, e);
-        }
-
-        if (day == season.getTotalDays()) {
-            seasonFinalRankingService.saveFinalRankings(season);
         }
     }
 }
