@@ -610,6 +610,117 @@ function FinaleScene() {
   );
 }
 
+/* ── Bankrupt Scene: 파산 — 무너진 가게 ── */
+function BankruptScene() {
+  return (
+    <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden">
+      {/* 빨간 경고등 — 전체 펄스 */}
+      <div className="absolute inset-0 wc-bankrupt-pulse" style={{
+        background: "radial-gradient(ellipse at center, rgba(239,68,68,0.12) 0%, transparent 70%)",
+      }} />
+
+      {/* 어두운 비네팅 */}
+      <div className="absolute inset-0" style={{
+        background: "radial-gradient(ellipse at center, transparent 30%, rgba(30,30,30,0.15) 100%)",
+      }} />
+
+      {/* 금이 간 균열 — 중앙에서 뻗어나감 */}
+      {[
+        { x1: "50%", y1: "50%", angle: -35, len: 90, w: 2.5, d: "0s" },
+        { x1: "50%", y1: "50%", angle: 40, len: 110, w: 2, d: "0.15s" },
+        { x1: "50%", y1: "50%", angle: -75, len: 70, w: 2, d: "0.3s" },
+        { x1: "50%", y1: "50%", angle: 15, len: 85, w: 1.5, d: "0.4s" },
+        { x1: "50%", y1: "50%", angle: -120, len: 95, w: 2, d: "0.2s" },
+        { x1: "50%", y1: "50%", angle: 70, len: 75, w: 1.5, d: "0.5s" },
+        { x1: "50%", y1: "50%", angle: 160, len: 80, w: 2, d: "0.1s" },
+        { x1: "50%", y1: "50%", angle: -160, len: 65, w: 1.5, d: "0.35s" },
+      ].map((cr, i) => (
+        <div key={`cr${i}`} className="absolute wc-shatter-crack" style={{
+          left: cr.x1, top: cr.y1, width: cr.len, height: cr.w,
+          transformOrigin: "0% 50%",
+          transform: `rotate(${cr.angle}deg)`,
+          background: `linear-gradient(90deg, rgba(239,68,68,0.6), rgba(239,68,68,0.25), transparent)`,
+          animationDelay: cr.d,
+        }} />
+      ))}
+
+      {/* 중앙 — 깨진 돼지저금통 */}
+      <div className="relative wc-bankrupt-shake">
+        <span className="text-7xl" style={{
+          filter: "drop-shadow(0 4px 12px rgba(239,68,68,0.3))",
+        }}>💸</span>
+      </div>
+
+      {/* 중앙에서 사방으로 날아가는 지폐/동전 — 돈이 빨려나가는 느낌 */}
+      {[
+        { angle: 0, dist: 140, d: "0s", sz: 24, e: "💵" },
+        { angle: 45, dist: 130, d: "0.2s", sz: 20, e: "💴" },
+        { angle: 90, dist: 120, d: "0.4s", sz: 22, e: "🪙" },
+        { angle: 135, dist: 135, d: "0.15s", sz: 18, e: "💵" },
+        { angle: 180, dist: 125, d: "0.5s", sz: 24, e: "💴" },
+        { angle: 225, dist: 140, d: "0.1s", sz: 20, e: "🪙" },
+        { angle: 270, dist: 115, d: "0.35s", sz: 22, e: "💵" },
+        { angle: 315, dist: 130, d: "0.25s", sz: 18, e: "💴" },
+        { angle: 20, dist: 145, d: "0.6s", sz: 16, e: "🪙" },
+        { angle: 110, dist: 120, d: "0.45s", sz: 20, e: "💵" },
+        { angle: 200, dist: 135, d: "0.55s", sz: 16, e: "🪙" },
+        { angle: 290, dist: 125, d: "0.3s", sz: 18, e: "💴" },
+      ].map((b, i) => (
+        <div key={`fly${i}`} className="absolute wc-money-fly" style={{
+          left: "50%", top: "50%",
+          fontSize: b.sz,
+          marginLeft: -b.sz / 2, marginTop: -b.sz / 2,
+          // CSS 변수로 각도와 거리 전달
+          ["--fly-x" as string]: `${Math.cos(b.angle * Math.PI / 180) * b.dist}px`,
+          ["--fly-y" as string]: `${Math.sin(b.angle * Math.PI / 180) * b.dist}px`,
+          ["--fly-r" as string]: `${(b.angle % 2 === 0 ? 1 : -1) * (180 + (i % 3) * 90)}deg`,
+          animationDelay: b.d,
+          animationDuration: `${2 + (i % 4) * 0.3}s`,
+        }}>{b.e}</div>
+      ))}
+
+      {/* 소용돌이 흡입 링 — 돈이 빨려나가는 바람 */}
+      {[0, 1, 2].map((i) => (
+        <div key={`vortex${i}`} className="absolute wc-vortex-ring rounded-full" style={{
+          left: "50%", top: "50%",
+          width: 40 + i * 50, height: 40 + i * 50,
+          marginLeft: -(20 + i * 25), marginTop: -(20 + i * 25),
+          border: `1.5px solid rgba(239,68,68,${0.25 - i * 0.06})`,
+          animationDelay: `${i * 0.4}s`,
+        }} />
+      ))}
+
+      {/* 하단 — 무너진 잔해 느낌 */}
+      <div className="absolute bottom-0 left-0 right-0 h-16">
+        <div className="absolute bottom-0 left-0 right-0 h-10 bg-gradient-to-t from-rose-100/60 via-rose-50/30 to-transparent" />
+        {/* 바닥에 쌓인 동전/지폐 */}
+        {["🪙","💵","🪙","💴","🪙","💵","🪙"].map((e, i) => (
+          <span key={`floor${i}`} className="absolute bottom-1 wc-floor-item" style={{
+            left: `${8 + i * 13}%`,
+            fontSize: 10 + (i % 3) * 3,
+            opacity: 0.4 + (i % 3) * 0.15,
+            transform: `rotate(${-20 + i * 12}deg)`,
+            animationDelay: `${i * 0.3}s`,
+          }}>{e}</span>
+        ))}
+      </div>
+
+      {/* 빨간 도장 — 파산 각인 */}
+      <div className="absolute wc-stamp-slam" style={{
+        top: "15%", right: "8%",
+        border: "3px solid rgba(220,38,38,0.5)",
+        borderRadius: 4,
+        padding: "2px 8px",
+        transform: "rotate(-12deg)",
+        color: "rgba(220,38,38,0.5)",
+        fontSize: 14,
+        fontWeight: 900,
+        letterSpacing: 4,
+      }}>CLOSED</div>
+    </div>
+  );
+}
+
 const SCENE_MAP: Record<WeatherCondition, () => JSX.Element> = {
   SUNNY: SunnyScene,
   RAIN: RainScene,
@@ -641,14 +752,14 @@ export default function WeatherCard({ condition, disabled = false }: WeatherCard
   const noWeather = !condition && !disabled;
 
   const bgGradient = disabled
-    ? "from-slate-50 to-slate-100"
+    ? "from-rose-50 via-slate-50 to-slate-100"
     : noWeather
       ? "from-amber-50 via-orange-50 to-rose-50"
       : weather
         ? weather.bg
         : "from-blue-50 to-indigo-50";
   const border = disabled
-    ? "border-slate-200"
+    ? "border-rose-200/60"
     : noWeather
       ? "border-amber-200/60"
       : weather
@@ -829,28 +940,51 @@ export default function WeatherCard({ condition, disabled = false }: WeatherCard
         }
         .wc-confetti { animation:wc-confetti-fall 3s ease-in-out infinite }
         .wc-trophy-bounce { animation:wc-trophy-bounce 2s ease-in-out infinite }
+
+        /* ── Bankrupt ── */
+        @keyframes wc-bankrupt-pulse { 0%,100%{opacity:.3} 50%{opacity:1} }
+        @keyframes wc-shatter-crack { 0%{opacity:0;transform:rotate(var(--r,0deg)) scaleX(0)} 40%{opacity:.8} 100%{opacity:.4;transform:rotate(var(--r,0deg)) scaleX(1)} }
+        @keyframes wc-bankrupt-shake { 0%,100%{transform:translate(0,0)} 10%{transform:translate(-2px,1px)} 20%{transform:translate(2px,-1px)} 30%{transform:translate(-1px,2px)} 40%{transform:translate(1px,-1px)} 50%{transform:translate(0,0)} }
+        @keyframes wc-money-fly {
+          0% { transform:translate(0,0) rotate(0deg) scale(1); opacity:.9 }
+          20% { opacity:1 }
+          100% { transform:translate(var(--fly-x),var(--fly-y)) rotate(var(--fly-r)) scale(.3); opacity:0 }
+        }
+        @keyframes wc-vortex-ring {
+          0% { transform:scale(.3); opacity:.5 }
+          100% { transform:scale(1.8); opacity:0 }
+        }
+        @keyframes wc-stamp-slam { 0%{transform:rotate(-12deg) scale(3);opacity:0} 50%{transform:rotate(-12deg) scale(0.95);opacity:.6} 70%{transform:rotate(-12deg) scale(1.05);opacity:.5} 100%{transform:rotate(-12deg) scale(1);opacity:.5} }
+        @keyframes wc-floor-wobble { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-2px)} }
+        .wc-bankrupt-pulse { animation:wc-bankrupt-pulse 2s ease-in-out infinite }
+        .wc-shatter-crack { animation:wc-shatter-crack 0.8s ease-out forwards }
+        .wc-bankrupt-shake { animation:wc-bankrupt-shake 3s ease-in-out infinite }
+        .wc-money-fly { animation:wc-money-fly 2.2s ease-out infinite }
+        .wc-vortex-ring { animation:wc-vortex-ring 2s ease-out infinite }
+        .wc-stamp-slam { animation:wc-stamp-slam 1s ease-out forwards }
+        .wc-floor-item { animation:wc-floor-wobble 2s ease-in-out infinite }
       `}</style>
 
       <div
         className={`lg:col-span-2 rounded-xl shadow-soft border flex flex-col overflow-hidden transition-all duration-700 ${
           disabled
-            ? `bg-gradient-to-br ${bgGradient} ${border} opacity-50 grayscale`
+            ? `bg-gradient-to-br ${bgGradient} ${border}`
             : `bg-gradient-to-br ${bgGradient} ${border}`
         } ${mounted ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2"}`}
       >
         {/* Header */}
         <div className="px-6 pt-6 pb-2 relative z-10">
           <h3 className="text-lg font-bold text-slate-800 mb-1 flex items-center gap-2">
-            <span className={`material-symbols-outlined ${noWeather ? "text-amber-500" : disabled ? "text-slate-400" : "text-blue-500"}`}>
-              {noWeather ? "flag" : "calendar_month"}
+            <span className={`material-symbols-outlined ${noWeather ? "text-amber-500" : disabled ? "text-rose-400" : "text-blue-500"}`}>
+              {noWeather ? "flag" : disabled ? "store" : "calendar_month"}
             </span>
-            {noWeather ? "시즌 종료" : "내일 날씨"}
+            {noWeather ? "시즌 종료" : disabled ? "영업 종료" : "내일 날씨"}
           </h3>
           <p className="text-sm text-slate-500">
             {noWeather
               ? "마지막 영업일이 끝났습니다."
               : disabled
-                ? "영업이 종료되었습니다."
+                ? "파산으로 매장이 폐업되었습니다."
                 : "내일의 날씨 예보입니다."}
           </p>
         </div>
@@ -859,11 +993,7 @@ export default function WeatherCard({ condition, disabled = false }: WeatherCard
         <div className="relative flex-1 min-h-[160px]">
           {Scene && !disabled && !noWeather && <Scene />}
           {noWeather && <FinaleScene />}
-          {disabled && !noWeather && (
-            <div className="absolute inset-0 flex items-center justify-center">
-              <span className="text-5xl grayscale opacity-30">💨</span>
-            </div>
-          )}
+          {disabled && !noWeather && <BankruptScene />}
         </div>
 
         {/* Label */}
@@ -874,9 +1004,14 @@ export default function WeatherCard({ condition, disabled = false }: WeatherCard
               <p className="text-sm text-slate-500 mt-1">결과를 확인해보세요</p>
             </>
           ) : (
-            <p className={`text-2xl font-black tracking-tight ${disabled ? "text-slate-400" : "text-slate-800"}`}>
-              {weather ? weather.label : "--"}
-            </p>
+            <>
+              <p className={`text-2xl font-black tracking-tight ${disabled ? "text-rose-400/80" : "text-slate-800"}`}>
+                {disabled ? "폐업" : weather ? weather.label : "--"}
+              </p>
+              {disabled && (
+                <p className="text-sm text-slate-400 mt-1">더 이상 영업할 수 없습니다</p>
+              )}
+            </>
           )}
         </div>
       </div>
