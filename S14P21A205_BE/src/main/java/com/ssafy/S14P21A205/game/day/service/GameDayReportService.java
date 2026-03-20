@@ -26,8 +26,11 @@ import com.ssafy.S14P21A205.store.repository.StoreRepository;
 import com.ssafy.S14P21A205.store.service.StoreLocationTransitionSupport;
 import com.ssafy.S14P21A205.user.entity.User;
 import com.ssafy.S14P21A205.user.service.UserService;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
@@ -149,19 +152,23 @@ public class GameDayReportService {
 
         DailyReport report = dailyReportRepository.findByStoreIdAndDay(store.getId(), day)
                 .orElseThrow(() -> new BaseException(ErrorCode.REPORT_NOT_FOUND));
+        List<DailyReport> storeReports = dailyReportRepository.findByStore_IdOrderByDayAsc(store.getId());
 
         return new GameDayReportResponse(
                 report.getStore().getSeason().getId(),
                 report.getDay(),
+                resolveStoreName(report),
                 resolveLocationName(report),
                 resolveMenuName(report),
                 valueOf(report.getRevenue()),
                 valueOf(report.getTotalCost()),
-                valueOf(report.getNetProfit()),
                 defaultInt(report.getVisitors()),
                 defaultInt(report.getSalesCount()),
                 defaultInt(report.getStockRemaining()),
                 STOCK_DISPOSED_COUNT,
+                captureRatePolicy.normalizeCaptureRate(report.getCaptureRate()),
+                resolveChangeCaptureRate(report, storeReports),
+                resolveDailyRevenue(storeReports, report.getDay()),
                 resolveTomorrowWeather(
                         store.getSeason().getId(),
                         resolveTomorrowLocationId(store, report.getDay()),
@@ -169,8 +176,7 @@ public class GameDayReportService {
                         store.getSeason().getTotalDays()
                 ),
                 resolveIsNextDayOrderDay(report.getDay(), store.getSeason().getTotalDays()),
-                defaultInt(report.getConsecutiveDeficitDays()),
-                Boolean.TRUE.equals(report.getIsBankrupt())
+                defaultInt(report.getConsecutiveDeficitDays())
         );
     }
 
@@ -275,11 +281,59 @@ public class GameDayReportService {
         return report.getStore().getLocation().getLocationName();
     }
 
+    private String resolveStoreName(DailyReport report) {
+        if (report.getStore().getStoreName() != null && !report.getStore().getStoreName().isBlank()) {
+            return report.getStore().getStoreName();
+        }
+        return null;
+    }
+
     private String resolveMenuName(DailyReport report) {
         if (report.getMenuName() != null && !report.getMenuName().isBlank()) {
             return report.getMenuName();
         }
         return report.getStore().getMenu().getMenuName();
+    }
+
+    private BigDecimal resolveChangeCaptureRate(DailyReport currentReport, List<DailyReport> storeReports) {
+        if (currentReport == null || currentReport.getDay() == null || currentReport.getDay() <= 1) {
+            return null;
+        }
+
+        DailyReport previousReport = storeReports.stream()
+                .filter(report -> report.getDay() != null)
+                .filter(report -> report.getDay().equals(currentReport.getDay() - 1))
+                .findFirst()
+                .orElse(null);
+        if (previousReport == null || previousReport.getCaptureRate() == null || currentReport.getCaptureRate() == null) {
+            return null;
+        }
+
+        return captureRatePolicy.normalizeCaptureRate(currentReport.getCaptureRate())
+                .subtract(captureRatePolicy.normalizeCaptureRate(previousReport.getCaptureRate()))
+                .setScale(4, RoundingMode.HALF_UP);
+    }
+
+    private GameDayReportResponse.DailyRevenue resolveDailyRevenue(List<DailyReport> storeReports, Integer reportDay) {
+        Long[] profits = new Long[MAX_SUPPORTED_DAY];
+        for (DailyReport report : storeReports) {
+            if (report.getDay() == null || report.getDay() < 1 || report.getDay() > MAX_SUPPORTED_DAY) {
+                continue;
+            }
+            if (reportDay != null && report.getDay() > reportDay) {
+                continue;
+            }
+            profits[report.getDay() - 1] = valueOf(report.getRevenue());
+        }
+        return new GameDayReportResponse.DailyRevenue(
+                profits[0],
+                profits[1],
+                profits[2],
+                profits[3],
+                profits[4],
+                profits[5],
+                profits[6]
+        );
     }
 
     private java.math.BigDecimal resolveCaptureRate(GameDayLiveState state) {

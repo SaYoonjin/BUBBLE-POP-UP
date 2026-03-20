@@ -222,6 +222,11 @@ class GameDayReportServiceTests {
         when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
                 .thenReturn(Optional.of(store));
         when(dailyReportRepository.findByStoreIdAndDay(15L, 2)).thenReturn(Optional.of(dayTwo));
+        when(dailyReportRepository.findByStore_IdOrderByDayAsc(15L)).thenReturn(List.of(
+                dailyReport(store, 1, "Seongsu", "Cookie", 4_000, 1_200, 2_800, 40, 18, 10, 0, false, 10_000, new BigDecimal("0.08")),
+                dayTwo,
+                dailyReport(store, 3, "Seongsu", "Cookie", 9_000, 2_000, 7_000, 55, 24, 8, 0, false, 20_000, new BigDecimal("0.11"))
+        ));
         when(weatherLocationRepository.findByDayOrderByLocation_IdAsc(3)).thenReturn(List.of(
                 weatherLocation(store.getLocation(), 3, weather(WeatherType.SNOW))
         ));
@@ -230,20 +235,30 @@ class GameDayReportServiceTests {
 
         assertThat(response.seasonId()).isEqualTo(9L);
         assertThat(response.day()).isEqualTo(2);
+        assertThat(response.storeName()).isEqualTo("Ignored Store Name");
         assertThat(response.locationName()).isEqualTo("Seongsu");
         assertThat(response.menuName()).isEqualTo("Cookie");
         assertThat(response.revenue()).isEqualTo(5_000L);
         assertThat(response.totalCost()).isEqualTo(1_300L);
-        assertThat(response.netProfit()).isEqualTo(3_700L);
         assertThat(response.visitors()).isEqualTo(42);
         assertThat(response.salesCount()).isEqualTo(20);
         assertThat(response.stockRemaining()).isEqualTo(12);
         assertThat(response.stockDisposedCount()).isZero();
+        assertThat(response.captureRate()).isEqualByComparingTo("0.10");
+        assertThat(response.changeCaptureRate()).isEqualByComparingTo("0.0200");
+        assertThat(response.dailyRevenue()).isEqualTo(new GameDayReportResponse.DailyRevenue(
+                4_000L,
+                5_000L,
+                null,
+                null,
+                null,
+                null,
+                null
+        ));
         assertThat(response.tomorrowWeather()).isNotNull();
         assertThat(response.tomorrowWeather().condition()).isEqualTo("SNOW");
         assertThat(response.isNextDayOrderDay()).isTrue();
         assertThat(response.consecutiveDeficitDays()).isEqualTo(2);
-        assertThat(response.isBankrupt()).isFalse();
     }
 
     @Test
@@ -275,6 +290,11 @@ class GameDayReportServiceTests {
         when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
                 .thenReturn(Optional.of(store));
         when(dailyReportRepository.findByStoreIdAndDay(15L, 2)).thenReturn(Optional.of(dayTwo));
+        when(dailyReportRepository.findByStore_IdOrderByDayAsc(15L)).thenReturn(List.of(
+                dailyReport(store, 1, "Current Location", "Current Menu", 3_000, 1_000, 2_000, 20, 10, 5, 0, false, 8_000, new BigDecimal("0.09")),
+                dayTwo,
+                dailyReport(store, 3, "Current Location", "Current Menu", 9_000, 2_000, 7_000, 50, 25, 9, 0, false, 20_000, new BigDecimal("0.11"))
+        ));
         when(weatherLocationRepository.findByDayOrderByLocation_IdAsc(3)).thenReturn(List.of(
                 weatherLocation(store.getLocation(), 3, weather(WeatherType.SNOW)),
                 weatherLocation(reservedLocation, 3, weather(WeatherType.RAIN))
