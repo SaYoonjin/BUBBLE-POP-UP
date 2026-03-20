@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useOutletContext, useParams } from "react-router-dom";
+import type { GameGuardContext } from "../router/GameGuard";
 import PlayHeader from "../components/play/PlayHeader";
 import EventSidebar, { type GameAlert } from "../components/play/EventSidebar";
 import RankingSidebar, { type RankEntry } from "../components/play/RankingSidebar";
@@ -11,7 +12,6 @@ import EmergencyOrderModal, {
 import PromotionModal from "../components/play/modals/PromotionModal";
 import ShareModal from "../components/play/modals/ShareModal";
 import MoveModal from "../components/play/modals/MoveModal";
-import { PLAY_SESSION_DEADLINE_STORAGE_KEY_PREFIX } from "../constants";
 import useBrandName from "../hooks/useBrandName";
 import { useUserStore } from "../stores/useUserStore";
 
@@ -103,40 +103,16 @@ const promotionLabels: Record<string, string> = {
 };
 
 const persistentActionTypes = new Set<ActionType>(["discount", "promotion", "share"]);
-const PLAY_DURATION_SECONDS = 120;
-const PLAY_DURATION_MS = PLAY_DURATION_SECONDS * 1000;
-
-function getPlaySessionStorageKey(dayNumber: number) {
-  return `${PLAY_SESSION_DEADLINE_STORAGE_KEY_PREFIX}:${dayNumber}`;
-}
-
-function resolvePlaySessionEndTimestamp(dayNumber: number) {
-  if (typeof window === "undefined") {
-    return Date.now() + PLAY_DURATION_MS;
-  }
-
-  const storageKey = getPlaySessionStorageKey(dayNumber);
-  const storedValue = window.sessionStorage.getItem(storageKey);
-  const parsedTimestamp = Number(storedValue);
-
-  if (Number.isFinite(parsedTimestamp) && parsedTimestamp > 0) {
-    return parsedTimestamp;
-  }
-
-  const nextTimestamp = Date.now() + PLAY_DURATION_MS;
-  window.sessionStorage.setItem(storageKey, String(nextTimestamp));
-
-  return nextTimestamp;
-}
 
 export default function PlayPage() {
   const { day } = useParams<{ day: string }>();
+  const guardContext = useOutletContext<GameGuardContext>();
   const dayNumber = useMemo(() => Number(day) || 1, [day]);
 
-  return <PlayPageSession key={dayNumber} dayNumber={dayNumber} />;
+  return <PlayPageSession key={dayNumber} dayNumber={dayNumber} phaseEndTimestamp={guardContext.phaseEndTimestamp} />;
 }
 
-function PlayPageSession({ dayNumber }: { dayNumber: number }) {
+function PlayPageSession({ dayNumber, phaseEndTimestamp }: { dayNumber: number; phaseEndTimestamp: number }) {
   const nickname = useUserStore((s) => s.nickname) ?? "버블킹";
   const { brandName } = useBrandName();
   const [activeModal, setActiveModal] = useState<ActionType | null>(null);
@@ -145,9 +121,7 @@ function PlayPageSession({ dayNumber }: { dayNumber: number }) {
   const [alerts, setAlerts] = useState<GameAlert[]>(() => getInitialAlerts());
   const [balance, setBalance] = useState(MOCK.balance);
   const [stock, setStock] = useState(MOCK.stock);
-  const [playEndTimestampMs] = useState(() =>
-    resolvePlaySessionEndTimestamp(dayNumber),
-  );
+  const playEndTimestampMs = phaseEndTimestamp;
   const [nowMs, setNowMs] = useState(() => Date.now());
   const hasDeadlineAlertRef = useRef(false);
   const hasLowStockAlertRef = useRef(false);
