@@ -1,7 +1,6 @@
 package com.ssafy.S14P21A205.game.season.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -11,6 +10,7 @@ import com.ssafy.S14P21A205.game.season.dto.GameWaitingStatus;
 import com.ssafy.S14P21A205.game.season.entity.Season;
 import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
 import com.ssafy.S14P21A205.game.season.repository.SeasonRepository;
+import com.ssafy.S14P21A205.store.repository.StoreRepository;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -21,6 +21,7 @@ import org.junit.jupiter.api.Test;
 class SeasonWaitingServiceTests {
 
     private final SeasonRepository seasonRepository = mock(SeasonRepository.class);
+    private final StoreRepository storeRepository = mock(StoreRepository.class);
 
     @Test
     void getWaitingStatusReturnsInProgressWhenSeasonIsActive() {
@@ -30,6 +31,7 @@ class SeasonWaitingServiceTests {
         Season inProgressSeason = season(3L, SeasonStatus.IN_PROGRESS, 3, 7, LocalDateTime.of(2026, 3, 16, 9, 58, 10));
         when(seasonRepository.findFirstByStatusOrderByIdDesc(SeasonStatus.IN_PROGRESS))
                 .thenReturn(Optional.of(inProgressSeason));
+        when(storeRepository.countDistinctUsersBySeasonId(3L)).thenReturn(12L);
 
         GameWaitingResponse response = seasonWaitingService.getWaitingStatus();
 
@@ -42,6 +44,7 @@ class SeasonWaitingServiceTests {
         assertEquals(6, response.tick());
         assertEquals(true, response.joinEnabled());
         assertEquals(3, response.joinPlayableFromDay());
+        assertEquals(12, response.participantCount());
     }
 
     @Test
@@ -64,6 +67,7 @@ class SeasonWaitingServiceTests {
         assertEquals(120, response.nextSeasonStartTime());
         assertEquals("NEXT_SEASON_WAITING", response.seasonPhase());
         assertEquals(7200, response.phaseRemainingSeconds());
+        assertNull(response.participantCount());
     }
 
     @Test
@@ -82,10 +86,11 @@ class SeasonWaitingServiceTests {
         assertEquals(1, response.nextSeasonNumber());
         assertNull(response.currentDay());
         assertNull(response.nextSeasonStartTime());
+        assertNull(response.participantCount());
     }
 
     private SeasonWaitingService createService(Clock clock) {
-        return new SeasonWaitingService(seasonRepository, clock);
+        return new SeasonWaitingService(seasonRepository, storeRepository, clock);
     }
 
     private Season season(

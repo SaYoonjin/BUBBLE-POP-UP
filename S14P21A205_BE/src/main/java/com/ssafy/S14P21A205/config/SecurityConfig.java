@@ -38,9 +38,9 @@ public class SecurityConfig {
             "/oauth2/**",
             "/login/oauth2/**",
             "/game/waiting",
-            "/api/auth/login",
-            "/api/auth/refresh",
-            "/api/auth/logout"
+            "/auth/login",
+            "/auth/refresh",
+            "/auth/logout"
     };
 
     private final RestAuthenticationEntryPoint restAuthenticationEntryPoint;

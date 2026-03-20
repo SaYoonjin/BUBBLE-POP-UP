@@ -104,8 +104,8 @@ SSAFY OAuth Client (if used) must include both:
 - `https://<YOUR_API_DOMAIN>/login/oauth2/code/ssafy`
 
 Login start API examples:
-- Google: `/api/auth/login?provider=google`
-- SSAFY: `/api/auth/login?provider=ssafy`
+- Google: `/auth/login?provider=google`
+- SSAFY: `/auth/login?provider=ssafy`
 
 ## 4) GitLab CI/CD (Self-Hosted Runner -> Web Server Docker Compose)
 

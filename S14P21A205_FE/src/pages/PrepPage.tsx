@@ -160,7 +160,7 @@ function mapTodayNews(items: { newsId: number; newsTitle: string; newsContent: s
 }
 
 function getRecommendedPrice(costPrice: number) {
-  return roundToHundreds(costPrice * 1.6);
+  return roundToHundreds(costPrice * 2.5);
 }
 
 function getSellingPriceDefault(
