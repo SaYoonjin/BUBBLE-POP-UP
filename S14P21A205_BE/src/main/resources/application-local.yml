@@ -3,6 +3,7 @@ spring:
     activate:
       on-profile: local
   jpa:
+    defer-datasource-initialization: true
     hibernate:
       ddl-auto: ${JPA_DDL_AUTO:update}
     properties:
@@ -10,5 +11,8 @@ spring:
         jdbc:
           time_zone: Asia/Seoul
     show-sql: ${JPA_SHOW_SQL:true}
+  sql:
+    init:
+      mode: ${SQL_INIT_MODE:always}
   flyway:
     enabled: ${FLYWAY_ENABLED:false}

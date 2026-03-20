@@ -31,21 +31,6 @@ spring:
       time-zone: Asia/Seoul
 # endregion
 
-# region ===== JPA =====
-  jpa:
-    hibernate:
-      ddl-auto: ${JPA_DDL_AUTO:update}
-    defer-datasource-initialization: true
-    properties:
-      hibernate:
-        jdbc:
-          time_zone: Asia/Seoul
-    show-sql: ${JPA_SHOW_SQL:true}
-  sql:
-    init:
-      mode: always
-# endregion
-
 # region ===== OAuth2 (Google + SSAFY) =====
   security:
     oauth2:

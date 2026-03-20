@@ -10,6 +10,9 @@ spring:
         jdbc:
           time_zone: Asia/Seoul
     show-sql: ${JPA_SHOW_SQL:false}
+  sql:
+    init:
+      mode: ${SQL_INIT_MODE:never}
   flyway:
     enabled: ${FLYWAY_ENABLED:true}
     baseline-on-migrate: ${FLYWAY_BASELINE_ON_MIGRATE:true}
