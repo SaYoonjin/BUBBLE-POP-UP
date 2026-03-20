@@ -8,6 +8,7 @@ import com.ssafy.S14P21A205.game.season.repository.SeasonRepository;
 import com.ssafy.S14P21A205.game.time.model.SeasonPhase;
 import com.ssafy.S14P21A205.game.time.model.SeasonTimePoint;
 import com.ssafy.S14P21A205.game.time.service.SeasonTimelineService;
+import com.ssafy.S14P21A205.store.repository.StoreRepository;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -21,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class SeasonWaitingService {
 
     private final SeasonRepository seasonRepository;
+    private final StoreRepository storeRepository;
     private final SeasonTimelineService seasonTimelineService = new SeasonTimelineService();
     private final Clock clock;
 
@@ -42,7 +44,8 @@ public class SeasonWaitingService {
                         timePoint.gameTime(),
                         timePoint.tick(),
                         timePoint.joinEnabled(),
-                        timePoint.joinPlayableFromDay()
+                        timePoint.joinPlayableFromDay(),
+                        resolveParticipantCount(inProgressSeason.getId())
                 );
             }
         }
@@ -61,6 +64,7 @@ public class SeasonWaitingService {
                     null,
                     null,
                     false,
+                    null,
                     null
             );
         }
@@ -80,6 +84,7 @@ public class SeasonWaitingService {
                 null,
                 null,
                 false,
+                null,
                 null
         );
     }
@@ -93,6 +98,13 @@ public class SeasonWaitingService {
 
     private Integer resolveSeasonNumber(Long seasonId) {
         return seasonId == null ? null : Math.toIntExact(seasonId);
+    }
+
+    private Integer resolveParticipantCount(Long seasonId) {
+        if (seasonId == null) {
+            return null;
+        }
+        return Math.toIntExact(storeRepository.countDistinctUsersBySeasonId(seasonId));
     }
 
     private Integer safeInt(long value) {
