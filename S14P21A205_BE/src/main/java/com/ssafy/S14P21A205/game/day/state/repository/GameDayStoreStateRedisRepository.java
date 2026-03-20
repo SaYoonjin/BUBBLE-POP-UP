@@ -35,6 +35,7 @@ public class GameDayStoreStateRedisRepository {
     private static final String FIELD_CAPTURE_RATE = "capture_rate";
     private static final String FIELD_SALE_PRICE = "sale_price";
     private static final String FIELD_TICK_CUSTOMER_COUNT = "tick_customer_count";
+    private static final String FIELD_TICK_SOLD_UNITS = "tick_sold_units";
     private static final String FIELD_TICK_PURCHASE_COUNT = "tick_purchase_count";
     private static final String FIELD_TICK_SALES = "tick_sales";
     private static final String FIELD_CUMULATIVE_CUSTOMER_COUNT = "cumulative_customer_count";
@@ -68,6 +69,7 @@ public class GameDayStoreStateRedisRepository {
                     parseCaptureRate(entries),
                     parseInteger(entries.get(FIELD_SALE_PRICE)),
                     parseInteger(entries.get(FIELD_TICK_CUSTOMER_COUNT)),
+                    parseIntegerList(entries.get(FIELD_TICK_SOLD_UNITS)),
                     parseInteger(entries.get(FIELD_TICK_PURCHASE_COUNT)),
                     parseLongObject(entries.get(FIELD_TICK_SALES)),
                     parseInteger(entries.get(FIELD_CUMULATIVE_CUSTOMER_COUNT)),
@@ -200,6 +202,7 @@ public class GameDayStoreStateRedisRepository {
         put(entries, FIELD_CAPTURE_RATE, state.captureRate());
         put(entries, FIELD_SALE_PRICE, state.salePrice());
         put(entries, FIELD_TICK_CUSTOMER_COUNT, state.tickCustomerCount());
+        putJson(entries, FIELD_TICK_SOLD_UNITS, state.tickSoldUnits());
         put(entries, FIELD_TICK_PURCHASE_COUNT, state.tickPurchaseCount());
         put(entries, FIELD_TICK_SALES, state.tickSales());
         put(entries, FIELD_CUMULATIVE_CUSTOMER_COUNT, state.cumulativeCustomerCount());
@@ -221,6 +224,7 @@ public class GameDayStoreStateRedisRepository {
         put(entries, prefix + "capture_rate", state.captureRate());
         put(entries, prefix + "sale_price", state.salePrice());
         put(entries, prefix + "tick_customer_count", state.tickCustomerCount());
+        putJson(entries, prefix + "tick_sold_units", state.tickSoldUnits());
         put(entries, prefix + "tick_purchase_count", state.tickPurchaseCount());
         put(entries, prefix + "tick_sales", state.tickSales());
         put(entries, prefix + "cumulative_customer_count", state.cumulativeCustomerCount());
@@ -292,6 +296,10 @@ public class GameDayStoreStateRedisRepository {
     }
 
     private List<Integer> parsePurchaseList(Object value) throws Exception {
+        return parseIntegerList(value);
+    }
+
+    private List<Integer> parseIntegerList(Object value) throws Exception {
         if (value == null) {
             return null;
         }

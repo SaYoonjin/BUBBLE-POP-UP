@@ -16,6 +16,7 @@ public record GameDayLiveState(
         BigDecimal captureRate,
         Integer salePrice,
         Integer tickCustomerCount,
+        List<Integer> tickSoldUnits,
         Integer tickPurchaseCount,
         Long tickSales,
         Integer cumulativeCustomerCount,
@@ -38,6 +39,7 @@ public record GameDayLiveState(
             BigDecimal captureRate,
             Integer salePrice,
             Integer tickCustomerCount,
+            List<Integer> tickSoldUnits,
             Integer tickPurchaseCount,
             Long tickSales,
             Integer cumulativeCustomerCount,
@@ -59,6 +61,7 @@ public record GameDayLiveState(
                 captureRate,
                 salePrice,
                 tickCustomerCount,
+                tickSoldUnits,
                 tickPurchaseCount,
                 tickSales,
                 cumulativeCustomerCount,
@@ -79,6 +82,7 @@ public record GameDayLiveState(
             LocalDateTime lastCalculatedAt
     ) {
         this(
+                null,
                 null,
                 null,
                 null,
