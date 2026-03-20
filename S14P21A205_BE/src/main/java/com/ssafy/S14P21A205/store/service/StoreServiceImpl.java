@@ -82,7 +82,7 @@ public class StoreServiceImpl implements StoreService {
 
         Integer updatedBalance = deductBalance(storeId, currentDay, location.getInteriorCost());
         recordLocationChangeCost(storeId, currentDay, location.getInteriorCost());
-        store.reserveLocationChange(location, currentDay, currentDay + 1);
+        store.reserveLocationChange(location, currentDay + 1);
 
         return new UpdateStoreLocationResponse(
                 location.getId(),
