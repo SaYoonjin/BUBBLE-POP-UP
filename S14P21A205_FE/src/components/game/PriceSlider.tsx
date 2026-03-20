@@ -11,10 +11,6 @@ interface PriceSliderProps {
   hasItemDiscount: boolean;
   defaultPrice: number;
   defaultPriceLabel: string;
-  referencePrices?: Array<{
-    label: string;
-    value: number;
-  }>;
   onChange: (price: number) => void;
 }
 
@@ -29,7 +25,6 @@ export default function PriceSlider({
   hasItemDiscount,
   defaultPrice,
   defaultPriceLabel,
-  referencePrices = [],
   onChange,
 }: PriceSliderProps) {
   const [showTooltip, setShowTooltip] = useState(false);
@@ -86,22 +81,6 @@ export default function PriceSlider({
             <span>최대 ₩{max.toLocaleString()}</span>
           </div>
         </div>
-
-        {referencePrices.length > 0 && (
-          <div className={`grid gap-2 ${referencePrices.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
-            {referencePrices.map((reference) => (
-              <div
-                key={`${reference.label}-${reference.value}`}
-                className="rounded-2xl border border-slate-100 bg-slate-50 px-3 py-2 text-center"
-              >
-                <p className="text-[11px] font-semibold text-slate-400">{reference.label}</p>
-                <p className="mt-1 text-sm font-bold text-slate-800">
-                  ₩{reference.value.toLocaleString()}
-                </p>
-              </div>
-            ))}
-          </div>
-        )}
 
         <div className="mt-auto grid grid-cols-2 gap-3 pt-3">
           <div className="rounded-2xl bg-slate-50 p-3 text-center">

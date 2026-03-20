@@ -36,6 +36,7 @@ interface EmergencyOrderModalProps {
   menuItems: EmergencyMenuItem[];
   currentMenuId: number | null;
   currentMenuPricing: CurrentMenuPricing | null;
+  deliveryTrafficLabel?: string | null;
   estimatedArrivalTime?: string | null;
   isInitializing?: boolean;
   initializationError?: string | null;
@@ -60,6 +61,27 @@ function getRecommendedPrice(costPrice: number) {
 
 function clampPrice(price: number, min: number, max: number) {
   return Math.min(Math.max(price, min), max);
+}
+
+function getDefaultSalePrice(
+  menu: EmergencyMenuItem,
+  currentMenuId: number | null,
+  currentMenuPricing: CurrentMenuPricing | null,
+) {
+  const isCurrentMenu = menu.menuId === currentMenuId;
+  const appliedCurrentPricing = isCurrentMenu ? currentMenuPricing : null;
+  const originalCostPrice = appliedCurrentPricing?.costPrice ?? menu.ingredientPrice;
+  const recommendedPrice =
+    appliedCurrentPricing?.recommendedPrice ?? getRecommendedPrice(originalCostPrice);
+  const maxSellingPrice =
+    appliedCurrentPricing?.maxSellingPrice ?? roundToHundreds(recommendedPrice * 2);
+  const minSellingPrice = appliedCurrentPricing?.costPrice ?? originalCostPrice;
+
+  return clampPrice(
+    appliedCurrentPricing?.sellingPrice ?? recommendedPrice,
+    minSellingPrice,
+    maxSellingPrice,
+  );
 }
 
 function formatWon(amount: number) {
@@ -153,6 +175,7 @@ export default function EmergencyOrderModal({
   menuItems,
   currentMenuId,
   currentMenuPricing,
+  deliveryTrafficLabel,
   estimatedArrivalTime,
   isInitializing = false,
   initializationError = null,
@@ -203,18 +226,12 @@ export default function EmergencyOrderModal({
   const maxSellingPrice =
     appliedCurrentPricing?.maxSellingPrice ?? roundToHundreds(recommendedPrice * 2);
   const minSellingPrice = appliedCurrentPricing?.costPrice ?? originalCostPrice;
-  const defaultSalePrice = clampPrice(
-    appliedCurrentPricing?.sellingPrice ?? recommendedPrice,
-    minSellingPrice,
-    maxSellingPrice,
+  const defaultSalePrice = getDefaultSalePrice(
+    selectedMenu,
+    currentMenuId,
+    currentMenuPricing,
   );
   const defaultPriceLabel = isCurrentMenu ? "현재 판매가" : "권장가";
-  const referencePrices = isCurrentMenu
-    ? [
-        { label: "권장가", value: recommendedPrice },
-        { label: "현재 판매가", value: appliedCurrentPricing?.sellingPrice ?? defaultSalePrice },
-      ]
-    : [{ label: "권장가", value: recommendedPrice }];
   const materialsCost = discountedCostPrice * quantity;
   const surcharge = Math.round(materialsCost * SURCHARGE_RATE);
   const totalCost = materialsCost + surcharge;
@@ -226,6 +243,18 @@ export default function EmergencyOrderModal({
     setPrice(defaultSalePrice);
     setSubmitError(null);
   }, [defaultSalePrice, selectedMenu.menuId]);
+
+  const handleSelectMenu = (index: number) => {
+    const nextMenu = menuItems[index];
+
+    if (!nextMenu) {
+      return;
+    }
+
+    setSelectedMenuIndex(index);
+    setPrice(getDefaultSalePrice(nextMenu, currentMenuId, currentMenuPricing));
+    setSubmitError(null);
+  };
 
   const handleSubmit = async () => {
     if (!canAfford || isSubmitting) {
@@ -248,12 +277,7 @@ export default function EmergencyOrderModal({
     } catch (error) {
       if (axios.isAxiosError<ApiErrorResponse>(error)) {
         const serverMessage = error.response?.data?.message;
-
-        if (serverMessage) {
-          setSubmitError(serverMessage);
-        } else {
-          setSubmitError("긴급 발주에 실패했습니다. 잠시 후 다시 시도해주세요.");
-        }
+        setSubmitError(serverMessage ?? "긴급 발주에 실패했습니다. 잠시 후 다시 시도해주세요.");
       } else {
         setSubmitError("긴급 발주에 실패했습니다. 잠시 후 다시 시도해주세요.");
       }
@@ -331,7 +355,7 @@ export default function EmergencyOrderModal({
                     <button
                       key={`${menu.menuId}-${menu.name}`}
                       type="button"
-                      onClick={() => setSelectedMenuIndex(index)}
+                      onClick={() => handleSelectMenu(index)}
                       className={`flex w-full items-center justify-between rounded-xl border px-3.5 py-3 text-left transition-all ${
                         isSelected
                           ? "border-primary bg-primary/5 shadow-sm ring-1 ring-primary/10"
@@ -411,7 +435,6 @@ export default function EmergencyOrderModal({
                 hasItemDiscount={hasItemDiscount}
                 defaultPrice={defaultSalePrice}
                 defaultPriceLabel={defaultPriceLabel}
-                referencePrices={referencePrices}
                 onChange={setPrice}
               />
             </div>
@@ -422,7 +445,7 @@ export default function EmergencyOrderModal({
               <div>
                 <h3 className="text-sm font-bold text-slate-800">배송 정보</h3>
                 <p className="mt-1 text-xs text-slate-400">
-                  교통량은 백엔드 필드 연동 후 반영되고, 현재는 도착 예정 시간만 실시간으로 보여줍니다.
+                  현재 교통량과 예상 도착 시간을 실시간으로 안내합니다.
                 </p>
               </div>
 
@@ -439,7 +462,7 @@ export default function EmergencyOrderModal({
                     </span>
                   </div>
                   <p className="text-[1.4rem] font-black tracking-tight text-slate-700">
-                    연동 예정
+                    {deliveryTrafficLabel ?? "연동 예정"}
                   </p>
                 </div>
 

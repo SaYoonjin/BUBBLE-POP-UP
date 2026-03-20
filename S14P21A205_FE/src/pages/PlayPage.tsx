@@ -15,7 +15,7 @@ import PromotionModal from "../components/play/modals/PromotionModal";
 import ShareModal from "../components/play/modals/ShareModal";
 import MoveModal from "../components/play/modals/MoveModal";
 import { postEmergencyOrder } from "../api/action";
-import { getGameDayState, startGameDay } from "../api/game";
+import { getGameDayState, startGameDay, type GameTrafficStatus } from "../api/game";
 import { getCurrentOrder, type CurrentOrderResponse } from "../api/order";
 import { getStoreMenus, type StoreMenuResponse } from "../api/store";
 import useBrandName from "../hooks/useBrandName";
@@ -163,6 +163,23 @@ function formatEmergencyArrivalTime(arrivedTime: string) {
   });
 }
 
+function getTrafficStatusLabel(status: GameTrafficStatus | null | undefined) {
+  switch (status) {
+    case "VERY_SMOOTH":
+      return "매우 원활";
+    case "SMOOTH":
+      return "원활";
+    case "NORMAL":
+      return "보통";
+    case "CONGESTED":
+      return "혼잡";
+    case "VERY_CONGESTED":
+      return "매우 혼잡";
+    default:
+      return null;
+  }
+}
+
 export default function PlayPage() {
   const { day } = useParams<{ day: string }>();
   const guardContext = useOutletContext<GameGuardContext>();
@@ -195,6 +212,7 @@ function PlayPageSession({
   const [guests, setGuests] = useState(MOCK.guests);
   const [currentOrder, setCurrentOrder] = useState<CurrentOrderResponse | null>(null);
   const [menuItems, setMenuItems] = useState<EmergencyMenuItem[]>([]);
+  const [deliveryTrafficLabel, setDeliveryTrafficLabel] = useState<string | null>(null);
   const [emergencyArriveAt, setEmergencyArriveAt] = useState<string | null>(null);
   const [isEmergencyDataLoading, setIsEmergencyDataLoading] = useState(true);
   const [emergencyDataError, setEmergencyDataError] = useState<string | null>(null);
@@ -258,7 +276,10 @@ function PlayPageSession({
         setBalance(stateResult.value.cash);
         setStock(stateResult.value.inventory.totalStock);
         setGuests(stateResult.value.customerCount);
+        setDeliveryTrafficLabel(getTrafficStatusLabel(stateResult.value.traffic?.status));
         setEmergencyArriveAt(stateResult.value.actionStatus.emergencyOrderArriveAt);
+      } else {
+        setDeliveryTrafficLabel(null);
       }
 
       if (orderResult.status === "fulfilled") {
@@ -451,6 +472,7 @@ function PlayPageSession({
           menuItems={menuItems}
           currentMenuId={currentOrder?.menuId ?? null}
           currentMenuPricing={currentMenuPricing}
+          deliveryTrafficLabel={deliveryTrafficLabel}
           estimatedArrivalTime={emergencyArriveAt}
           isInitializing={isEmergencyDataLoading}
           initializationError={emergencyDataError}
