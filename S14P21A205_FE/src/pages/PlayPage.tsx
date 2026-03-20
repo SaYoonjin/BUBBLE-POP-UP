@@ -14,8 +14,13 @@ import EmergencyOrderModal, {
 import PromotionModal from "../components/play/modals/PromotionModal";
 import ShareModal from "../components/play/modals/ShareModal";
 import MoveModal from "../components/play/modals/MoveModal";
-import { postEmergencyOrder } from "../api/action";
-import { getGameDayState, startGameDay, type GameTrafficStatus } from "../api/game";
+import { postDiscount, postEmergencyOrder } from "../api/action";
+import {
+  getGameDayState,
+  startGameDay,
+  type GameStateResponse,
+  type GameTrafficStatus,
+} from "../api/game";
 import { getCurrentOrder, type CurrentOrderResponse } from "../api/order";
 import { getStoreMenus, type StoreMenuResponse } from "../api/store";
 import useBrandName from "../hooks/useBrandName";
@@ -180,6 +185,14 @@ function getEstimatedEmergencyArrivalTime(
   return new Date(parsedServerTime.getTime() + delaySeconds * 1000).toISOString();
 }
 
+function getDiscountedPrice(
+  currentPrice: number,
+  minimumPrice: number,
+  discountRate: number,
+) {
+  return Math.max(minimumPrice, Math.round(currentPrice * (1 - discountRate / 100)));
+}
+
 function getTrafficStatusLabel(status: GameTrafficStatus | null | undefined) {
   switch (status) {
     case "VERY_SMOOTH":
@@ -249,6 +262,46 @@ function PlayPageSession({
         sellingPrice: currentOrder.sellingPrice,
       }
     : null;
+  const discountCurrentPrice = currentOrder?.sellingPrice ?? MOCK.currentPrice;
+  const discountMinimumPrice = currentOrder?.costPrice ?? discountCurrentPrice;
+
+  const syncDiscountActionState = (discountUsed: boolean) => {
+    setUsedActions((prev) => {
+      const next = new Set(prev);
+
+      if (discountUsed) {
+        next.add("discount");
+      } else {
+        next.delete("discount");
+      }
+
+      return next;
+    });
+
+    setActiveEffects((prev) => {
+      const next = new Set(prev);
+
+      if (discountUsed) {
+        next.add("discount");
+      } else {
+        next.delete("discount");
+      }
+
+      return next;
+    });
+  };
+
+  const applyGameState = (state: GameStateResponse) => {
+    setBalance(state.cash);
+    setStock(state.inventory.totalStock);
+    setGuests(state.customerCount);
+    setDeliveryTrafficLabel(getTrafficStatusLabel(state.traffic?.status));
+    setEmergencyArriveAt(
+      state.actionStatus.emergencyOrderArriveAt ??
+        getEstimatedEmergencyArrivalTime(state.serverTime, state.traffic?.delaySeconds),
+    );
+    syncDiscountActionState(state.actionStatus.discountUsed);
+  };
 
   const rankings = useMemo(
     () =>
@@ -290,20 +343,11 @@ function PlayPageSession({
       }
 
       if (stateResult.status === "fulfilled") {
-        setBalance(stateResult.value.cash);
-        setStock(stateResult.value.inventory.totalStock);
-        setGuests(stateResult.value.customerCount);
-        setDeliveryTrafficLabel(getTrafficStatusLabel(stateResult.value.traffic?.status));
-        setEmergencyArriveAt(
-          stateResult.value.actionStatus.emergencyOrderArriveAt ??
-            getEstimatedEmergencyArrivalTime(
-              stateResult.value.serverTime,
-              stateResult.value.traffic?.delaySeconds,
-            ),
-        );
+        applyGameState(stateResult.value);
       } else {
         setDeliveryTrafficLabel(null);
         setEmergencyArriveAt(null);
+        syncDiscountActionState(false);
       }
 
       if (orderResult.status === "fulfilled") {
@@ -477,9 +521,46 @@ function PlayPageSession({
 
       {activeModal === "discount" && (
         <DiscountModal
-          currentPrice={currentOrder?.sellingPrice ?? MOCK.currentPrice}
+          currentPrice={discountCurrentPrice}
+          minimumPrice={discountMinimumPrice}
           onClose={closeModal}
-          onSubmit={(rate) => {
+          onSubmit={async (rate) => {
+            const discountedPrice = getDiscountedPrice(
+              discountCurrentPrice,
+              discountMinimumPrice,
+              rate,
+            );
+            const discountValue = discountCurrentPrice - discountedPrice;
+
+            if (discountValue <= 0) {
+              return;
+            }
+
+            const response = await postDiscount(discountValue);
+
+            setCurrentOrder((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    sellingPrice: response.newPrice,
+                  }
+                : prev,
+            );
+            syncDiscountActionState(true);
+
+            const [stateResult, orderResult] = await Promise.allSettled([
+              getGameDayState(),
+              getCurrentOrder(),
+            ]);
+
+            if (stateResult.status === "fulfilled") {
+              applyGameState(stateResult.value);
+            }
+
+            if (orderResult.status === "fulfilled") {
+              setCurrentOrder(orderResult.value);
+            }
+
             completeAction("discount", {
               alert: {
                 title: "할인 이벤트 적용",

@@ -133,6 +133,8 @@ export async function getAllDayReports(currentDay: number) {
 export interface CustomerTick {
   tick: number;
   customerCount: number;
+  unitPrice: number;
+  soldUnits: number[];
   baseFloatingPopulation: number;
   populationGrowthRate: number;
   currentFloatingPopulation: number;
