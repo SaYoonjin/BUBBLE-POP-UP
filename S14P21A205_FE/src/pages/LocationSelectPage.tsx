@@ -267,12 +267,20 @@ export default function LocationSelectPage() {
       if (joinResponse.waitingForPlayableDay) {
         clearLocationSelectionDeadline();
 
+        // 다음 영업준비까지 남은 시간 계산
+        const latestStatus = await getGameWaitingStatus();
+        const secondsUntilNextPrep = getSecondsUntilDayStart(
+          latestStatus,
+          joinResponse.playableFromDay,
+        );
+
         const waitingState: WaitingRouteState = {
           mode: "next_business_day",
           brandName,
           districtName: selectedDistrict.name,
           nextPath: nextPrepPath,
           targetDay: joinResponse.playableFromDay,
+          endTimestampMs: Date.now() + secondsUntilNextPrep * 1000,
         };
 
         navigate("/game/waiting", { state: waitingState });
