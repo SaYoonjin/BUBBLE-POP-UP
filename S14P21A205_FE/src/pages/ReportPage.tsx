@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import AppHeader from "../components/common/AppHeader";
 import StatCard from "../components/common/StatCard";
@@ -7,51 +7,25 @@ import CountdownTimer from "../components/common/CountdownTimer";
 import ProfitChart from "../components/report/ProfitChart";
 import WeatherCard from "../components/report/WeatherCard";
 import BankruptModal from "../components/report/BankruptModal";
+import { getAllDayReports, type GameDayReportResponse } from "../api/game";
+import useBrandName from "../hooks/useBrandName";
 
-// API 응답 타입
-interface ProfitByDay {
-  first: number | null;
-  second: number | null;
-  third: number | null;
-  fourth: number | null;
-  fifth: number | null;
-  sixth: number | null;
-  seventh: number | null;
-}
-
-interface DayReportResponse {
-  seasonId: number;
-  day: number;
-  storeName: string;
-  locationName: string;
-  menuName: string;
-  revenue: number;
-  totalCost: number;
-  profit: ProfitByDay;
-  visitors: number;
-  salesCount: number;
-  stockRemaining: number;
-  stockDisposedCount: number;
-  reputationScore: number;
-  reputationChange: number;
-  tomorrowWeather: { condition: "CLEAR" | "CLOUDY" | "RAIN" | "SNOW" | "STORM" } | null;
-  isNextDayOrderDay: boolean | null;
-  consecutiveDeficitDays: number;
-}
-
-const PROFIT_KEYS: (keyof ProfitByDay)[] = ["first", "second", "third", "fourth", "fifth", "sixth", "seventh"];
-
-function profitToChartData(profit: ProfitByDay, currentDay: number) {
-  return PROFIT_KEYS.map((key, i) => {
-    const dayNum = i + 1;
-    const value = profit[key];
-    return {
-      day: dayNum,
-      value: value ?? 0,
-      isCurrent: dayNum === currentDay,
-      isFuture: value === null,
-    };
-  }).filter((d) => !d.isFuture || d.day === currentDay + 1);
+function buildChartData(reports: GameDayReportResponse[], currentDay: number) {
+  const result = reports.map((r) => ({
+    day: r.day,
+    value: r.netProfit,
+    isCurrent: r.day === currentDay,
+    isFuture: false,
+  }));
+  if (currentDay < 7) {
+    result.push({
+      day: currentDay + 1,
+      value: 0,
+      isCurrent: false,
+      isFuture: true,
+    });
+  }
+  return result;
 }
 
 /** 짝수일(2,4,6) 또는 마지막날(7)이면 재고가 전량 폐기 */
@@ -59,76 +33,63 @@ function isStockDisposalDay(day: number) {
   return day % 2 === 0 || day === 7;
 }
 
-// TODO: Replace with API call - GET /game/day/reports/{day}
-const MOCK_NORMAL: DayReportResponse = {
-  seasonId: 12,
-  day: 3,
-  storeName: "윤진이네 쫀쫀쿠키",
-  locationName: "성수",
-  menuName: "쫀쫀쿠키",
-  revenue: 1200000,
-  totalCost: 320000,
-  profit: {
-    first: 400000,
-    second: 600000,
-    third: 880000,
-    fourth: null,
-    fifth: null,
-    sixth: null,
-    seventh: null,
-  },
-  visitors: 150,
-  salesCount: 142,
-  stockRemaining: 45,
-  stockDisposedCount: 8,
-  reputationScore: 3.8,
-  reputationChange: 0.2,
-  tomorrowWeather: { condition: "CLEAR" },
-  isNextDayOrderDay: false, // 홀수일 → 발주일 아님 (짝수일 리포트에서만 true)
-  consecutiveDeficitDays: 0,
-};
-
-const MOCK_BANKRUPT: DayReportResponse = {
-  seasonId: 12,
-  day: 5,
-  storeName: "윤진이네 쫀쫀쿠키",
-  locationName: "성수",
-  menuName: "쫀쫀쿠키",
-  revenue: 120000,
-  totalCost: 330000,
-  profit: {
-    first: 400000,
-    second: -100000,
-    third: -300000,
-    fourth: -500000,
-    fifth: -210000,
-    sixth: null,
-    seventh: null,
-  },
-  visitors: 23,
-  salesCount: 18,
-  stockRemaining: 120,
-  stockDisposedCount: 45,
-  reputationScore: 1.2,
-  reputationChange: -0.8,
-  tomorrowWeather: null,
-  isNextDayOrderDay: null,
-  consecutiveDeficitDays: 3,
-};
-
 export default function ReportPage() {
   const { day: dayParam } = useParams<{ day: string }>();
   const navigate = useNavigate();
   const day = Number(dayParam) || 1;
+  const { brandName } = useBrandName();
 
-  // TODO: API 호출로 교체
-  const data = day >= 6 ? MOCK_BANKRUPT : MOCK_NORMAL;
-  const chartData = profitToChartData(data.profit, data.day);
-  const todayProfit = data.profit[PROFIT_KEYS[data.day - 1]] ?? 0;
+  const [report, setReport] = useState<GameDayReportResponse | null>(null);
+  const [allReports, setAllReports] = useState<GameDayReportResponse[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const isBankrupt = data.consecutiveDeficitDays >= 3;
-  const disposal = isStockDisposalDay(data.day);
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+
+    getAllDayReports(day)
+      .then((reports) => {
+        if (cancelled) return;
+        setAllReports(reports);
+        setReport(reports.find((r) => r.day === day) ?? reports[reports.length - 1]);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setError("리포트를 불러오지 못했습니다.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [day]);
+
   const [showBankruptModal, setShowBankruptModal] = useState(false);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#FDFDFB] flex flex-col items-center justify-center">
+        <AppHeader />
+        <p className="text-slate-500 pt-24">리포트를 불러오는 중...</p>
+      </div>
+    );
+  }
+
+  if (error || !report) {
+    return (
+      <div className="min-h-screen bg-[#FDFDFB] flex flex-col items-center justify-center">
+        <AppHeader />
+        <p className="text-red-500 pt-24">{error ?? "데이터를 불러올 수 없습니다."}</p>
+      </div>
+    );
+  }
+
+  const chartData = buildChartData(allReports, report.day);
+  const todayProfit = report.netProfit;
+  const isBankrupt = report.isBankrupt;
+  const disposal = isStockDisposalDay(report.day);
 
   const fmt = (v: number) => v < 0 ? `-₩${Math.abs(v).toLocaleString()}` : `₩${v.toLocaleString()}`;
 
@@ -148,7 +109,7 @@ export default function ReportPage() {
             setShowBankruptModal(false);
             navigate("/", { state: { showBankruptWarning: true } });
           }}
-          isLastDay={data.day === 7}
+          isLastDay={report.day === 7}
         />
       )}
 
@@ -158,16 +119,16 @@ export default function ReportPage() {
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 border-b border-slate-200 pb-6">
             <div className="flex flex-col gap-2">
               <div className="flex items-center gap-2">
-                <Badge variant="gray" size="sm">시즌 {data.seasonId}</Badge>
-                <Badge variant="green" size="sm">{data.locationName}</Badge>
-                <Badge variant="gold" size="sm">{data.menuName}</Badge>
+                <Badge variant="gray" size="sm">시즌 {report.seasonId}</Badge>
+                <Badge variant="green" size="sm">{report.locationName}</Badge>
+                <Badge variant="gold" size="sm">{report.menuName}</Badge>
               </div>
               <h1 className="text-4xl font-black leading-tight tracking-tight">
-                {data.storeName}
+                {brandName}
               </h1>
               {isBankrupt
-                ? <p className="text-rose-dark text-base font-medium">Day {data.day} 영업 종료 — 파산 상태</p>
-                : <p className="text-slate-500 text-base">Day {data.day} 운영 결과를 확인하세요.</p>}
+                ? <p className="text-rose-dark text-base font-medium">Day {report.day} 영업 종료 — 파산 상태</p>
+                : <p className="text-slate-500 text-base">Day {report.day} 운영 결과를 확인하세요.</p>}
             </div>
             <div className="flex flex-col items-end gap-1.5">
               <CountdownTimer
@@ -183,7 +144,7 @@ export default function ReportPage() {
           </div>
 
           {/* Warning: 연속 적자 */}
-          {data.consecutiveDeficitDays > 0 && (
+          {report.consecutiveDeficitDays > 0 && (
             <div className={`rounded-xl p-4 flex items-center gap-3 ${
               isBankrupt
                 ? "bg-rose-soft border border-rose-dark text-white"
@@ -192,14 +153,14 @@ export default function ReportPage() {
               <span className={`material-symbols-outlined text-2xl ${isBankrupt ? "text-white" : "text-red-500"}`}>warning</span>
               <h3 className="tracking-tight text-lg font-bold">
                 {isBankrupt
-                  ? `파산했습니다: ${data.consecutiveDeficitDays}일 연속 적자 발생`
-                  : `${data.consecutiveDeficitDays}일 연속 적자 중 (3일 연속 시 파산)`}
+                  ? `파산했습니다: ${report.consecutiveDeficitDays}일 연속 적자 발생`
+                  : `${report.consecutiveDeficitDays}일 연속 적자 중 (3일 연속 시 파산)`}
               </h3>
             </div>
           )}
 
           {/* 발주일 안내 */}
-          {data.isNextDayOrderDay && (
+          {report.isNextDayOrderDay && (
             <div className="rounded-xl p-4 flex items-center gap-3 bg-primary/10 border border-primary/30 text-primary-dark">
               <span className="material-symbols-outlined text-2xl text-primary">local_shipping</span>
               <h3 className="tracking-tight text-base font-bold">내일은 발주일입니다! 재고를 확인하세요.</h3>
@@ -208,8 +169,8 @@ export default function ReportPage() {
 
           {/* Stats */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <StatCard label="매출" value={fmt(data.revenue)} icon="payments" iconBg="bg-green-100" iconColor="text-green-600" />
-            <StatCard label="지출" value={fmt(data.totalCost)} icon="shopping_cart_checkout" iconBg="bg-red-100" iconColor="text-red-600" />
+            <StatCard label="매출" value={fmt(report.revenue)} icon="payments" iconBg="bg-green-100" iconColor="text-green-600" />
+            <StatCard label="지출" value={fmt(report.totalCost)} icon="shopping_cart_checkout" iconBg="bg-red-100" iconColor="text-red-600" />
             <StatCard
               label="순이익"
               value={fmt(todayProfit)}
@@ -218,24 +179,24 @@ export default function ReportPage() {
               iconColor={todayProfit >= 0 ? "text-primary-dark" : "text-rose-dark"}
               highlight={todayProfit < 0}
             />
-            <StatCard label="방문객 수" value={`${data.visitors}명`} icon="groups" iconBg="bg-slate-100" iconColor="text-slate-600" />
-            <StatCard label="평판" value={String(data.reputationScore)}
-              change={{ value: `${data.reputationChange >= 0 ? "+" : ""}${data.reputationChange}`, positive: data.reputationChange >= 0 }}
+            <StatCard label="방문객 수" value={`${report.visitors}명`} icon="groups" iconBg="bg-slate-100" iconColor="text-slate-600" />
+            <StatCard label="평판" value={String(report.reputationScore)}
+              change={{ value: `${report.reputationChange >= 0 ? "+" : ""}${report.reputationChange}`, positive: report.reputationChange >= 0 }}
               icon="star" iconBg="bg-yellow-100" iconColor="text-yellow-600" />
-            <StatCard label="판매 수량" value={`${data.salesCount}개`} subtext={data.menuName} icon="shopping_bag" iconBg="bg-blue-100" iconColor="text-blue-600" />
-            <StatCard label="남은 재고" value={`${data.stockRemaining}개`} subtext={stockSubtext}
+            <StatCard label="판매 수량" value={`${report.salesCount}개`} subtext={report.menuName} icon="shopping_bag" iconBg="bg-blue-100" iconColor="text-blue-600" />
+            <StatCard label="남은 재고" value={`${report.stockRemaining}개`} subtext={stockSubtext}
               icon="inventory_2" iconBg="bg-purple-100" iconColor="text-purple-600" />
-            <StatCard label="폐기된 재고" value={`${data.stockDisposedCount}개`}
-              subtext={data.stockDisposedCount > 50 ? "대규모 손실 발생" : "손실 발생"}
+            <StatCard label="폐기된 재고" value={`${report.stockDisposedCount}개`}
+              subtext={report.stockDisposedCount > 50 ? "대규모 손실 발생" : "손실 발생"}
               icon="delete" iconBg="bg-slate-100" iconColor="text-slate-500"
-              highlight={data.stockDisposedCount > 50} />
+              highlight={report.stockDisposedCount > 50} />
           </div>
 
           {/* Chart + Weather */}
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
             <ProfitChart data={chartData} isBankrupt={isBankrupt} />
             <WeatherCard
-              condition={data.tomorrowWeather?.condition ?? null}
+              condition={report.tomorrowWeather?.condition ?? null}
               disabled={isBankrupt}
             />
           </div>
