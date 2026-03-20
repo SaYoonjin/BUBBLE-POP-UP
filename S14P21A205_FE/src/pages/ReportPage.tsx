@@ -180,8 +180,8 @@ export default function ReportPage() {
               highlight={todayProfit < 0}
             />
             <StatCard label="방문객 수" value={`${report.visitors}명`} icon="groups" iconBg="bg-slate-100" iconColor="text-slate-600" />
-            <StatCard label="평판" value={String(report.reputationScore)}
-              change={{ value: `${report.reputationChange >= 0 ? "+" : ""}${report.reputationChange}`, positive: report.reputationChange >= 0 }}
+            <StatCard label="평판" value={(report.reputationScore / 2).toFixed(1)}
+              change={{ value: `${report.reputationChange >= 0 ? "+" : ""}${(report.reputationChange / 2).toFixed(1)}`, positive: report.reputationChange >= 0 }}
               icon="star" iconBg="bg-yellow-100" iconColor="text-yellow-600" />
             <StatCard label="판매 수량" value={`${report.salesCount}개`} subtext={report.menuName} icon="shopping_bag" iconBg="bg-blue-100" iconColor="text-blue-600" />
             <StatCard label="남은 재고" value={`${report.stockRemaining}개`} subtext={stockSubtext}
