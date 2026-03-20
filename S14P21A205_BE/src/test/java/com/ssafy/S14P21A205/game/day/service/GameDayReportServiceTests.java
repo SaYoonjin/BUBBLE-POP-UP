@@ -245,6 +245,7 @@ class GameDayReportServiceTests {
         assertThat(response.stockRemaining()).isEqualTo(12);
         assertThat(response.stockDisposedCount()).isZero();
         assertThat(response.captureRate()).isEqualByComparingTo("0.10");
+        assertThat(response.changeCaptureRate()).isEqualByComparingTo("0.0200");
         assertThat(response.dailyRevenue()).isEqualTo(new GameDayReportResponse.DailyRevenue(
                 4_000L,
                 5_000L,

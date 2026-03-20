@@ -16,6 +16,7 @@ public record GameDayReportResponse(
         Integer stockRemaining,
         Integer stockDisposedCount,
         @JsonProperty("capture_rate") BigDecimal captureRate,
+        @JsonProperty("change_capture_rate") BigDecimal changeCaptureRate,
         DailyRevenue dailyRevenue,
         TomorrowWeather tomorrowWeather,
         Boolean isNextDayOrderDay,
