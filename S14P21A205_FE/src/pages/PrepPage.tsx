@@ -9,7 +9,7 @@ import QuantityCounter from "../components/game/QuantityCounter";
 import CozyNewspaper from "../components/game/CozyNewspaper";
 import { postRegularOrder } from "../api/order";
 import { getGameWaitingStatus, type GameWaitingResponse } from "../api/game";
-import { getStoreMenus, type StoreMenuResponse } from "../api/store";
+import { getStore, getStoreMenus, type StoreMenuResponse, type StoreResponse } from "../api/store";
 import bubbleNewsImage from "../assets/Bubblenewsimg.png";
 import {
   applyDiscount,
@@ -98,6 +98,35 @@ function isOrderPreparingPhase(waitingStatus: GameWaitingResponse | null, day: n
   );
 }
 
+function normalizeMenuName(value: string | null | undefined) {
+  return value?.trim() ?? "";
+}
+
+function resolveSelectedMenuId(
+  menus: PrepMenu[],
+  currentMenuId: number | null,
+  day: number,
+  storeMenuName: string | null,
+) {
+  const fallbackMenuId =
+    menus.find((menu) => menu.id === currentMenuId)?.id ?? menus[0]?.id ?? null;
+
+  if (day < 2) {
+    return fallbackMenuId;
+  }
+
+  const normalizedStoreMenuName = normalizeMenuName(storeMenuName);
+
+  if (!normalizedStoreMenuName) {
+    return fallbackMenuId;
+  }
+
+  return (
+    menus.find((menu) => normalizeMenuName(menu.name) === normalizedStoreMenuName)?.id ??
+    fallbackMenuId
+  );
+}
+
 function mapStoreMenusToPrepMenus(menus: StoreMenuResponse[]) {
   return menus.map((menu) => {
     const fallbackMenu = fallbackMenus.find((entry) => entry.id === menu.menuId);
@@ -123,6 +152,7 @@ export default function PrepPage() {
   const [menus, setMenus] = useState<PrepMenu[]>(fallbackMenus);
   const [isMenusLoading, setIsMenusLoading] = useState(true);
   const [menuError, setMenuError] = useState<string | null>(null);
+  const [currentStoreMenuName, setCurrentStoreMenuName] = useState<string | null>(null);
   const [waitingStatus, setWaitingStatus] = useState<GameWaitingResponse | null>(null);
   const [isWaitingStatusLoading, setIsWaitingStatusLoading] = useState(true);
   const [regularOrderStatus, setRegularOrderStatus] = useState<RegularOrderStatus>("idle");
@@ -152,6 +182,8 @@ export default function PrepPage() {
   const discountAmount = totalCost - discountedTotalCost;
   const isServerPreparing = isOrderPreparingPhase(waitingStatus, day);
   const canPrepareToday = isRegularOrderRouteDay && isServerPreparing;
+  const normalizedCurrentStoreMenuName = normalizeMenuName(currentStoreMenuName);
+  const shouldShowMenuStatus = day >= 2 && normalizedCurrentStoreMenuName.length > 0;
   const isSubmittingRegularOrder = regularOrderStatus === "submitting";
   const hasSubmittedRegularOrder = regularOrderStatus === "submitted";
   const canSubmitRegularOrder =
@@ -169,6 +201,24 @@ export default function PrepPage() {
 
     return Date.now() + waitingStatus.phaseRemainingSeconds * 1000;
   }, [isServerPreparing, waitingStatus?.phaseRemainingSeconds]);
+  const menuSelectorMenus = useMemo(
+    () =>
+      menus.map((menu) => {
+        const isCurrentSellingMenu =
+          shouldShowMenuStatus &&
+          normalizeMenuName(menu.name) === normalizedCurrentStoreMenuName;
+
+        return {
+          id: menu.id,
+          emoji: menu.emoji,
+          name: menu.name,
+          isCurrentSellingMenu,
+          isSelectedNewMenu:
+            shouldShowMenuStatus && selectedMenu === menu.id && !isCurrentSellingMenu,
+        };
+      }),
+    [menus, normalizedCurrentStoreMenuName, selectedMenu, shouldShowMenuStatus],
+  );
   const newsSidebarSections =
     day === 1
       ? [
@@ -203,13 +253,29 @@ export default function PrepPage() {
   useEffect(() => {
     let isActive = true;
 
-    const loadMenus = async () => {
+    const loadPrepMenus = async () => {
       try {
-        const { menus: fetchedMenus } = await getStoreMenus();
+        const [menusResult, storeResult] = await Promise.allSettled([
+          getStoreMenus(),
+          day >= 2 ? getStore() : Promise.resolve<StoreResponse | null>(null),
+        ]);
 
         if (!isActive) {
           return;
         }
+
+        const nextStoreMenuName =
+          storeResult.status === "fulfilled"
+            ? normalizeMenuName(storeResult.value?.menu)
+            : "";
+        setCurrentStoreMenuName(nextStoreMenuName || null);
+
+        if (menusResult.status !== "fulfilled") {
+          setMenuError("메뉴 정보를 불러오지 못했습니다. 정규 발주 요청은 잠시 후 다시 시도해주세요.");
+          return;
+        }
+
+        const fetchedMenus = menusResult.value.menus;
 
         if (fetchedMenus.length === 0) {
           setMenuError("메뉴 정보를 불러오지 못했습니다. 정규 발주 요청은 잠시 후 다시 시도해주세요.");
@@ -219,7 +285,7 @@ export default function PrepPage() {
         const nextMenus = mapStoreMenusToPrepMenus(fetchedMenus);
         setMenus(nextMenus);
         setSelectedMenu((currentMenuId) =>
-          nextMenus.some((menu) => menu.id === currentMenuId) ? currentMenuId : nextMenus[0].id,
+          resolveSelectedMenuId(nextMenus, currentMenuId, day, nextStoreMenuName),
         );
         setMenuError(null);
       } catch {
@@ -227,6 +293,7 @@ export default function PrepPage() {
           return;
         }
 
+        setCurrentStoreMenuName(null);
         setMenuError("메뉴 정보를 불러오지 못했습니다. 정규 발주 요청은 잠시 후 다시 시도해주세요.");
       } finally {
         if (isActive) {
@@ -235,12 +302,13 @@ export default function PrepPage() {
       }
     };
 
-    void loadMenus();
+    setIsMenusLoading(true);
+    void loadPrepMenus();
 
     return () => {
       isActive = false;
     };
-  }, []);
+  }, [day]);
 
   useEffect(() => {
     let isActive = true;
@@ -467,7 +535,11 @@ export default function PrepPage() {
                   }`}
                   aria-disabled={isPrepFormLocked}
                 >
-                  <MenuSelector menus={menus} selectedId={selectedMenu} onSelect={setSelectedMenu} />
+                  <MenuSelector
+                    menus={menuSelectorMenus}
+                    selectedId={selectedMenu}
+                    onSelect={setSelectedMenu}
+                  />
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <PriceSlider

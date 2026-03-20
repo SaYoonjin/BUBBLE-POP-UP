@@ -4,6 +4,8 @@ interface MenuItem {
   id: number;
   emoji: string;
   name: string;
+  isCurrentSellingMenu?: boolean;
+  isSelectedNewMenu?: boolean;
 }
 
 interface MenuSelectorProps {
@@ -42,13 +44,15 @@ export default function MenuSelector({ menus, selectedId, onSelect }: MenuSelect
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         {menus.map((menu) => {
           const isSelected = menu.id === selectedId;
+
           return (
             <button
               key={menu.id}
+              type="button"
               onClick={() => onSelect(menu.id)}
               className={`
                 group relative flex flex-col items-center justify-center p-3 rounded-2xl transition-all
-                aspect-square md:aspect-auto md:h-28
+                aspect-square md:aspect-auto md:h-32
                 ${isSelected
                   ? "bg-white border border-primary shadow-md ring-2 ring-primary/10"
                   : "bg-slate-50 border border-transparent hover:bg-slate-100"
@@ -70,6 +74,18 @@ export default function MenuSelector({ menus, selectedId, onSelect }: MenuSelect
               <span className={`text-sm md:text-[14px] font-medium text-center leading-tight ${isSelected ? "font-bold text-slate-900" : "text-slate-600"}`}>
                 {menu.name}
               </span>
+              <div className="mt-2 flex min-h-5 flex-wrap items-center justify-center gap-1.5">
+                {menu.isCurrentSellingMenu && (
+                  <span className="rounded-full bg-primary/15 px-2 py-1 text-[10px] font-bold text-primary-dark">
+                    현재 판매 중
+                  </span>
+                )}
+                {menu.isSelectedNewMenu && (
+                  <span className="rounded-full bg-accent-rose/15 px-2 py-1 text-[10px] font-bold text-rose-dark">
+                    새 메뉴
+                  </span>
+                )}
+              </div>
             </button>
           );
         })}
