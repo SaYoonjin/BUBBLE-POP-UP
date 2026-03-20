@@ -1,10 +1,8 @@
 package com.ssafy.S14P21A205.game.season.dto;
 
-import com.fasterxml.jackson.annotation.JsonInclude;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.LocalDateTime;
 
-@JsonInclude(JsonInclude.Include.NON_NULL)
 @Schema(description = "Current season global time state")
 public record CurrentSeasonTimeResponse(
         @Schema(description = "Current season phase", example = "DAY_PREPARING")
@@ -27,3 +25,4 @@ public record CurrentSeasonTimeResponse(
         Integer joinPlayableFromDay
 ) {
 }
+

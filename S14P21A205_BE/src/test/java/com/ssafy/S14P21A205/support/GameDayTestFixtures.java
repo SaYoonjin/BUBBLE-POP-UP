@@ -176,6 +176,7 @@ public final class GameDayTestFixtures {
                 CAPTURE_RATE,
                 SALE_PRICE,
                 0,
+                List.of(),
                 0,
                 0L,
                 0,

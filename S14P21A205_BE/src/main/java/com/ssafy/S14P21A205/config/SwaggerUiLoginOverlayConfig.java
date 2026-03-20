@@ -182,7 +182,7 @@ public class SwaggerUiLoginOverlayConfig {
                           alert("로그인 후 다시 시도해주세요.");
                           return;
                         }
-                        const response = await request("/api/users");
+                        const response = await request("/users");
                         if (!response.ok) {
                           alert("인증 상태를 확인해주세요. HTTP " + response.status);
                           return;

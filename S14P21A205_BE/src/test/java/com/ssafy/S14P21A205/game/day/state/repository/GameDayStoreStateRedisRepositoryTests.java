@@ -152,6 +152,7 @@ class GameDayStoreStateRedisRepositoryTests {
                 new BigDecimal("0.25"),
                 5000,
                 12,
+                List.of(),
                 8,
                 40_000L,
                 30,

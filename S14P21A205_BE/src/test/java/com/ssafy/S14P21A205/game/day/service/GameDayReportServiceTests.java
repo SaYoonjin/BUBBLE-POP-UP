@@ -395,6 +395,7 @@ class GameDayReportServiceTests {
                 captureRate,
                 500,
                 0,
+                List.of(),
                 0,
                 0L,
                 cumulativeCustomerCount,
