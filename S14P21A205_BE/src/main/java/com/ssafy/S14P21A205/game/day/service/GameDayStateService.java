@@ -175,7 +175,7 @@ public class GameDayStateService {
                 serverTime,
                 store.getSeason().getId(),
                 day,
-                String.valueOf(calculatedState.populationPerStore()),
+                populationPolicy.resolvePopulationLabel(calculatedState.baseFloatingPopulation()),
                 new GameStateResponse.Traffic(
                         resolvedTraffic.trafficStatus(),
                         resolvedTraffic.trafficStatus() == null ? null : resolvedTraffic.trafficStatus().getValue(),
@@ -778,3 +778,4 @@ public class GameDayStateService {
         }
     }
 }
+
