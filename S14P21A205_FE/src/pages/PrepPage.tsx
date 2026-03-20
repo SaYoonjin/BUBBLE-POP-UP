@@ -9,6 +9,12 @@ import QuantityCounter from "../components/game/QuantityCounter";
 import CozyNewspaper from "../components/game/CozyNewspaper";
 import { postRegularOrder } from "../api/order";
 import { getGameWaitingStatus, type GameWaitingResponse } from "../api/game";
+import {
+  getNewsRanking,
+  getTodayNews,
+  type AreaRankingItemResponse,
+  type NewsRankingResponse,
+} from "../api/news";
 import { getStore, getStoreMenus, type StoreMenuResponse, type StoreResponse } from "../api/store";
 import bubbleNewsImage from "../assets/Bubblenewsimg.png";
 import {
@@ -58,6 +64,8 @@ const mockNews = [
   { id: 5, title: "홍대 주변, 20대 유동인구 지난달 대비 15% 증가", content: "홍대 일대의 20대 유동인구가 지난달 대비 15% 증가한 것으로 나타났습니다. 봄 시즌 개강 효과와 맞물린 것으로 분석됩니다." },
 ];
 
+void mockNews;
+
 type Tab = "prep" | "news";
 type RegularOrderStatus = "idle" | "submitting" | "submitted";
 
@@ -66,8 +74,88 @@ interface ApiErrorResponse {
   message?: string;
 }
 
+interface PrepNewsItem {
+  id: number;
+  title: string;
+  content?: string;
+}
+
+interface PrepNewsRankingItem {
+  rank: number;
+  name: string;
+  change: string;
+  positive: boolean;
+}
+
+interface PrepNewsRankingSection {
+  title: string;
+  eyebrow: string;
+  items?: PrepNewsRankingItem[];
+  imageSrc?: string;
+  imageAlt?: string;
+  caption?: string;
+  captionDetail?: string;
+  meta?: string[];
+}
+
 function roundToHundreds(value: number) {
   return Math.round(value / 100) * 100;
+}
+
+function formatRankingChange(changeRate: number) {
+  return `${Math.abs(changeRate).toFixed(1)}%`;
+}
+
+function mapAreaRankings(items: AreaRankingItemResponse[]) {
+  return items.map((item) => ({
+    rank: item.rank,
+    name: item.areaName,
+    change: formatRankingChange(item.changeRate),
+    positive: item.changeRate > 0,
+  }));
+}
+
+function buildNewsSidebarSections(day: number, rankingResponse: NewsRankingResponse | null) {
+  const sections: PrepNewsRankingSection[] = [];
+
+  if (rankingResponse) {
+    sections.push({
+      title: "유동인구 순위",
+      eyebrow: "Foot Traffic Ranking",
+      items: mapAreaRankings(rankingResponse.areaTrafficRanking),
+    });
+
+    if (day >= 2) {
+      sections.push({
+        title: "지역 매출 순위",
+        eyebrow: "Regional Revenue Ranking",
+        items: mapAreaRankings(rankingResponse.areaRevenueRanking),
+      });
+    }
+  }
+
+  if (day === 1) {
+    sections.push({
+      title: "스팟 현장",
+      eyebrow: "",
+      imageSrc: bubbleNewsImage,
+      caption: "개점 첫날, 입장 대기줄에 긴장감 팽팽",
+      captionDetail:
+        "초기 반응과 기대감이 높아지면서 첫날 흥행 가능성에 관심이 쏠리고 있습니다.",
+      meta: ["DAY 1 현장 스케치"],
+      imageAlt: "개점 첫날, 매장 앞에 모여든 방문객들",
+    });
+  }
+
+  return sections;
+}
+
+function mapTodayNews(items: { newsId: number; newsTitle: string; newsContent: string }[]) {
+  return items.map((item) => ({
+    id: item.newsId,
+    title: item.newsTitle,
+    content: item.newsContent,
+  }));
 }
 
 function getRecommendedPrice(costPrice: number) {
@@ -155,11 +243,15 @@ export default function PrepPage() {
   const [currentStoreMenuName, setCurrentStoreMenuName] = useState<string | null>(null);
   const [waitingStatus, setWaitingStatus] = useState<GameWaitingResponse | null>(null);
   const [isWaitingStatusLoading, setIsWaitingStatusLoading] = useState(true);
+  const [newsItems, setNewsItems] = useState<PrepNewsItem[]>([]);
+  const [newsRanking, setNewsRanking] = useState<NewsRankingResponse | null>(null);
+  const [isNewsLoading, setIsNewsLoading] = useState(true);
+  const [newsError, setNewsError] = useState<string | null>(null);
   const [regularOrderStatus, setRegularOrderStatus] = useState<RegularOrderStatus>("idle");
   const [regularOrderError, setRegularOrderError] = useState<string | null>(null);
   const [selectedMenu, setSelectedMenu] = useState<number | null>(1);
   const [quantity, setQuantity] = useState(120);
-  const [expandedNewsId, setExpandedNewsId] = useState<number | null>(1);
+  const [expandedNewsId, setExpandedNewsId] = useState<number | null>(null);
   const selectedMenuData = menus.find((menu) => menu.id === selectedMenu) ?? menus[0] ?? fallbackMenus[0];
   const originalCostPrice = selectedMenuData.costPrice;
   const ingredientDiscountMultiplier = selectedMenuData.ingredientDiscountMultiplier;
@@ -250,6 +342,12 @@ export default function PrepPage() {
           },
         ];
 
+  const apiNewsSidebarSections = useMemo(
+    () => buildNewsSidebarSections(day, newsRanking),
+    [day, newsRanking],
+  );
+  void newsSidebarSections;
+
   useEffect(() => {
     let isActive = true;
 
@@ -304,6 +402,68 @@ export default function PrepPage() {
 
     setIsMenusLoading(true);
     void loadPrepMenus();
+
+    return () => {
+      isActive = false;
+    };
+  }, [day]);
+
+  useEffect(() => {
+    let isActive = true;
+
+    const loadNews = async () => {
+      try {
+        const [todayNewsResult, rankingResult] = await Promise.allSettled([
+          getTodayNews(),
+          getNewsRanking(),
+        ]);
+
+        if (!isActive) {
+          return;
+        }
+
+        let nextError: string | null = null;
+
+        if (todayNewsResult.status === "fulfilled") {
+          const nextNewsItems = mapTodayNews(todayNewsResult.value.news);
+          setNewsItems(nextNewsItems);
+          setExpandedNewsId((currentId) =>
+            nextNewsItems.some((item) => item.id === currentId)
+              ? currentId
+              : nextNewsItems[0]?.id ?? null,
+          );
+        } else {
+          setNewsItems([]);
+          setExpandedNewsId(null);
+          nextError = "뉴스 정보를 일부 불러오지 못했습니다. 잠시 후 다시 시도해주세요.";
+        }
+
+        if (rankingResult.status === "fulfilled") {
+          setNewsRanking(rankingResult.value);
+        } else {
+          setNewsRanking(null);
+          nextError = "뉴스 정보를 일부 불러오지 못했습니다. 잠시 후 다시 시도해주세요.";
+        }
+
+        setNewsError(nextError);
+      } catch {
+        if (!isActive) {
+          return;
+        }
+
+        setNewsItems([]);
+        setNewsRanking(null);
+        setExpandedNewsId(null);
+        setNewsError("뉴스 정보를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.");
+      } finally {
+        if (isActive) {
+          setIsNewsLoading(false);
+        }
+      }
+    };
+
+    setIsNewsLoading(true);
+    void loadNews();
 
     return () => {
       isActive = false;
@@ -609,13 +769,40 @@ export default function PrepPage() {
             </div>
           ) : (
             /* Tab: 버블 뉴스 */
-            <CozyNewspaper
-              items={mockNews}
-              expandedId={expandedNewsId}
-              onToggle={(id) => setExpandedNewsId(expandedNewsId === id ? null : id)}
-              day={day}
-              rankings={newsSidebarSections}
-            />
+            <div className="flex flex-col gap-4">
+              {(isNewsLoading || newsError) && (
+                <div
+                  className={`flex items-start gap-3 rounded-2xl px-4 py-3 text-sm ${
+                    newsError
+                      ? "border border-amber-200 bg-amber-50/80 text-amber-700"
+                      : "border border-slate-200 bg-slate-50/80 text-slate-500"
+                  }`}
+                >
+                  <span className="material-symbols-outlined mt-0.5 text-base">
+                    {newsError ? "error" : "hourglass_top"}
+                  </span>
+                  <p className="leading-6">
+                    {newsError ?? "뉴스 정보를 불러오는 중입니다."}
+                  </p>
+                </div>
+              )}
+
+              {newsItems.length > 0 ? (
+                <CozyNewspaper
+                  items={newsItems}
+                  expandedId={expandedNewsId}
+                  onToggle={(id) => setExpandedNewsId(expandedNewsId === id ? null : id)}
+                  day={day}
+                  rankings={apiNewsSidebarSections}
+                />
+              ) : (
+                !isNewsLoading && (
+                  <div className="rounded-2xl border border-slate-200 bg-white/80 px-6 py-10 text-center text-sm text-slate-500 shadow-soft">
+                    오늘 표시할 뉴스가 아직 없습니다.
+                  </div>
+                )
+              )}
+            </div>
           )}
         </div>
       </main>
