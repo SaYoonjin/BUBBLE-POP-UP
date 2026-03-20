@@ -7,6 +7,7 @@ export interface StoreResponse {
   popupName: string;
   menu: string;
   day: number;
+  playableFromDay: number;
 }
 
 export interface MenuItem {
@@ -29,13 +30,6 @@ export interface StoreMenuResponse {
 
 export interface StoreMenuListResponse {
   menus: StoreMenuResponse[];
-}
-
-export interface StoreResponse {
-  location: string;
-  popupName: string;
-  menu: string;
-  day: number;
 }
 
 export interface LocationItem {
