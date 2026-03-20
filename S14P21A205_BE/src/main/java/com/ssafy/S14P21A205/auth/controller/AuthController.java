@@ -24,7 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
 /** 용도: 인증 API 엔드포인트 구현. */
 @RestController
 @RequiredArgsConstructor
-@RequestMapping("/api/auth")
+@RequestMapping("/auth")
 public class AuthController implements AuthControllerDoc {
 
     private static final String REFRESH_TOKEN_COOKIE = "refreshToken";

@@ -10,7 +10,8 @@ public record GameWaitingResponse(
         String gameTime,
         Integer tick,
         Boolean joinEnabled,
-        Integer joinPlayableFromDay
+        Integer joinPlayableFromDay,
+        Integer participantCount
 ) {
     public GameWaitingResponse(
             GameWaitingStatus status,
@@ -18,7 +19,7 @@ public record GameWaitingResponse(
             Integer currentDay,
             Integer nextSeasonStartTime
     ) {
-        this(status, nextSeasonNumber, currentDay, nextSeasonStartTime, null, null, null, null, null, null);
+        this(status, nextSeasonNumber, currentDay, nextSeasonStartTime, null, null, null, null, null, null, null);
     }
 }
 
