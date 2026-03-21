@@ -26,6 +26,7 @@ import {
 } from "../api/action";
 import {
   getGameDayState,
+  getCurrentSeasonTopRankings,
   startGameDay,
   type GameStateResponse,
   type GameTrafficStatus,
@@ -132,13 +133,7 @@ function getInitialAlerts(): GameAlert[] {
   ];
 }
 
-const baseRankings: RankEntry[] = [
-  { id: "kim-boss", name: "김사장", storeName: "쿠키 팩토리", revenue: 12_400_000, roi: 42.8 },
-  { id: "lee-ceo", name: "이대표", storeName: "버블티 하우스", revenue: 11_800_000, roi: 38.4 },
-  { id: "me", name: "나", storeName: "버블티 스토리", revenue: 10_200_000, roi: 34.2, isMe: true },
-  { id: "park-manager", name: "박점장", storeName: "핫도그랩", revenue: 9_700_000, roi: 27.5 },
-  { id: "choi-owner", name: "최사장", storeName: "붕어빵연구소", revenue: 830_000, roi: 18.7 },
-];
+const RANKING_POLL_INTERVAL_MS = 10_000;
 
 const promotionLabels: Record<string, string> = {
   influencer: "인플루언서 홍보",
@@ -415,19 +410,38 @@ function PlayPageSession({
     syncShareActionState(state.actionStatus.donationUsed);
   };
 
-  const rankings = useMemo(
-    () =>
-      baseRankings.map((entry) =>
-        entry.id === "me"
-          ? {
-              ...entry,
-              name: nickname,
-              storeName: playStoreName,
-            }
-          : entry,
-      ),
-    [nickname, playStoreName],
-  );
+  const [rankings, setRankings] = useState<RankEntry[]>([]);
+
+  useEffect(() => {
+    let isActive = true;
+
+    const fetchRankings = async () => {
+      try {
+        const res = await getCurrentSeasonTopRankings();
+        if (!isActive) return;
+        setRankings(
+          res.rankings.map((r) => ({
+            id: String(r.userId),
+            name: r.nickname,
+            storeName: r.storeName,
+            revenue: r.totalRevenue,
+            roi: typeof r.roi === "number" ? r.roi : Number(r.roi),
+            isMe: r.nickname === nickname,
+          })),
+        );
+      } catch {
+        // 랭킹 조회 실패 시 기존 데이터 유지
+      }
+    };
+
+    void fetchRankings();
+    const timer = window.setInterval(fetchRankings, RANKING_POLL_INTERVAL_MS);
+
+    return () => {
+      isActive = false;
+      window.clearInterval(timer);
+    };
+  }, [nickname]);
 
   useEffect(() => {
     let isActive = true;
