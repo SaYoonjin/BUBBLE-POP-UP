@@ -1,13 +1,23 @@
-import { useState, type CSSProperties } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 
-export type AlertType = "event" | "deadline" | "stock" | "action";
+export type AlertType = "event" | "bad_event" | "deadline" | "stock" | "action";
 
 export interface GameAlert {
   id: number;
   type: AlertType;
   title: string;
   description: string;
-  time: string;
+  createdAt: number;
+  /** 설정하면 상대시간 대신 이 문자열을 표시 */
+  timeLabel?: string;
+}
+
+function getRelativeTime(createdAt: number): string {
+  const diff = Math.floor((Date.now() - createdAt) / 1000);
+  if (diff < 5) return "방금 전";
+  if (diff < 60) return `${diff}초 전`;
+  if (diff < 3600) return `${Math.floor(diff / 60)}분 전`;
+  return `${Math.floor(diff / 3600)}시간 전`;
 }
 
 interface EventSidebarProps {
@@ -16,6 +26,7 @@ interface EventSidebarProps {
 
 const typeIcons: Record<AlertType, string> = {
   event: "celebration",
+  bad_event: "warning",
   deadline: "alarm",
   stock: "inventory_2",
   action: "task_alt",
@@ -25,6 +36,10 @@ const typeIconStyles: Record<AlertType, { chip: string; icon: string }> = {
   event: {
     chip: "bg-cozy-primary/10",
     icon: "text-cozy-primary",
+  },
+  bad_event: {
+    chip: "bg-orange-50",
+    icon: "text-orange-500",
   },
   deadline: {
     chip: "bg-accent-rose/15",
@@ -60,7 +75,13 @@ const descriptionClampStyle: CSSProperties = {
 
 export default function EventSidebar({ alerts }: EventSidebarProps) {
   const [expanded, setExpanded] = useState(false);
+  const [, setTick] = useState(0);
   const latest = alerts[0];
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setTick((t) => t + 1), 5_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   return (
     <aside className="absolute top-20 right-4 z-10 w-72 pointer-events-none">
@@ -115,7 +136,7 @@ function AlertCard({ alert }: { alert: GameAlert }) {
             >
               {alert.title}
             </p>
-            <span className="mt-0.5 shrink-0 text-[10px] leading-none text-slate-400">{alert.time}</span>
+            <span className="mt-0.5 shrink-0 text-[10px] leading-none text-slate-400">{alert.timeLabel ?? getRelativeTime(alert.createdAt)}</span>
           </div>
 
           <p

@@ -215,6 +215,7 @@ export interface GameDayStartResponse {
   eventSchedule: Array<{
     time: string;
     type: string;
+    scope: { region: number | null; menu: number | null } | null;
     newsTitle: string;
     populationMultiplier: number;
     balanceChange: number;
