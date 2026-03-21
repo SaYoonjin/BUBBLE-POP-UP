@@ -28,15 +28,19 @@ export interface SeasonJoinResponse {
   waitingForPlayableDay: boolean;
 }
 
+export interface CurrentSeasonTopRankingItem {
+  rank: number;
+  userId: number;
+  nickname: string;
+  storeName: string;
+  roi: number;
+  totalRevenue: number;
+  rewardPoints: number;
+}
+
 export interface CurrentSeasonTopRankingsResponse {
   seasonId: number;
-  rankings: Array<{
-    ranking: number;
-    userName: string;
-    storeName: string;
-    roi: number;
-    revenue: number;
-  }>;
+  rankings: CurrentSeasonTopRankingItem[];
   refreshedAt: string;
 }
 
