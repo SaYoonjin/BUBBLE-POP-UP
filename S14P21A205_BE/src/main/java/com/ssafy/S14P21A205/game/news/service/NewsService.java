@@ -16,6 +16,7 @@ import com.ssafy.S14P21A205.game.news.repository.NewsReportRepository;
 import com.ssafy.S14P21A205.game.season.entity.Season;
 import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
 import com.ssafy.S14P21A205.game.season.repository.SeasonRepository;
+import com.ssafy.S14P21A205.store.entity.Store;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -80,6 +81,13 @@ public class NewsService {
      */
     public void updateDayRankings(Long seasonId, int day) {
         newsDataSaver.updateDayRankings(seasonId, day);
+    }
+
+    /**
+     * Redis state에서 직접 순위 집계 + 마감 뉴스 생성 (daily_report 의존 없음).
+     */
+    public void updateDayRankingsFromRedis(Long seasonId, int day, List<Store> stores) {
+        newsDataSaver.updateDayRankingsFromRedis(seasonId, day, stores);
     }
 
     /**

@@ -1,5 +1,7 @@
 package com.ssafy.S14P21A205.game.news.service;
 
+import com.ssafy.S14P21A205.game.day.state.GameDayLiveState;
+import com.ssafy.S14P21A205.game.day.state.repository.GameDayStoreStateRedisRepository;
 import com.ssafy.S14P21A205.game.environment.repository.PopulationRepository;
 import com.ssafy.S14P21A205.game.event.entity.DailyEvent;
 import com.ssafy.S14P21A205.game.event.entity.EventCategory;
@@ -15,6 +17,7 @@ import com.ssafy.S14P21A205.game.news.repository.NewsArticleRepository;
 import com.ssafy.S14P21A205.game.news.repository.NewsReportRepository;
 import com.ssafy.S14P21A205.game.news.service.AiNewsGenerator.NewsGenerationResult;
 import com.ssafy.S14P21A205.store.entity.Location;
+import com.ssafy.S14P21A205.store.entity.Store;
 import com.ssafy.S14P21A205.store.repository.LocationRepository;
 import com.ssafy.S14P21A205.store.repository.StoreRepository;
 import java.time.LocalDate;
@@ -51,6 +54,7 @@ public class NewsDataSaver {
     private final StoreRepository storeRepository;
     private final LocationRepository locationRepository;
     private final DailyEventRepository dailyEventRepository;
+    private final GameDayStoreStateRedisRepository gameDayStoreStateRedisRepository;
 
     @Transactional
     public void saveNewsData(Long seasonId, Season season, int totalDays,
@@ -408,6 +412,193 @@ public class NewsDataSaver {
                 log.error("Failed to generate missing event preview. seasonId={} day={}", seasonId, day, e);
             }
         }
+    }
+
+    /**
+     * Redis state에서 직접 지역별 매출 순위를 집계하여 NewsReport에 저장하고, 마감 뉴스도 생성.
+     * daily_report 의존 없이 독립 실행 가능.
+     */
+    @Transactional
+    public void updateDayRankingsFromRedis(Long seasonId, int day, List<Store> stores) {
+        NewsReport report = newsReportRepository.findBySeasonIdAndDay(seasonId, day).orElse(null);
+        if (report == null) {
+            return;
+        }
+
+        String revenueRanking = buildAreaRevenueRankingFromRedis(stores, day);
+        String menuEntryRanking = buildMenuEntryRanking(seasonId);
+        String areaEntryRanking = buildAreaEntryRanking(seasonId);
+
+        report.updateRankings(revenueRanking, menuEntryRanking, areaEntryRanking);
+        log.info("Updated rankings from Redis for season {} day {}", seasonId, day);
+
+        log.info("[NEWS] Starting closing news from Redis for season {} day {}", seasonId, day);
+        generateClosingNewsFromRedis(report, seasonId, day, stores);
+        log.info("[NEWS] Completed closing news from Redis for season {} day {}", seasonId, day);
+    }
+
+    // ---- Redis 기반 마감 뉴스 (매출 1위 / 누적 판매량 / 팝업 이동 중 1건) ----
+
+    private void generateClosingNewsFromRedis(NewsReport report, Long seasonId, int day, List<Store> stores) {
+        List<Runnable> candidates = new ArrayList<>();
+        candidates.add(() -> generateTopStoreNewsFromRedis(report, seasonId, day, stores));
+        candidates.add(() -> generateCumulativeSalesNewsFromRedis(report, seasonId, day, stores));
+        candidates.add(() -> generateMigrationNewsFromStores(report, seasonId, day, stores));
+
+        Collections.shuffle(candidates);
+        try {
+            candidates.get(0).run();
+        } catch (Exception e) {
+            log.error("Failed to generate closing news from Redis. seasonId={} day={}", seasonId, day, e);
+        }
+    }
+
+    private void generateTopStoreNewsFromRedis(NewsReport report, Long seasonId, int day, List<Store> stores) {
+        Store topStore = null;
+        long topSales = 0;
+        int topPurchaseCount = 0;
+
+        for (Store store : stores) {
+            GameDayLiveState state = gameDayStoreStateRedisRepository.find(store.getId(), day).orElse(null);
+            if (state == null || state.cumulativeSales() == null) {
+                continue;
+            }
+            if (state.cumulativeSales() > topSales) {
+                topSales = state.cumulativeSales();
+                topPurchaseCount = state.cumulativePurchaseCount() != null ? state.cumulativePurchaseCount() : 0;
+                topStore = store;
+            }
+        }
+
+        if (topStore == null || topSales <= 0) {
+            return;
+        }
+
+        NewsGenerationResult result = aiNewsGenerator.generateTopStoreNews(
+                seasonId, day, topStore.getStoreName(), topStore.getMenu().getMenuName(),
+                (int) topSales, topPurchaseCount);
+        newsArticleRepository.save(NewsArticle.create(
+                report, day, NewsCategory.EXTRA, result.title(), result.content()));
+        log.info("Generated top store news from Redis for season {} day {}", seasonId, day);
+    }
+
+    private void generateCumulativeSalesNewsFromRedis(NewsReport report, Long seasonId, int day, List<Store> stores) {
+        // 과거 daily_report 누적(이미 DB에 있음) + 오늘 Redis cumulative_purchase_count
+        List<Object[]> pastSalesData = dailyReportRepository.sumSalesCountBySeasonId(seasonId);
+        Map<Long, Long> pastSalesByStore = new LinkedHashMap<>();
+        Map<Long, String> storeNames = new LinkedHashMap<>();
+        Map<Long, String> menuNames = new LinkedHashMap<>();
+        for (Object[] row : pastSalesData) {
+            Long storeId = ((Number) row[0]).longValue();
+            pastSalesByStore.put(storeId, ((Number) row[3]).longValue());
+            storeNames.put(storeId, (String) row[1]);
+            menuNames.put(storeId, (String) row[2]);
+        }
+
+        // 오늘 Redis 데이터 합산
+        record SalesEntry(String storeName, String menuName, long totalSales) {}
+        List<SalesEntry> entries = new ArrayList<>();
+        for (Store store : stores) {
+            long pastSales = pastSalesByStore.getOrDefault(store.getId(), 0L);
+            int todaySales = gameDayStoreStateRedisRepository.find(store.getId(), day)
+                    .map(s -> s.cumulativePurchaseCount() != null ? s.cumulativePurchaseCount() : 0)
+                    .orElse(0);
+            long totalSales = pastSales + todaySales;
+            if (totalSales > 0) {
+                entries.add(new SalesEntry(
+                        storeNames.getOrDefault(store.getId(), store.getStoreName()),
+                        menuNames.getOrDefault(store.getId(), store.getMenu().getMenuName()),
+                        totalSales));
+            }
+        }
+        entries.sort((a, b) -> Long.compare(b.totalSales(), a.totalSales()));
+
+        int[] thresholds = {1000, 500, 200, 100};
+        for (SalesEntry entry : entries) {
+            for (int threshold : thresholds) {
+                if (entry.totalSales() >= threshold) {
+                    NewsGenerationResult result = aiNewsGenerator.generateCumulativeSalesNews(
+                            seasonId, day, entry.storeName(), entry.menuName(), entry.totalSales(), threshold);
+                    newsArticleRepository.save(NewsArticle.create(
+                            report, day, NewsCategory.EXTRA, result.title(), result.content()));
+                    log.info("Generated cumulative sales news from Redis for season {} day {}", seasonId, day);
+                    return;
+                }
+            }
+        }
+    }
+
+    private void generateMigrationNewsFromStores(NewsReport report, Long seasonId, int day, List<Store> stores) {
+        if (day < 2) {
+            return;
+        }
+
+        // 현재 지역별 가게 수: Store 테이블의 현재 location
+        Map<String, Long> currentCounts = new LinkedHashMap<>();
+        for (Store store : stores) {
+            String locationName = store.getLocation().getLocationName();
+            currentCounts.merge(locationName, 1L, Long::sum);
+        }
+
+        // 이전 day 지역별 가게 수: 이미 저장된 daily_report (이전 day는 Thread 1과 무관)
+        List<Object[]> previousLocationCounts = dailyReportRepository
+                .countStoresByLocationAndDay(seasonId, day - 1);
+        if (previousLocationCounts.isEmpty()) {
+            return;
+        }
+
+        Map<String, Long> prevMap = new LinkedHashMap<>();
+        for (Object[] row : previousLocationCounts) {
+            prevMap.put((String) row[0], ((Number) row[1]).longValue());
+        }
+
+        List<Map<String, Object>> changes = new ArrayList<>();
+        for (Map.Entry<String, Long> entry : currentCounts.entrySet()) {
+            String locationName = entry.getKey();
+            long currentCount = entry.getValue();
+            long previousCount = prevMap.getOrDefault(locationName, 0L);
+            long diff = currentCount - previousCount;
+            if (diff != 0) {
+                Map<String, Object> change = new LinkedHashMap<>();
+                change.put("name", locationName);
+                change.put("currentCount", currentCount);
+                change.put("previousCount", previousCount);
+                change.put("change", diff);
+                changes.add(change);
+            }
+        }
+
+        if (changes.isEmpty()) {
+            return;
+        }
+
+        NewsGenerationResult result = aiNewsGenerator.generateMigrationNews(seasonId, day, changes);
+        newsArticleRepository.save(NewsArticle.create(
+                report, day, NewsCategory.EXTRA, result.title(), result.content()));
+        log.info("Generated migration news from stores for season {} day {}", seasonId, day);
+    }
+
+    private String buildAreaRevenueRankingFromRedis(List<Store> stores, int day) {
+        Map<String, Long> revenueByLocation = new LinkedHashMap<>();
+        for (Store store : stores) {
+            String locationName = store.getLocation().getLocationName();
+            long sales = gameDayStoreStateRedisRepository.find(store.getId(), day)
+                    .map(GameDayLiveState::cumulativeSales)
+                    .orElse(0L);
+            revenueByLocation.merge(locationName, sales, Long::sum);
+        }
+
+        List<Map<String, Object>> ranking = revenueByLocation.entrySet().stream()
+                .sorted(Map.Entry.<String, Long>comparingByValue().reversed())
+                .map(entry -> {
+                    Map<String, Object> item = new LinkedHashMap<>();
+                    item.put("name", entry.getKey());
+                    item.put("revenue", entry.getValue());
+                    return item;
+                })
+                .toList();
+
+        return toJson(ranking);
     }
 
     // ---- Ranking build methods ----

@@ -8,14 +8,14 @@ import com.ssafy.S14P21A205.game.season.service.SeasonFinalRankingService;
 import com.ssafy.S14P21A205.store.entity.Store;
 import com.ssafy.S14P21A205.store.repository.StoreRepository;
 import java.util.List;
-import lombok.RequiredArgsConstructor;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @Slf4j
-@RequiredArgsConstructor
 public class SeasonDayClosingService {
 
     private final SeasonRepository seasonRepository;
@@ -23,6 +23,23 @@ public class SeasonDayClosingService {
     private final GameDayReportService gameDayReportService;
     private final SeasonFinalRankingService seasonFinalRankingService;
     private final NewsService newsService;
+    private final Executor dayClosingExecutor;
+
+    public SeasonDayClosingService(
+            SeasonRepository seasonRepository,
+            StoreRepository storeRepository,
+            GameDayReportService gameDayReportService,
+            SeasonFinalRankingService seasonFinalRankingService,
+            NewsService newsService,
+            @Qualifier("dayClosingExecutor") Executor dayClosingExecutor
+    ) {
+        this.seasonRepository = seasonRepository;
+        this.storeRepository = storeRepository;
+        this.gameDayReportService = gameDayReportService;
+        this.seasonFinalRankingService = seasonFinalRankingService;
+        this.newsService = newsService;
+        this.dayClosingExecutor = dayClosingExecutor;
+    }
 
     public void handleBusinessEnd(Long seasonId, int day) {
         if (seasonId == null || day < 1) {
@@ -40,20 +57,26 @@ public class SeasonDayClosingService {
             return;
         }
 
-        // 각 store의 recordClosedDayReport는 자체 @Transactional로 즉시 커밋
-        for (Store store : stores) {
-            gameDayReportService.recordClosedDayReport(store, day);
-        }
+        boolean isLastDay = day == season.getTotalDays();
 
-        if (day == season.getTotalDays()) {
-            seasonFinalRankingService.saveFinalRankings(season);
-        }
+        // Thread 1: 일일 리포트 저장 (DB 작업)
+        CompletableFuture<Void> reportsFuture = CompletableFuture.runAsync(() -> {
+            for (Store store : stores) {
+                gameDayReportService.recordClosedDayReport(store, day);
+            }
+            if (isLastDay) {
+                seasonFinalRankingService.saveFinalRankings(season);
+            }
+            log.info("Daily reports saved. seasonId={} day={} storeCount={}", seasonId, day, stores.size());
+        }, dayClosingExecutor);
 
-        // daily_report 커밋 완료 후 뉴스 생성 (AI 호출 포함, 별도 트랜잭션)
-        try {
-            newsService.updateDayRankings(seasonId, day);
-        } catch (Exception e) {
-            log.error("Failed to generate closing news. seasonId={} day={}", seasonId, day, e);
-        }
+        // Thread 2: Redis에서 직접 순위 집계 + 마감 뉴스 생성 (daily_report 의존 없음)
+        CompletableFuture.runAsync(() -> {
+            try {
+                newsService.updateDayRankingsFromRedis(seasonId, day, stores);
+            } catch (Exception e) {
+                log.error("Failed to update rankings/news from Redis. seasonId={} day={}", seasonId, day, e);
+            }
+        }, dayClosingExecutor);
     }
 }
