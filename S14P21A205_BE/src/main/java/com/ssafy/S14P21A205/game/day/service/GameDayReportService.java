@@ -154,6 +154,15 @@ public class GameDayReportService {
                 .orElseThrow(() -> new BaseException(ErrorCode.REPORT_NOT_FOUND));
         List<DailyReport> storeReports = dailyReportRepository.findByStore_IdOrderByDayAsc(store.getId());
 
+        int stockRemaining = defaultInt(report.getStockRemaining());
+        int stockDisposed = STOCK_DISPOSED_COUNT;
+        boolean nextDayIsOrderDay = Boolean.TRUE.equals(
+                resolveIsNextDayOrderDay(report.getDay(), store.getSeason().getTotalDays()));
+        if (nextDayIsOrderDay && stockRemaining > 0) {
+            stockDisposed = stockRemaining;
+            stockRemaining = 0;
+        }
+
         return new GameDayReportResponse(
                 report.getStore().getSeason().getId(),
                 report.getDay(),
@@ -164,8 +173,8 @@ public class GameDayReportService {
                 valueOf(report.getTotalCost()),
                 defaultInt(report.getVisitors()),
                 defaultInt(report.getSalesCount()),
-                defaultInt(report.getStockRemaining()),
-                STOCK_DISPOSED_COUNT,
+                stockRemaining,
+                stockDisposed,
                 captureRatePolicy.normalizeCaptureRate(report.getCaptureRate()),
                 resolveChangeCaptureRate(report, storeReports),
                 resolveDailyRevenue(storeReports, report.getDay()),

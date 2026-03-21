@@ -59,18 +59,16 @@ public class SeasonDayClosingService {
 
         boolean isLastDay = day == season.getTotalDays();
 
-        // Thread 1: 일일 리포트 저장 (DB 작업)
-        CompletableFuture<Void> reportsFuture = CompletableFuture.runAsync(() -> {
-            for (Store store : stores) {
-                gameDayReportService.recordClosedDayReport(store, day);
-            }
-            if (isLastDay) {
-                seasonFinalRankingService.saveFinalRankings(season);
-            }
-            log.info("Daily reports saved. seasonId={} day={} storeCount={}", seasonId, day, stores.size());
-        }, dayClosingExecutor);
+        // 일일 리포트 저장 (동기 — 스케줄러 catch-up 시 순서 보장 필요)
+        for (Store store : stores) {
+            gameDayReportService.recordClosedDayReport(store, day);
+        }
+        if (isLastDay) {
+            seasonFinalRankingService.saveFinalRankings(season);
+        }
+        log.info("Daily reports saved. seasonId={} day={} storeCount={}", seasonId, day, stores.size());
 
-        // Thread 2: Redis에서 직접 순위 집계 + 마감 뉴스 생성 (daily_report 의존 없음)
+        // 순위 집계 + 마감 뉴스는 비동기 (Redis 기반, daily_report 의존 없음)
         CompletableFuture.runAsync(() -> {
             try {
                 newsService.updateDayRankingsFromRedis(seasonId, day, stores);
