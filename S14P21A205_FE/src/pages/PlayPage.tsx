@@ -26,6 +26,7 @@ import {
 } from "../api/action";
 import {
   getGameDayState,
+  getCurrentSeasonTopRankings,
   startGameDay,
   type GameStateResponse,
   type GameTrafficStatus,
@@ -39,6 +40,7 @@ import {
   type LocationItem,
   type StoreMenuResponse,
 } from "../api/store";
+import { BUSINESS_SECONDS, DAY_SECONDS, elapsedToGameTime } from "../constants/gameTime";
 import useBrandName from "../hooks/useBrandName";
 import { useUserStore } from "../stores/useUserStore";
 import { normalizeDiscountMultiplier } from "../utils/dashboardItems";
@@ -113,32 +115,136 @@ const MENU_EMOJI_BY_NAME: Record<string, string> = {
   버블티: "🧋",
 };
 
-function getInitialAlerts(): GameAlert[] {
-  return [
-    {
-      id: 1,
-      type: "event",
-      title: "SNS에서 입소문 확산",
-      description: "손님 유입률이 15% 증가하고 있습니다.",
-      time: "방금 전",
-    },
-    {
-      id: 2,
-      type: "event",
-      title: "주변 축제 개최",
-      description: "유동인구가 20% 증가할 예정입니다.",
-      time: "5분 전",
-    },
-  ];
+interface EventScheduleItem {
+  time: string;
+  type: string;
+  scope: { region: number | null; menu: number | null } | null;
+  newsTitle: string;
+  populationMultiplier: number;
+  balanceChange: number;
 }
 
-const baseRankings: RankEntry[] = [
-  { id: "kim-boss", name: "김사장", storeName: "쿠키 팩토리", revenue: 12_400_000, roi: 42.8 },
-  { id: "lee-ceo", name: "이대표", storeName: "버블티 하우스", revenue: 11_800_000, roi: 38.4 },
-  { id: "me", name: "나", storeName: "버블티 스토리", revenue: 10_200_000, roi: 34.2, isMe: true },
-  { id: "park-manager", name: "박점장", storeName: "핫도그랩", revenue: 9_700_000, roi: 27.5 },
-  { id: "choi-owner", name: "최사장", storeName: "붕어빵연구소", revenue: 830_000, roi: 18.7 },
-];
+interface EventTemplate {
+  title: string;
+  /** $LOC → 지역명, $MENU → 메뉴명 */
+  description: string;
+}
+
+/** 영업 시작과 동시에 표시할 이벤트 */
+const IMMEDIATE_EVENT_NAMES = new Set([
+  "대체공휴일", "Substitute Holiday",
+  "축제", "Festival",
+]);
+
+/** 일반 이벤트 고정 발생 게임 시간 (최대 2개) */
+const REGULAR_EVENT_TIMES = ["14:00", "18:00"] as const;
+
+function getDaysAgoLabel(appliedAt: string): string {
+  const appliedMs = new Date(appliedAt).getTime();
+  if (Number.isNaN(appliedMs)) return "이전";
+  const elapsedSec = (Date.now() - appliedMs) / 1000;
+  const daysAgo = Math.max(1, Math.round(elapsedSec / DAY_SECONDS));
+  if (daysAgo === 1) return "어제";
+  return `${daysAgo}일 전`;
+}
+
+/** 악재 이벤트 (populationMultiplier < 1, 재난, 원가 상승 등) */
+function isBadEvent(event: EventScheduleItem): boolean {
+  if (event.populationMultiplier < 1) return true;
+  if (event.balanceChange < 0) return true;
+  const name = event.type || event.newsTitle;
+  if (name.includes("상승") || name.includes("UP")) return true;
+  const badKeywords = ["감염병", "지진", "침수", "태풍", "화재", "정책", "정부 방침",
+    "Infectious", "Earthquake", "Flood", "Typhoon", "Fire", "Policy"];
+  return badKeywords.some((kw) => name.includes(kw));
+}
+
+/** eventName(type/newsTitle)→{title, description} 매핑 (DB 한국어 + 영어 fallback) */
+const EVENT_INFO: Record<string, EventTemplate> = {
+  // 한국어 (data.sql 기준)
+  "연예인 등장": { title: "연예인 등장", description: "$LOC에 유명인이 나타났습니다." },
+  "빵 원재료 가격 하락": { title: "빵 원가 하락", description: "빵 원재료 시세가 하락했습니다." },
+  "마라꼬치 원재료 가격 하락": { title: "마라꼬치 원가 하락", description: "마라꼬치 원재료 시세가 하락했습니다." },
+  "젤리 원재료 가격 하락": { title: "젤리 원가 하락", description: "젤리 원재료 시세가 하락했습니다." },
+  "떡볶이 원재료 가격 하락": { title: "떡볶이 원가 하락", description: "떡볶이 원재료 시세가 하락했습니다." },
+  "햄버거 원재료 가격 하락": { title: "햄버거 원가 하락", description: "햄버거 원재료 시세가 하락했습니다." },
+  "아이스크림 원재료 가격 하락": { title: "아이스크림 원가 하락", description: "아이스크림 원재료 시세가 하락했습니다." },
+  "닭강정 원재료 가격 하락": { title: "닭강정 원가 하락", description: "닭강정 원재료 시세가 하락했습니다." },
+  "타코 원재료 가격 하락": { title: "타코 원가 하락", description: "타코 원재료 시세가 하락했습니다." },
+  "핫도그 원재료 가격 하락": { title: "핫도그 원가 하락", description: "핫도그 원재료 시세가 하락했습니다." },
+  "버블티 원재료 가격 하락": { title: "버블티 원가 하락", description: "버블티 원재료 시세가 하락했습니다." },
+  "빵 원재료 가격 상승": { title: "빵 원가 상승", description: "빵 원재료 시세가 상승했습니다." },
+  "마라꼬치 원재료 가격 상승": { title: "마라꼬치 원가 상승", description: "마라꼬치 원재료 시세가 상승했습니다." },
+  "젤리 원재료 가격 상승": { title: "젤리 원가 상승", description: "젤리 원재료 시세가 상승했습니다." },
+  "떡볶이 원재료 가격 상승": { title: "떡볶이 원가 상승", description: "떡볶이 원재료 시세가 상승했습니다." },
+  "햄버거 원재료 가격 상승": { title: "햄버거 원가 상승", description: "햄버거 원재료 시세가 상승했습니다." },
+  "아이스크림 원재료 가격 상승": { title: "아이스크림 원가 상승", description: "아이스크림 원재료 시세가 상승했습니다." },
+  "닭강정 원재료 가격 상승": { title: "닭강정 원가 상승", description: "닭강정 원재료 시세가 상승했습니다." },
+  "타코 원재료 가격 상승": { title: "타코 원가 상승", description: "타코 원재료 시세가 상승했습니다." },
+  "핫도그 원재료 가격 상승": { title: "핫도그 원가 상승", description: "핫도그 원재료 시세가 상승했습니다." },
+  "버블티 원재료 가격 상승": { title: "버블티 원가 상승", description: "버블티 원재료 시세가 상승했습니다." },
+  "대체공휴일": { title: "대체 공휴일", description: "정부가 오늘을 대체 공휴일로 지정했습니다." },
+  "정부지원금": { title: "정부 지원금", description: "소상공인 긴급 지원금이 지급되었습니다." },
+  "정부 방침 변경": { title: "정책 변경", description: "일회용품 사용 규제 등 정부 방침이 변경되었습니다." },
+  "감염병": { title: "감염병 발생", description: "$LOC 일대에 감염병이 확산되고 있습니다." },
+  "지진": { title: "지진 발생", description: "$LOC 인근에서 지진이 발생했습니다." },
+  "침수": { title: "홍수 발생", description: "$LOC 일대가 침수되었습니다." },
+  "태풍": { title: "태풍 접근", description: "$LOC 지역에 태풍이 접근하고 있습니다." },
+  "화재": { title: "화재 발생", description: "$LOC 인근에서 화재가 발생했습니다." },
+  // 영어 fallback (배포 DB에 영어로 들어간 경우)
+  "Celebrity Appearance": { title: "연예인 등장", description: "$LOC에 유명인이 나타났습니다." },
+  "Policy Change": { title: "정책 변경", description: "일회용품 사용 규제 등 정부 방침이 변경되었습니다." },
+  "Substitute Holiday": { title: "대체 공휴일", description: "정부가 오늘을 대체 공휴일로 지정했습니다." },
+  "Government Subsidy": { title: "정부 지원금", description: "소상공인 긴급 지원금이 지급되었습니다." },
+  "Infectious Disease": { title: "감염병 발생", description: "$LOC 일대에 감염병이 확산되고 있습니다." },
+  "Festival": { title: "축제 개최", description: "$LOC에서 축제가 열리고 있습니다." },
+  "Earthquake": { title: "지진 발생", description: "$LOC 인근에서 지진이 발생했습니다." },
+  "Flood": { title: "홍수 발생", description: "$LOC 일대가 침수되었습니다." },
+  "Typhoon": { title: "태풍 접근", description: "$LOC 지역에 태풍이 접근하고 있습니다." },
+  "Fire": { title: "화재 발생", description: "$LOC 인근에서 화재가 발생했습니다." },
+  // 원가 변동 영어 fallback
+  "Bread Price Down": { title: "빵 원가 하락", description: "빵 원재료 시세가 하락했습니다." },
+  "Bread Price Up": { title: "빵 원가 상승", description: "빵 원재료 시세가 상승했습니다." },
+  "Mala Skewer Price Down": { title: "마라꼬치 원가 하락", description: "마라꼬치 원재료 시세가 하락했습니다." },
+  "Mala Skewer Price Up": { title: "마라꼬치 원가 상승", description: "마라꼬치 원재료 시세가 상승했습니다." },
+  "Jelly Price Down": { title: "젤리 원가 하락", description: "젤리 원재료 시세가 하락했습니다." },
+  "Jelly Price Up": { title: "젤리 원가 상승", description: "젤리 원재료 시세가 상승했습니다." },
+  "Tteokbokki Price Down": { title: "떡볶이 원가 하락", description: "떡볶이 원재료 시세가 하락했습니다." },
+  "Tteokbokki Price Up": { title: "떡볶이 원가 상승", description: "떡볶이 원재료 시세가 상승했습니다." },
+  "Hamburger Price Down": { title: "햄버거 원가 하락", description: "햄버거 원재료 시세가 하락했습니다." },
+  "Hamburger Price Up": { title: "햄버거 원가 상승", description: "햄버거 원재료 시세가 상승했습니다." },
+  "Ice Cream Price Down": { title: "아이스크림 원가 하락", description: "아이스크림 원재료 시세가 하락했습니다." },
+  "Ice Cream Price Up": { title: "아이스크림 원가 상승", description: "아이스크림 원재료 시세가 상승했습니다." },
+  "Dakgangjeong Price Down": { title: "닭강정 원가 하락", description: "닭강정 원재료 시세가 하락했습니다." },
+  "Dakgangjeong Price Up": { title: "닭강정 원가 상승", description: "닭강정 원재료 시세가 상승했습니다." },
+  "Taco Price Down": { title: "타코 원가 하락", description: "타코 원재료 시세가 하락했습니다." },
+  "Taco Price Up": { title: "타코 원가 상승", description: "타코 원재료 시세가 상승했습니다." },
+  "Hotdog Price Down": { title: "핫도그 원가 하락", description: "핫도그 원재료 시세가 하락했습니다." },
+  "Hotdog Price Up": { title: "핫도그 원가 상승", description: "핫도그 원재료 시세가 상승했습니다." },
+  "Bubble Tea Price Down": { title: "버블티 원가 하락", description: "버블티 원재료 시세가 하락했습니다." },
+  "Bubble Tea Price Up": { title: "버블티 원가 상승", description: "버블티 원재료 시세가 상승했습니다." },
+};
+
+function getEventInfo(
+  event: EventScheduleItem,
+  locationName: string,
+  _menuName: string,
+): { title: string; description: string } {
+  const template = EVENT_INFO[event.type] ?? EVENT_INFO[event.newsTitle];
+  if (!template) {
+    return { title: event.newsTitle, description: "새로운 이벤트가 발생했습니다." };
+  }
+  let description = template.description.replace("$LOC", locationName);
+
+  // 지원금 이벤트의 경우 금액 표시
+  if (event.balanceChange > 0) {
+    description += ` (${event.balanceChange.toLocaleString()}원)`;
+  }
+
+  return { title: template.title, description };
+}
+
+const RANKING_POLL_INTERVAL_MS = 10_000;
 
 const promotionLabels: Record<string, string> = {
   influencer: "인플루언서 홍보",
@@ -243,17 +349,16 @@ function getErrorMessage(error: unknown, fallbackMessage: string) {
   return fallbackMessage;
 }
 
-function formatEmergencyArrivalTime(arrivedTime: string) {
+function formatEmergencyArrivalGameTime(arrivedTime: string, businessEndMs: number) {
   const parsed = new Date(arrivedTime);
 
   if (Number.isNaN(parsed.getTime())) {
     return "";
   }
 
-  return parsed.toLocaleTimeString("ko-KR", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  const businessStartMs = businessEndMs - BUSINESS_SECONDS * 1000;
+  const elapsedSec = Math.max(0, Math.min((parsed.getTime() - businessStartMs) / 1000, BUSINESS_SECONDS));
+  return elapsedToGameTime(elapsedSec);
 }
 
 function getEstimatedEmergencyArrivalTime(
@@ -324,7 +429,9 @@ function PlayPageSession({
   const [activeModal, setActiveModal] = useState<ActionType | null>(null);
   const [usedActions, setUsedActions] = useState<Set<ActionType>>(new Set());
   const [activeEffects, setActiveEffects] = useState<Set<ActionType>>(new Set());
-  const [alerts, setAlerts] = useState<GameAlert[]>(() => getInitialAlerts());
+  const [alerts, setAlerts] = useState<GameAlert[]>([]);
+  const [eventSchedule, setEventSchedule] = useState<EventScheduleItem[]>([]);
+  const hasLoadedCarryOverRef = useRef(false);
   const [balance, setBalance] = useState(MOCK.balance);
   const [stock, setStock] = useState(MOCK.stock);
   const [guests, setGuests] = useState(MOCK.guests);
@@ -413,21 +520,67 @@ function PlayPageSession({
     syncDiscountActionState(state.actionStatus.discountUsed);
     syncPromotionActionState(isPromotionUsed(state.actionStatus));
     syncShareActionState(state.actionStatus.donationUsed);
+
+    // 이전 일차에서 이어지는 이벤트를 carry-over 알림으로 표시 (최초 1회)
+    if (!hasLoadedCarryOverRef.current && state.appliedEvents.length > 0) {
+      hasLoadedCarryOverRef.current = true;
+      const carryOverAlerts: GameAlert[] = state.appliedEvents.map((ae) => {
+        const fakeSchedule: EventScheduleItem = {
+          time: "10:00",
+          type: ae.eventName,
+          scope: null,
+          newsTitle: ae.newsTitle,
+          populationMultiplier: 1,
+          balanceChange: 0,
+        };
+        const info = getEventInfo(fakeSchedule, currentLocationName, currentMenuName);
+        return {
+          id: Date.now() + Math.floor(Math.random() * 10000),
+          type: isBadEvent(fakeSchedule) ? "bad_event" as const : "event" as const,
+          title: info.title,
+          description: info.description,
+          createdAt: Date.now(),
+          timeLabel: getDaysAgoLabel(ae.appliedAt),
+        };
+      });
+      if (carryOverAlerts.length > 0) {
+        setAlerts((prev) => [...prev, ...carryOverAlerts]);
+      }
+    }
   };
 
-  const rankings = useMemo(
-    () =>
-      baseRankings.map((entry) =>
-        entry.id === "me"
-          ? {
-              ...entry,
-              name: nickname,
-              storeName: playStoreName,
-            }
-          : entry,
-      ),
-    [nickname, playStoreName],
-  );
+  const [rankings, setRankings] = useState<RankEntry[]>([]);
+
+  useEffect(() => {
+    let isActive = true;
+
+    const fetchRankings = async () => {
+      try {
+        const res = await getCurrentSeasonTopRankings();
+        if (!isActive) return;
+        setRankings(
+          res.rankings.map((r) => ({
+            id: String(r.userId),
+            name: r.nickname,
+            storeName: r.storeName,
+            revenue: r.totalRevenue,
+            roi: typeof r.roi === "number" ? r.roi : Number(r.roi),
+            isMe: r.nickname === nickname,
+          })),
+        );
+      } catch {
+        // 랭킹 조회 실패 시 기존 데이터 유지
+      }
+    };
+
+    void fetchRankings();
+    const timer = window.setInterval(fetchRankings, RANKING_POLL_INTERVAL_MS);
+
+    return () => {
+      isActive = false;
+      window.clearInterval(timer);
+    };
+  }, [nickname]);
 
   useEffect(() => {
     let isActive = true;
@@ -441,7 +594,10 @@ function PlayPageSession({
       let startErrorMessage: string | null = null;
 
       try {
-        await startGameDay();
+        const dayStartRes = await startGameDay();
+        if (isActive && dayStartRes.eventSchedule) {
+          setEventSchedule(dayStartRes.eventSchedule);
+        }
       } catch (error) {
         startErrorMessage = getErrorMessage(error, "영업 상태를 준비하지 못했습니다.");
       }
@@ -573,7 +729,7 @@ function PlayPageSession({
             type: "deadline",
             title: "마감 1분 전",
             description: "영업 종료가 곧 다가옵니다.",
-            time: "방금 전",
+            createdAt: Date.now(),
           },
           ...prev,
         ]);
@@ -589,6 +745,119 @@ function PlayPageSession({
     return () => window.clearInterval(timer);
   }, [playEndTimestampMs]);
 
+  const triggeredEventsRef = useRef<Set<string>>(new Set());
+  const pendingEventTimersRef = useRef<number[]>([]);
+
+  useEffect(() => {
+    if (eventSchedule.length === 0) return;
+
+    const totalBusinessMs = BUSINESS_SECONDS * 1000;
+    const businessStartMs = playEndTimestampMs - totalBusinessMs;
+
+    /** 같은 시간 이벤트를 시차(3초)를 두고 push */
+    const scheduleAlert = (event: EventScheduleItem, delayMs: number) => {
+      const timerId = window.setTimeout(() => {
+        const info = getEventInfo(event, currentLocationName, currentMenuName);
+        setAlerts((prev) => [
+          {
+            id: Date.now() + Math.floor(Math.random() * 1000),
+            type: isBadEvent(event) ? "bad_event" : "event",
+            title: info.title,
+            description: info.description,
+            createdAt: Date.now(),
+          },
+          ...prev,
+        ]);
+      }, delayMs);
+      pendingEventTimersRef.current.push(timerId);
+    };
+
+    // 즉시 이벤트와 일반(14:00/18:00) 이벤트 분리
+    const immediateEvents: EventScheduleItem[] = [];
+    const regularEvents: EventScheduleItem[] = [];
+
+    for (const event of eventSchedule) {
+      const isImmediate = IMMEDIATE_EVENT_NAMES.has(event.type) || IMMEDIATE_EVENT_NAMES.has(event.newsTitle);
+      if (isImmediate) {
+        immediateEvents.push(event);
+      } else {
+        regularEvents.push(event);
+      }
+    }
+
+    // 오늘 새 이벤트 최대 2개, 14:00 / 18:00 고정
+    const todayRegulars = regularEvents.slice(-2).map((event, i) => ({
+      ...event,
+      time: REGULAR_EVENT_TIMES[i] ?? REGULAR_EVENT_TIMES[REGULAR_EVENT_TIMES.length - 1],
+    }));
+
+    const check = () => {
+      const elapsedMs = Date.now() - businessStartMs;
+      const elapsedSec = Math.max(0, Math.min(elapsedMs / 1000, BUSINESS_SECONDS));
+      const currentGameTime = elapsedToGameTime(elapsedSec);
+
+      let sameTimeCount = 0;
+
+      // 즉시 이벤트: 영업 시작 시 바로
+      for (const event of immediateEvents) {
+        const key = `immediate-${event.newsTitle}`;
+        if (triggeredEventsRef.current.has(key)) continue;
+        if (elapsedSec >= 0) {
+          triggeredEventsRef.current.add(key);
+          scheduleAlert(event, sameTimeCount * 3000);
+          sameTimeCount++;
+        }
+      }
+
+      // 일반 이벤트: 14:00 / 18:00 고정
+      for (const event of todayRegulars) {
+        const key = `regular-${event.time}-${event.newsTitle}`;
+        if (triggeredEventsRef.current.has(key)) continue;
+        if (currentGameTime >= event.time) {
+          triggeredEventsRef.current.add(key);
+          scheduleAlert(event, 0);
+        }
+      }
+    };
+
+    check();
+    const timer = window.setInterval(check, 1000);
+    return () => {
+      window.clearInterval(timer);
+      for (const id of pendingEventTimersRef.current) {
+        window.clearTimeout(id);
+      }
+      pendingEventTimersRef.current = [];
+    };
+  }, [eventSchedule, playEndTimestampMs, currentLocationName, currentMenuName]);
+
+  /** 사용자가 직접 발주했을 때만 true → 도착 알림 활성화 */
+  const didOrderEmergencyRef = useRef(false);
+  const hasEmergencyArrivalAlertRef = useRef(false);
+
+  useEffect(() => {
+    if (!emergencyArriveAt || !didOrderEmergencyRef.current) {
+      return;
+    }
+
+    const arriveMs = new Date(emergencyArriveAt).getTime();
+    if (Number.isNaN(arriveMs)) return;
+
+    if (hasEmergencyArrivalAlertRef.current) return;
+
+    const check = () => {
+      if (hasEmergencyArrivalAlertRef.current) return;
+      if (Date.now() >= arriveMs) {
+        hasEmergencyArrivalAlertRef.current = true;
+        pushAlert("action", "긴급 발주 도착", "긴급 발주한 물품이 도착했습니다.");
+      }
+    };
+
+    check();
+    const timer = window.setInterval(check, 1000);
+    return () => window.clearInterval(timer);
+  }, [emergencyArriveAt]);
+
   const handleAction = (action: ActionType) => {
     setActiveModal(action);
   };
@@ -599,7 +868,6 @@ function PlayPageSession({
     type: GameAlert["type"],
     title: string,
     description: string,
-    time = "방금 전",
   ) => {
     setAlerts((prev) => [
       {
@@ -607,7 +875,7 @@ function PlayPageSession({
         type,
         title,
         description,
-        time,
+        createdAt: Date.now(),
       },
       ...prev,
     ]);
@@ -750,8 +1018,10 @@ function PlayPageSession({
           onClose={closeModal}
           onSubmit={async ({ menuId, menuName, quantity, salePrice }) => {
             const response = await postEmergencyOrder(menuId, quantity, salePrice);
+            didOrderEmergencyRef.current = true;
+            hasEmergencyArrivalAlertRef.current = false;
             const isNewMenuOrder = menuId !== currentOrder?.menuId;
-            const arrivalLabel = formatEmergencyArrivalTime(response.arrivedTime);
+            const arrivalLabel = formatEmergencyArrivalGameTime(response.arrivedTime, playEndTimestampMs);
             const arrivalText = arrivalLabel ? ` ${arrivalLabel} 도착 예정입니다.` : "";
 
             setEmergencyArriveAt(response.arrivedTime);
