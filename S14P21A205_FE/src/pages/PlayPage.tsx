@@ -49,45 +49,6 @@ interface ApiErrorResponse {
   message?: string;
 }
 
-const MOCK = {
-  location: "성수",
-  storeName: "버블티 스토리",
-  menuName: "버블티",
-  congestion: "crowded" as const,
-  guests: 24,
-  stock: 85,
-  balance: 4_500_000,
-  currentPrice: 4_100,
-  moveRegions: [
-    {
-      id: 1,
-      name: "강남구",
-      icon: "🏙️",
-      iconBg: "bg-blue-100",
-      population: "매우 많음",
-      populationColor: "text-blue-500",
-      moveCost: 2_000,
-    },
-    {
-      id: 2,
-      name: "성수동",
-      icon: "🧋",
-      iconBg: "bg-green-100",
-      population: "보통",
-      populationColor: "text-green-600",
-      moveCost: 1_200,
-    },
-    {
-      id: 3,
-      name: "해운대구",
-      icon: "🌊",
-      iconBg: "bg-purple-100",
-      population: "많음",
-      populationColor: "text-purple-500",
-      moveCost: 1_800,
-    },
-  ],
-};
 
 const MENU_EMOJI_MAP: Record<number, string> = {
   1: "🍞",
@@ -432,10 +393,10 @@ function PlayPageSession({
   const [alerts, setAlerts] = useState<GameAlert[]>([]);
   const [eventSchedule, setEventSchedule] = useState<EventScheduleItem[]>([]);
   const hasLoadedCarryOverRef = useRef(false);
-  const [balance, setBalance] = useState(MOCK.balance);
-  const [stock, setStock] = useState(MOCK.stock);
-  const [guests, setGuests] = useState(MOCK.guests);
-  const [currentLocationName, setCurrentLocationName] = useState(MOCK.location);
+  const [balance, setBalance] = useState(0);
+  const [stock, setStock] = useState(0);
+  const [guests, setGuests] = useState(0);
+  const [currentLocationName, setCurrentLocationName] = useState("");
   const [currentOrder, setCurrentOrder] = useState<CurrentOrderResponse | null>(null);
   const [menuItems, setMenuItems] = useState<EmergencyMenuItem[]>([]);
   const [moveRegions, setMoveRegions] = useState<MoveRegion[]>([]);
@@ -454,8 +415,8 @@ function PlayPageSession({
   const hasLowStockAlertRef = useRef(false);
   const remainingMilliseconds = Math.max(0, playEndTimestampMs - nowMs);
   const remainingSeconds = Math.max(0, Math.ceil(remainingMilliseconds / 1000));
-  const playStoreName = brandName || MOCK.storeName;
-  const currentMenuName = currentOrder?.menuName ?? MOCK.menuName;
+  const playStoreName = brandName || "";
+  const currentMenuName = currentOrder?.menuName ?? "";
   const currentMenuPricing: CurrentMenuPricing | null = currentOrder
     ? {
         costPrice: currentOrder.costPrice,
@@ -464,7 +425,7 @@ function PlayPageSession({
         sellingPrice: currentOrder.sellingPrice,
       }
     : null;
-  const discountCurrentPrice = currentOrder?.sellingPrice ?? MOCK.currentPrice;
+  const discountCurrentPrice = currentOrder?.sellingPrice ?? 0;
   const discountMinimumPrice = currentOrder?.costPrice ?? discountCurrentPrice;
 
   const syncPersistentActionState = (
@@ -508,7 +469,30 @@ function PlayPageSession({
     syncPersistentActionState("share", donationUsed);
   };
 
+  const [guestsDelta, setGuestsDelta] = useState<number | null>(null);
+  const [stockDelta, setStockDelta] = useState<number | null>(null);
+  const [balanceDelta, setBalanceDelta] = useState<number | null>(null);
+  // ref로 최신 값 추적 (클로저 캡처 문제 방지)
+  const prevGuestsRef = useRef<number | null>(null);
+  const prevStockRef = useRef<number | null>(null);
+  const prevBalanceRef = useRef<number | null>(null);
+
   const applyGameState = (state: GameStateResponse) => {
+    // 이전 값이 있으면 delta 계산
+    if (prevGuestsRef.current !== null) {
+      const gd = state.customerCount - prevGuestsRef.current;
+      const sd = state.inventory.totalStock - prevStockRef.current!;
+      const bd = state.cash - prevBalanceRef.current!;
+      if (gd !== 0) setGuestsDelta(gd);
+      if (sd !== 0) setStockDelta(sd);
+      if (bd !== 0) setBalanceDelta(bd);
+    }
+
+    // 현재 값을 ref에 저장 (다음 비교용)
+    prevGuestsRef.current = state.customerCount;
+    prevStockRef.current = state.inventory.totalStock;
+    prevBalanceRef.current = state.cash;
+
     setBalance(state.cash);
     setStock(state.inventory.totalStock);
     setGuests(state.customerCount);
@@ -520,6 +504,15 @@ function PlayPageSession({
     syncDiscountActionState(state.actionStatus.discountUsed);
     syncPromotionActionState(isPromotionUsed(state.actionStatus));
     syncShareActionState(state.actionStatus.donationUsed);
+
+    // 긴급발주 사용 여부 동기화
+    if (state.actionStatus.emergencyOrderPending || state.actionStatus.emergencyOrderArriveAt) {
+      setUsedActions((prev) => {
+        const next = new Set(prev);
+        next.add("emergency");
+        return next;
+      });
+    }
 
     // 이전 일차에서 이어지는 이벤트를 carry-over 알림으로 표시 (최초 1회)
     if (!hasLoadedCarryOverRef.current && state.appliedEvents.length > 0) {
@@ -745,6 +738,21 @@ function PlayPageSession({
     return () => window.clearInterval(timer);
   }, [playEndTimestampMs]);
 
+  // 10초마다 게임 상태 폴링 (유동인구, 손님, 재고, 잔액)
+  useEffect(() => {
+    const poll = async () => {
+      try {
+        const state = await getGameDayState();
+        applyGameState(state);
+      } catch {
+        // 폴링 실패 무시
+      }
+    };
+
+    const timer = window.setInterval(poll, 10_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
   const triggeredEventsRef = useRef<Set<string>>(new Set());
   const pendingEventTimersRef = useRef<number[]>([]);
 
@@ -850,6 +858,14 @@ function PlayPageSession({
       if (Date.now() >= arriveMs) {
         hasEmergencyArrivalAlertRef.current = true;
         pushAlert("action", "긴급 발주 도착", "긴급 발주한 물품이 도착했습니다.");
+        // 메뉴/재고/잔액 서버에서 재조회 (BE 반영 타이밍 보정 위해 다중 재시도)
+        const refreshData = () => {
+          getCurrentOrder().then((order) => setCurrentOrder(order)).catch(() => {});
+          getGameDayState().then((state) => applyGameState(state)).catch(() => {});
+        };
+        refreshData();
+        setTimeout(refreshData, 2000);
+        setTimeout(refreshData, 5000);
       }
     };
 
@@ -938,10 +954,13 @@ function PlayPageSession({
         day={dayNumber}
         remainingSeconds={remainingSeconds}
         remainingMilliseconds={remainingMilliseconds}
-        congestion={MOCK.congestion}
+        congestion="normal"
         guests={guests}
         stock={stock}
         balance={balance}
+        guestsDelta={guestsDelta}
+        stockDelta={stockDelta}
+        balanceDelta={balanceDelta}
       />
 
       <main className="relative flex flex-1 overflow-hidden">

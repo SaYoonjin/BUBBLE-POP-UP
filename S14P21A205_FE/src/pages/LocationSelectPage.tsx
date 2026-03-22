@@ -309,13 +309,16 @@ export default function LocationSelectPage() {
         Math.ceil((selectionWindow.endTimestampMs - Date.now()) / 1000),
       );
 
-      if (joinResponse.waitingForPlayableDay) {
+      // playableFromDay가 현재 day보다 크면 대기 필요
+      const latestStatusForCheck = await getGameWaitingStatus();
+      const needsWaiting = joinResponse.playableFromDay > (latestStatusForCheck.currentDay ?? 1);
+
+      if (needsWaiting) {
         clearLocationSelectionDeadline();
 
         // 다음 영업준비까지 남은 시간 계산
-        const latestStatus = await getGameWaitingStatus();
         const secondsUntilNextPrep = getSecondsUntilDayStart(
-          latestStatus,
+          latestStatusForCheck,
           joinResponse.playableFromDay,
         );
 
