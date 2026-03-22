@@ -2,7 +2,7 @@ import axios from "axios";
 
 // 401 인터셉터 무한루프 방지를 위해 별도 인스턴스 사용
 const authClient = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || "/api",
+  baseURL: import.meta.env.VITE_API_BASE_URL || "",
   headers: { "Content-Type": "application/json" },
   withCredentials: true,
 });
