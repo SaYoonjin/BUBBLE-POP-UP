@@ -28,7 +28,7 @@ export async function getTodayNews() {
   return data;
 }
 
-export async function getNewsRanking() {
-  const { data } = await client.get<NewsRankingResponse>("/api/news/ranking");
+export async function getNewsRanking(day: number) {
+  const { data } = await client.get<NewsRankingResponse>(`/api/news/${day}/ranking`);
   return data;
 }

@@ -11,7 +11,7 @@ export interface MoveRegion {
   name: string;
   rent: number;
   moveCost: number;
-  congestionLabel: string;
+  trafficRank: number | null;
   icon: string;
 }
 
@@ -29,21 +29,8 @@ function formatCurrency(value: number) {
   return `₩${value.toLocaleString("ko-KR")}`;
 }
 
-function getCongestionTone(label: string) {
-  switch (label) {
-    case "매우 혼잡":
-      return "text-rose-500";
-    case "혼잡":
-      return "text-amber-500";
-    case "보통":
-      return "text-slate-600";
-    case "원활":
-      return "text-sky-600";
-    case "매우 원활":
-      return "text-emerald-600";
-    default:
-      return "text-slate-500";
-  }
+function formatTrafficRank(rank: number | null) {
+  return typeof rank === "number" ? `${rank}위` : "순위 정보 없음";
 }
 
 export default function MoveModal({
@@ -318,14 +305,14 @@ export default function MoveModal({
                 </div>
                 <div className="rounded-xl border border-slate-100 bg-white/80 p-3">
                   <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                    혼잡도
+                    혼잡도 순위
                   </p>
                   <p
                     className={`mt-1 text-sm font-bold ${
-                      getCongestionTone(selectedRegion.congestionLabel)
+                      selectedRegion.trafficRank === null ? "text-slate-500" : "text-slate-900"
                     }`}
                   >
-                    {selectedRegion.congestionLabel}
+                    {formatTrafficRank(selectedRegion.trafficRank)}
                   </p>
                 </div>
               </div>

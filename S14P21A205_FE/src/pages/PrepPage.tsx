@@ -417,7 +417,7 @@ export default function PrepPage() {
       try {
         const [todayNewsResult, rankingResult] = await Promise.allSettled([
           getTodayNews(),
-          getNewsRanking(),
+          getNewsRanking(day),
         ]);
 
         if (!isActive) {
