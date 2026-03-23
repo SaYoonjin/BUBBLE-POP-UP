@@ -3,7 +3,6 @@ import { Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { getSeasonTime, type CurrentSeasonTimeResponse } from "../api/game";
 import { getStore, type StoreResponse } from "../api/store";
 import { phaseToRoute, type SeasonPhase } from "../constants/gameTime";
-import { useGameStore } from "../stores/useGameStore";
 import type { WaitingRouteState } from "../types/waiting";
 
 /** GameGuard가 하위 페이지에 전달하는 context */
@@ -137,17 +136,11 @@ export default function GameGuard() {
         joined = false;
       }
 
-      // gameStore에 playableFromDay가 있으면 join 직후 상태 → 이걸로 판정
-      // 없으면 (새로고침 등) → BE StoreResponse에 playableFromDay 없으므로 대기 스킵
-      const storedPlayableFromDay = useGameStore.getState().playableFromDay;
+      // 서버의 StoreResponse.playableFromDay로 대기 여부 판정 (새로고침해도 정확)
+      const playableFromDay = storeData?.playableFromDay ?? null;
       const waitingForPlayableDay = joined
-        && storedPlayableFromDay != null
-        && day < storedPlayableFromDay;
-
-      // playableFromDay에 도달하면 store 클리어 (더 이상 대기 불필요)
-      if (joined && storedPlayableFromDay != null && day >= storedPlayableFromDay) {
-        useGameStore.getState().clearGame();
-      }
+        && playableFromDay != null
+        && day < playableFromDay;
 
       const pathname = location.pathname;
       let allowed = false;
@@ -205,8 +198,8 @@ export default function GameGuard() {
           joined = false;
         }
 
-        const storedPFD = useGameStore.getState().playableFromDay;
-        const waiting = joined && storedPFD != null && day < storedPFD;
+        const pfd = storeData?.playableFromDay ?? null;
+        const waiting = joined && pfd != null && day < pfd;
 
         let target: RedirectTarget;
         if (joined) {

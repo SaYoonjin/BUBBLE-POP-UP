@@ -25,7 +25,6 @@ export interface SeasonJoinResponse {
   storeName: string;
   balance: number;
   playableFromDay: number;
-  waitingForPlayableDay: boolean;
 }
 
 export interface CurrentSeasonTopRankingItem {

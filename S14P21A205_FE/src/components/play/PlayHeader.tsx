@@ -1,4 +1,5 @@
-import { formatMoneyUnit } from "../../utils/formatMoneyUnit";
+import { useEffect, useRef, useState } from "react";
+// statDeltaFade 애니메이션은 제거됨 (누적 delta는 항상 표시)
 
 type CongestionLevel = "very_crowded" | "crowded" | "normal" | "relaxed" | "very_relaxed";
 
@@ -13,6 +14,9 @@ interface PlayHeaderProps {
   guests: number;
   stock: number;
   balance: number;
+  guestsDelta?: number | null;
+  stockDelta?: number | null;
+  balanceDelta?: number | null;
 }
 
 const TOTAL_PLAY_SECONDS = 120;
@@ -68,49 +72,75 @@ export default function PlayHeader({
   guests,
   stock,
   balance,
+  guestsDelta,
+  stockDelta,
+  balanceDelta,
 }: PlayHeaderProps) {
   const congestionInfo = congestionMap[congestion];
-  const formattedBalance = formatMoneyUnit(balance);
+  const formattedBalance = `₩${balance.toLocaleString()}`;
   const isUrgent = remainingSeconds <= 10;
 
   return (
-    <header className="sticky top-0 z-50 flex h-16 items-center justify-between border-b border-white/40 px-5 shadow-sm glass-panel">
-      <div className="flex items-center gap-3 text-sm font-medium text-slate-600">
-        <div className="flex items-center gap-1.5">
-          <span className="material-symbols-outlined text-[18px] text-primary">location_on</span>
-          <span className="font-bold text-slate-800">{location}</span>
+    <header className="sticky top-0 z-50 flex flex-wrap items-center justify-between gap-2 border-b border-white/40 px-4 py-2 shadow-sm glass-panel">
+      <style>{`
+        @keyframes statPulse {
+          0% { transform: scale(1.3); opacity: 0.6; }
+          50% { transform: scale(1.1); }
+          100% { transform: scale(1); opacity: 1; }
+        }
+        @keyframes menuBounce {
+          0% { transform: scale(0.6) rotate(-8deg); opacity: 0; }
+          40% { transform: scale(1.15) rotate(3deg); opacity: 1; }
+          60% { transform: scale(0.95) rotate(-1deg); }
+          80% { transform: scale(1.05) rotate(0deg); }
+          100% { transform: scale(1) rotate(0deg); opacity: 1; }
+        }
+        @keyframes menuGlow {
+          0% { box-shadow: 0 0 0 0 rgba(168,191,169,0.5); }
+          50% { box-shadow: 0 0 8px 4px rgba(168,191,169,0.3); }
+          100% { box-shadow: 0 0 0 0 rgba(168,191,169,0); }
+        }
+        @keyframes statDeltaFade {
+          0% { opacity: 1; transform: translateY(0); }
+          70% { opacity: 1; transform: translateY(-4px); }
+          100% { opacity: 0; transform: translateY(-10px); }
+        }
+      `}</style>
+      {/* 좌측: 매장 정보 */}
+      <div className="flex items-center gap-2 text-sm font-medium text-slate-600 shrink-0">
+        <div className="flex items-center gap-1">
+          <span className="material-symbols-outlined text-[16px] text-primary">location_on</span>
+          <span className="font-bold text-slate-800 whitespace-nowrap">{location}</span>
         </div>
         <div className="h-3.5 w-px bg-slate-300" />
-        <div className="flex items-center gap-1.5">
-          <span className="material-symbols-outlined text-[18px] text-primary">storefront</span>
-          <span className="font-bold text-slate-800">{storeName}</span>
+        <div className="flex items-center gap-1">
+          <span className="material-symbols-outlined text-[16px] text-primary">storefront</span>
+          <span className="font-bold text-slate-800 truncate max-w-[100px]">{storeName}</span>
         </div>
-        <div className="h-3.5 w-px bg-slate-300" />
-        <div className="flex items-center gap-1.5">
-          <span className="material-symbols-outlined text-[18px] text-primary">restaurant_menu</span>
-          <span className="font-bold text-slate-800">{menuName}</span>
-        </div>
+        <div className="h-3.5 w-px bg-slate-300 hidden sm:block" />
+        <MenuBadge menuName={menuName} />
       </div>
 
-      <div className="absolute left-1/2 flex min-w-[21.25rem] -translate-x-1/2 items-center gap-3.5 rounded-full bg-white/56 px-3.5 py-1 backdrop-blur-sm">
-        <div className="rounded-full border border-primary/20 bg-primary/15 px-3 py-1">
-          <span className="text-[0.95rem] font-extrabold tracking-[0.08em] text-primary-dark">DAY {day}</span>
+      {/* 중앙: DAY + 시계 + 타이머 */}
+      <div className="flex items-center gap-2.5 rounded-full bg-white/56 px-3 py-1 backdrop-blur-sm shrink-0">
+        <div className="rounded-full border border-primary/20 bg-primary/15 px-2.5 py-0.5">
+          <span className="text-sm font-extrabold tracking-[0.08em] text-primary-dark whitespace-nowrap">DAY {day}</span>
         </div>
         <AnalogClock remainingMilliseconds={remainingMilliseconds} />
         <div
-          className={`flex min-w-[6.1rem] flex-col items-center rounded-2xl border px-3 py-1.5 text-center ${
+          className={`flex flex-col items-center rounded-xl border px-2.5 py-1 text-center ${
             isUrgent ? "border-red-200 bg-red-50/90" : "border-slate-100 bg-white/92"
           }`}
         >
           <span
-            className={`text-[10px] font-bold tracking-[0.18em] ${
+            className={`text-[9px] font-bold tracking-[0.18em] ${
               isUrgent ? "text-red-400" : "text-slate-400"
             }`}
           >
             영업중
           </span>
           <span
-            className={`font-countdown text-[1.3rem] font-black tabular-nums leading-none ${
+            className={`font-countdown text-lg font-black tabular-nums leading-none ${
               isUrgent ? "text-red-500" : "text-slate-900"
             }`}
           >
@@ -119,14 +149,15 @@ export default function PlayHeader({
         </div>
       </div>
 
-      <div className="flex items-center gap-6 rounded-xl border border-white/50 bg-white/60 px-6 py-2 shadow-sm backdrop-blur-sm">
+      {/* 우측: 통계 */}
+      <div className="flex items-center gap-3 sm:gap-5 rounded-xl border border-white/50 bg-white/60 px-3 sm:px-5 py-1.5 shadow-sm backdrop-blur-sm shrink-0">
         <StatItem label="유동인구" icon="groups" value={congestionInfo.label} valueColor={congestionInfo.color} />
-        <div className="h-7 w-px bg-slate-200" />
-        <StatItem label="손님" icon="person" value={String(guests)} />
-        <div className="h-7 w-px bg-slate-200" />
-        <StatItem label="재고" icon="inventory_2" value={String(stock)} />
-        <div className="h-7 w-px bg-slate-200" />
-        <StatItem label="잔액" icon="account_balance_wallet" value={formattedBalance} />
+        <div className="h-6 w-px bg-slate-200" />
+        <StatItem label="손님" icon="person" value={String(guests)} delta={guestsDelta} />
+        <div className="h-6 w-px bg-slate-200" />
+        <StatItem label="재고" icon="inventory_2" value={String(stock)} delta={stockDelta} />
+        <div className="h-6 w-px bg-slate-200" />
+        <StatItem label="잔액" icon="account_balance_wallet" value={formattedBalance} delta={balanceDelta} />
       </div>
     </header>
   );
@@ -249,19 +280,84 @@ function StatItem({
   icon,
   value,
   valueColor,
+  delta,
 }: {
   label: string;
   icon: string;
   value: string;
   valueColor?: string;
+  delta?: number | null;
 }) {
+  const [showDelta, setShowDelta] = useState(false);
+  const [displayDelta, setDisplayDelta] = useState<number>(0);
+  const [animKey, setAnimKey] = useState(0);
+  const prevValueRef = useRef(value);
+
+  useEffect(() => {
+    if (prevValueRef.current !== value) {
+      setAnimKey((k) => k + 1);
+      prevValueRef.current = value;
+    }
+  }, [value]);
+
+  useEffect(() => {
+    if (delta != null && delta !== 0) {
+      setDisplayDelta(delta);
+      setShowDelta(true);
+      const timer = setTimeout(() => setShowDelta(false), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [delta]);
+
   return (
-    <div className="flex min-w-[3.75rem] flex-col items-center">
+    <div className="flex min-w-[3.75rem] flex-col items-center relative">
+      {showDelta && displayDelta !== 0 && (
+        <span
+          className={`absolute -top-3 text-[10px] font-bold animate-[statDeltaFade_3s_ease-out_forwards] ${
+            displayDelta > 0 ? "text-red-500" : "text-blue-500"
+          }`}
+        >
+          {displayDelta > 0 ? `+${displayDelta.toLocaleString()}` : displayDelta.toLocaleString()}
+        </span>
+      )}
       <span className="text-[10px] font-bold tracking-[0.14em] text-slate-400">{label}</span>
       <div className="flex items-center gap-1 whitespace-nowrap">
         <span className="material-symbols-outlined text-[14px] text-slate-400">{icon}</span>
-        <span className={`text-sm font-bold ${valueColor || "text-slate-800"}`}>{value}</span>
+        <span
+          key={animKey}
+          className={`text-sm font-bold ${valueColor || "text-slate-800"}`}
+          style={animKey > 0 ? { animation: "statPulse 0.4s ease-out" } : undefined}
+        >
+          {value}
+        </span>
       </div>
+    </div>
+  );
+}
+
+function MenuBadge({ menuName }: { menuName: string }) {
+  const [animKey, setAnimKey] = useState(0);
+  const prevRef = useRef(menuName);
+
+  useEffect(() => {
+    if (prevRef.current !== menuName && menuName) {
+      prevRef.current = menuName;
+      setAnimKey((k) => k + 1);
+    }
+  }, [menuName]);
+
+  return (
+    <div className="hidden sm:flex items-center gap-1 relative">
+      <span className="material-symbols-outlined text-[16px] text-primary">restaurant_menu</span>
+      <span
+        key={animKey}
+        className="font-bold text-slate-800 whitespace-nowrap rounded-md px-1"
+        style={animKey > 0 ? {
+          animation: "menuBounce 0.6s ease-out, menuGlow 1.5s ease-out",
+        } : undefined}
+      >
+        {menuName}
+      </span>
     </div>
   );
 }

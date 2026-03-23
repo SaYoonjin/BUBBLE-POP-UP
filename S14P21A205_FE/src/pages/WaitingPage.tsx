@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import CountdownTimer from "../components/common/CountdownTimer";
 import { LOCATION_SELECTION_DEADLINE_STORAGE_KEY } from "../constants";
 import type { WaitingRouteState } from "../types/waiting";
@@ -23,15 +23,6 @@ export default function WaitingPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const routeState = isWaitingRouteState(location.state) ? location.state : null;
-  const backHref =
-    routeState?.mode === "next_business_day"
-      ? "/"
-      : "/game/setup/location";
-  const backLabel =
-    routeState?.mode === "next_business_day"
-      ? "대시보드로 돌아가기"
-      : "지역 선택으로 돌아가기";
-
   const content = useMemo(() => {
     if (!routeState) {
       return {
@@ -172,17 +163,13 @@ export default function WaitingPage() {
             </div>
           </div>
 
-          <div className="mt-8 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-5">
-            <p className="text-sm text-slate-400">
-              진행 상태를 유지하려면 이 화면을 닫지 마세요.
-            </p>
-            <Link
-              to={backHref}
-              className="inline-flex h-11 items-center justify-center rounded-2xl border border-slate-200 px-4 text-sm font-semibold text-slate-600 transition-colors hover:border-slate-300 hover:text-slate-900"
-            >
-              {backLabel}
-            </Link>
-          </div>
+          {routeState?.mode === "prep_locked" && (
+            <div className="mt-8 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-5">
+              <p className="text-sm text-slate-400">
+                설정 시간이 끝나면 자동으로 이동합니다.
+              </p>
+            </div>
+          )}
         </div>
       </div>
     </div>

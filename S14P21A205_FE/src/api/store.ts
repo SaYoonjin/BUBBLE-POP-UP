@@ -5,6 +5,7 @@ export interface StoreResponse {
   popupName: string;
   menu: string;
   day: number;
+  playableFromDay: number;
 }
 
 export interface StoreMenuResponse {
