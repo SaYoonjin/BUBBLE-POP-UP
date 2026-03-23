@@ -51,7 +51,6 @@ import {
   elapsedToGameTime,
 } from "../constants/gameTime";
 import { setWeather, startDay, spawnShopAtIndex } from "../utils/unity";
-import { BUSINESS_SECONDS, DAY_SECONDS, elapsedToGameTime } from "../constants/gameTime";
 import useBrandName from "../hooks/useBrandName";
 import { useUserStore } from "../stores/useUserStore";
 import { normalizeDiscountMultiplier } from "../utils/dashboardItems";
