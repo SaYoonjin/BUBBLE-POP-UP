@@ -257,10 +257,10 @@ public final class GameDayTestFixtures {
                         "0.00",
                         "1.05",
                         0,
-                        EventStartTime.IMMEDIATE,
+                        EventStartTime.NEXT_DAY,
                         EventEndTime.SEASON_END
                 ),
-                CURRENT_DAY,
+                CURRENT_DAY - 1,
                 0,
                 null,
                 null,
