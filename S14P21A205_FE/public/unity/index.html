@@ -25,6 +25,37 @@
     </div>
     <script>
       var canvas = document.querySelector("#unity-canvas");
+      window.unityApp = {
+        instance: null,
+        isReady: false,
+        sendMessage: function(methodName, payload) {
+          if (!this.instance) return false;
+          this.instance.SendMessage("WebGLBridge", methodName, payload);
+          return true;
+        },
+      };
+
+      function notifyParent(type, payload) {
+        if (window.parent && window.parent !== window) {
+          window.parent.postMessage(
+            Object.assign({ source: "unity-webgl", type: type }, payload || {}),
+            window.location.origin,
+          );
+        }
+      }
+
+      function dispatchPopupArrival(popupStoreIndex) {
+        var parsedPopupStoreIndex = Number(popupStoreIndex);
+
+        notifyParent("popup-arrival", {
+          popupStoreIndex: Number.isFinite(parsedPopupStoreIndex) ? parsedPopupStoreIndex : null,
+        });
+      }
+
+      window.notifyPopupArrival = dispatchPopupArrival;
+      window.NotifyPopupArrival = dispatchPopupArrival;
+      window.SendPopupArrivalSignal = dispatchPopupArrival;
+      window.unityApp.notifyPopupArrival = dispatchPopupArrival;
 
       // Shows a temporary message banner/ribbon for a few seconds, or
       // a permanent error message on top of the canvas if type=='error'.
@@ -147,6 +178,9 @@
                   parent.postMessage({ type: "unityReady" }, "*");
                 }, 3000);
                 document.querySelector("#unity-loading-bar").style.display = "none";
+                window.unityApp.instance = unityInstance;
+                window.unityApp.isReady = true;
+                notifyParent("ready");
                 document.querySelector("#unity-fullscreen-button").onclick = () => {
                   unityInstance.SetFullscreen(1);
                 };

@@ -106,6 +106,13 @@ class GameDayStateServiceTests {
                 ))
                 .thenReturn(List.of());
         org.mockito.Mockito.lenient()
+                .when(orderRepository.findByStoreIdAndOrderedDayAndOrderTypeOrderByArrivedTimeAscIdAsc(
+                        org.mockito.ArgumentMatchers.anyLong(),
+                        org.mockito.ArgumentMatchers.anyInt(),
+                        org.mockito.ArgumentMatchers.eq(OrderType.EMERGENCY)
+                ))
+                .thenReturn(List.of());
+        org.mockito.Mockito.lenient()
                 .when(gameDayStartService.ensureCurrentDayState(any(), any(), any()))
                 .thenReturn(Optional.empty());
         org.mockito.Mockito.lenient()
@@ -418,6 +425,11 @@ class GameDayStateServiceTests {
                 GameDayTestFixtures.STORE_ID,
                 OrderType.EMERGENCY
         )).thenReturn(List.of(pendingEmergencyOrder));
+        when(orderRepository.findByStoreIdAndOrderedDayAndOrderTypeOrderByArrivedTimeAscIdAsc(
+                GameDayTestFixtures.STORE_ID,
+                GameDayTestFixtures.CURRENT_DAY,
+                OrderType.EMERGENCY
+        )).thenReturn(List.of(pendingEmergencyOrder));
         when(actionLogRepository.findByStore_IdAndGameDayAndIsUsedTrue(GameDayTestFixtures.STORE_ID, GameDayTestFixtures.CURRENT_DAY))
                 .thenReturn(List.of());
         when(dailyEventRepository.findBySeasonIdAndDayBetweenOrderByDayAscIdAsc(
@@ -434,6 +446,131 @@ class GameDayStateServiceTests {
         assertThat(response.actionStatus().emergencyOrderPending()).isTrue();
         assertThat(response.actionStatus().emergencyOrderArriveAt())
                 .isEqualTo(LocalDateTime.of(2026, 3, 17, 10, 1, 20));
+    }
+
+    @Test
+    void getGameStateUsesRedisActionStatusAndSeparatesEmergencyUsedFromPending() {
+        gameDayStateService = createService(GameDayTestFixtures.fixedClockAt(LocalDateTime.of(2026, 3, 17, 10, 0, 55)));
+
+        User user = GameDayTestFixtures.user(GameDayTestFixtures.USER_ID);
+        User dummyUser = GameDayTestFixtures.user(GameDayTestFixtures.DUMMY_USER_ID);
+        Location location = GameDayTestFixtures.location();
+        Menu menu = GameDayTestFixtures.menu();
+        Season season = GameDayTestFixtures.season();
+        Store store = GameDayTestFixtures.store(user, season, location, menu);
+        Store dummyStore = GameDayTestFixtures.dummyStore(dummyUser, season, location, menu);
+        GameDayLiveState state = GameDayTestFixtures.liveState(
+                GameDayTestFixtures.startResponse(List.of()),
+                GameDayTestFixtures.fixedPurchaseList(),
+                GameDayTestFixtures.DAY4_STARTED_AT
+        );
+        Order pendingEmergencyOrder = Order.createEmergency(
+                store.getMenu(),
+                store,
+                20,
+                63_000,
+                2_800,
+                GameDayTestFixtures.CURRENT_DAY,
+                LocalDateTime.of(2026, 3, 17, 10, 1, 20)
+        );
+
+        when(userService.getCurrentUser(any())).thenReturn(user);
+        when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(
+                GameDayTestFixtures.USER_ID,
+                SeasonStatus.IN_PROGRESS
+        )).thenReturn(Optional.of(store));
+        when(storeRepository.findBySeason_IdOrderByIdAsc(GameDayTestFixtures.SEASON_ID))
+                .thenReturn(List.of(store, dummyStore));
+        when(gameDayStoreStateRedisRepository.find(GameDayTestFixtures.STORE_ID, GameDayTestFixtures.CURRENT_DAY))
+                .thenReturn(Optional.of(state));
+        when(gameDayStoreStateRedisRepository.getActions(GameDayTestFixtures.STORE_ID, GameDayTestFixtures.CURRENT_DAY))
+                .thenReturn(Map.of("discount", true, "promotion", true));
+        when(orderRepository.findDailyStartOrder(GameDayTestFixtures.STORE_ID, GameDayTestFixtures.CURRENT_DAY))
+                .thenReturn(Optional.of(GameDayTestFixtures.dailyStartOrder(store)));
+        when(orderRepository.findByStoreIdAndOrderTypeOrderByArrivedTimeAscIdAsc(
+                GameDayTestFixtures.STORE_ID,
+                OrderType.EMERGENCY
+        )).thenReturn(List.of(pendingEmergencyOrder));
+        when(orderRepository.findByStoreIdAndOrderedDayAndOrderTypeOrderByArrivedTimeAscIdAsc(
+                GameDayTestFixtures.STORE_ID,
+                GameDayTestFixtures.CURRENT_DAY,
+                OrderType.EMERGENCY
+        )).thenReturn(List.of(pendingEmergencyOrder));
+        when(actionLogRepository.findByStore_IdAndGameDayAndIsUsedTrue(GameDayTestFixtures.STORE_ID, GameDayTestFixtures.CURRENT_DAY))
+                .thenReturn(List.of());
+        when(dailyEventRepository.findBySeasonIdAndDayBetweenOrderByDayAscIdAsc(
+                GameDayTestFixtures.SEASON_ID,
+                1,
+                GameDayTestFixtures.CURRENT_DAY
+        )).thenReturn(List.of());
+
+        GameStateResponse response = gameDayStateService.getGameState(mock(Authentication.class));
+
+        assertThat(response.actionStatus().discountUsed()).isTrue();
+        assertThat(response.actionStatus().donationUsed()).isFalse();
+        assertThat(response.actionStatus().promotionUsed()).isTrue();
+        assertThat(response.actionStatus().emergencyUsed()).isFalse();
+        assertThat(response.actionStatus().emergencyOrderPending()).isTrue();
+    }
+
+    @Test
+    void getGameStateDoesNotExposePreviousDayEmergencyOrderAsTodayPendingStatus() {
+        gameDayStateService = createService(GameDayTestFixtures.fixedClockAt(LocalDateTime.of(2026, 3, 17, 10, 0, 55)));
+
+        User user = GameDayTestFixtures.user(GameDayTestFixtures.USER_ID);
+        User dummyUser = GameDayTestFixtures.user(GameDayTestFixtures.DUMMY_USER_ID);
+        Location location = GameDayTestFixtures.location();
+        Menu menu = GameDayTestFixtures.menu();
+        Season season = GameDayTestFixtures.season();
+        Store store = GameDayTestFixtures.store(user, season, location, menu);
+        Store dummyStore = GameDayTestFixtures.dummyStore(dummyUser, season, location, menu);
+        GameDayLiveState state = GameDayTestFixtures.liveState(
+                GameDayTestFixtures.startResponse(List.of()),
+                GameDayTestFixtures.fixedPurchaseList(),
+                GameDayTestFixtures.DAY4_STARTED_AT
+        );
+        Order previousDayPendingEmergencyOrder = Order.createEmergency(
+                store.getMenu(),
+                store,
+                20,
+                63_000,
+                2_800,
+                GameDayTestFixtures.CURRENT_DAY - 1,
+                LocalDateTime.of(2026, 3, 17, 10, 1, 20)
+        );
+
+        when(userService.getCurrentUser(any())).thenReturn(user);
+        when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(
+                GameDayTestFixtures.USER_ID,
+                SeasonStatus.IN_PROGRESS
+        )).thenReturn(Optional.of(store));
+        when(storeRepository.findBySeason_IdOrderByIdAsc(GameDayTestFixtures.SEASON_ID))
+                .thenReturn(List.of(store, dummyStore));
+        when(gameDayStoreStateRedisRepository.find(GameDayTestFixtures.STORE_ID, GameDayTestFixtures.CURRENT_DAY))
+                .thenReturn(Optional.of(state));
+        when(orderRepository.findDailyStartOrder(GameDayTestFixtures.STORE_ID, GameDayTestFixtures.CURRENT_DAY))
+                .thenReturn(Optional.of(GameDayTestFixtures.dailyStartOrder(store)));
+        when(orderRepository.findByStoreIdAndOrderTypeOrderByArrivedTimeAscIdAsc(
+                GameDayTestFixtures.STORE_ID,
+                OrderType.EMERGENCY
+        )).thenReturn(List.of(previousDayPendingEmergencyOrder));
+        when(orderRepository.findByStoreIdAndOrderedDayAndOrderTypeOrderByArrivedTimeAscIdAsc(
+                GameDayTestFixtures.STORE_ID,
+                GameDayTestFixtures.CURRENT_DAY,
+                OrderType.EMERGENCY
+        )).thenReturn(List.of());
+        when(actionLogRepository.findByStore_IdAndGameDayAndIsUsedTrue(GameDayTestFixtures.STORE_ID, GameDayTestFixtures.CURRENT_DAY))
+                .thenReturn(List.of());
+        when(dailyEventRepository.findBySeasonIdAndDayBetweenOrderByDayAscIdAsc(
+                GameDayTestFixtures.SEASON_ID,
+                1,
+                GameDayTestFixtures.CURRENT_DAY
+        )).thenReturn(List.of());
+
+        GameStateResponse response = gameDayStateService.getGameState(mock(Authentication.class));
+
+        assertThat(response.actionStatus().emergencyOrderPending()).isFalse();
+        assertThat(response.actionStatus().emergencyOrderArriveAt()).isNull();
     }
 
     @Test
