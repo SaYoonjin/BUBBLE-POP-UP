@@ -7,6 +7,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface DailyEventRepository extends JpaRepository<DailyEvent, Long> {
 
+    boolean existsBySeasonId(Long seasonId);
+
     void deleteBySeasonId(Long seasonId);
 
     @EntityGraph(attributePaths = {"event"})
