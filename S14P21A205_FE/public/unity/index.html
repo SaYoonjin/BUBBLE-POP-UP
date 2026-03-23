@@ -154,8 +154,9 @@
 
       } else {
         // Desktop style: Render the game canvas in a window that can be maximized to fullscreen:
-        canvas.style.width = "960px";
-        canvas.style.height = "600px";
+        document.querySelector("#unity-container").className = "unity-desktop";
+        canvas.style.width = "100%";
+        canvas.style.height = "100%";
       }
 
       document.querySelector("#unity-loading-bar").style.display = "block";
@@ -184,6 +185,20 @@
                 document.querySelector("#unity-fullscreen-button").onclick = () => {
                   unityInstance.SetFullscreen(1);
                 };
+
+                // FE에서 postMessage로 Unity 제어 가능하게
+                window.addEventListener("message", function(event) {
+                  if (event.data && event.data.type === "unity") {
+                    unityInstance.SendMessage(
+                      event.data.gameObject || "WebGLBridge",
+                      event.data.method,
+                      event.data.payload || ""
+                    );
+                  }
+                });
+
+                // 준비 완료 알림
+                window.parent.postMessage({ type: "unity-ready" }, "*");
 
               }).catch((message) => {
                 alert(message);
