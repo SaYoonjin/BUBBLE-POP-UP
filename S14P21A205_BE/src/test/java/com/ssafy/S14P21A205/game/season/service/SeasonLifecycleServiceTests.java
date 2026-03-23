@@ -162,6 +162,31 @@ class SeasonLifecycleServiceTests {
     }
 
     @Test
+    void synchronizeBootstrapsInitialScheduledSeasonWhenNoSeasonExists() {
+        LocalDateTime now = LocalDateTime.of(2026, 3, 18, 10, 0, 0);
+        LocalDateTime expectedSeasonStartAt = now.plusMinutes(5);
+        LocalDateTime expectedSeasonEndAt = expectedSeasonStartAt.plusMinutes(30);
+
+        seasonLifecycleService = createService(Clock.fixed(now.atZone(ZoneId.of("Asia/Seoul")).toInstant(), ZoneId.of("Asia/Seoul")));
+
+        when(seasonRepository.findFirstByStatusOrderByIdDesc(SeasonStatus.IN_PROGRESS)).thenReturn(Optional.empty());
+        when(seasonRepository.findFirstByStatusOrderByStartTimeAscIdAsc(SeasonStatus.SCHEDULED)).thenReturn(Optional.empty());
+        when(seasonRepository.findFirstByOrderByIdDesc()).thenReturn(Optional.empty());
+        when(seasonRepository.save(any(Season.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        seasonLifecycleService.synchronize();
+
+        ArgumentCaptor<Season> initialSeasonCaptor = ArgumentCaptor.forClass(Season.class);
+        verify(seasonRepository).save(initialSeasonCaptor.capture());
+        Season initialSeason = initialSeasonCaptor.getValue();
+        assertThat(initialSeason.getStatus()).isEqualTo(SeasonStatus.SCHEDULED);
+        assertThat(initialSeason.getCurrentDay()).isEqualTo(1);
+        assertThat(initialSeason.getTotalDays()).isEqualTo(7);
+        assertThat(initialSeason.getStartTime()).isEqualTo(expectedSeasonStartAt);
+        assertThat(initialSeason.getEndTime()).isEqualTo(expectedSeasonEndAt);
+    }
+
+    @Test
     void prepareScheduledSeasonIfNeededBuildsDailyEventsBeforeGeneratingNews() {
         LocalDateTime seasonStartAt = LocalDateTime.of(2026, 3, 18, 10, 0, 0);
         LocalDateTime now = seasonStartAt.minusMinutes(1);
