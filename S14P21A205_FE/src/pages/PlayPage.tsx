@@ -1,6 +1,7 @@
-import axios from "axios";
+import axios, { type AxiosError } from "axios";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useOutletContext, useParams } from "react-router-dom";
+import { GAME_EXIT_CODES } from "../api/client";
 import type { GameGuardContext } from "../router/GameGuard";
 import PlayHeader from "../components/play/PlayHeader";
 import EventSidebar, { type GameAlert } from "../components/play/EventSidebar";
@@ -941,6 +942,8 @@ function PlayPageSession({
       setMoveDataError(null);
 
       let startErrorMessage: string | null = null;
+      let dayStartFallbackBalance: number | null = null;
+      let dayStartFallbackStock: number | null = null;
 
       try {
         const dayStartRes = await startGameDay();
@@ -949,6 +952,13 @@ function PlayPageSession({
         }
         if (isActive) {
           setDayWeatherType(dayStartRes.weatherType ?? null);
+          // fallback용으로만 저장 (getGameDayState 실패 시 사용)
+          if (typeof dayStartRes.initialBalance === "number") {
+            dayStartFallbackBalance = dayStartRes.initialBalance;
+          }
+          if (typeof dayStartRes.initialStock === "number") {
+            dayStartFallbackStock = dayStartRes.initialStock;
+          }
         }
       } catch (error) {
         startErrorMessage = getErrorMessage(error, "영업 상태를 준비하지 못했습니다.");
@@ -979,6 +989,15 @@ function PlayPageSession({
       if (stateResult.status === "fulfilled") {
         applyGameState(stateResult.value);
       } else {
+        // getGameDayState 실패 시 startGameDay의 initialBalance/Stock을 fallback으로 사용
+        if (dayStartFallbackBalance !== null) {
+          setBalance(dayStartFallbackBalance);
+          prevBalanceRef.current = dayStartFallbackBalance;
+        }
+        if (dayStartFallbackStock !== null) {
+          setStock(dayStartFallbackStock);
+          prevStockRef.current = dayStartFallbackStock;
+        }
         setTrafficStatus(null);
         setDeliveryTrafficLabel(null);
         setEmergencyArriveAt(null);
@@ -1149,8 +1168,12 @@ function PlayPageSession({
       try {
         const state = await getGameDayState();
         applyGameState(state);
-      } catch {
-        // 폴링 실패 무시
+      } catch (err) {
+        // 파산/시즌종료 에러 코드 → 메인으로 이동
+        const code = (err as AxiosError<{ code?: string }>)?.response?.data?.code;
+        if (code && GAME_EXIT_CODES.has(code)) {
+          window.location.href = "/";
+        }
       }
     };
 
