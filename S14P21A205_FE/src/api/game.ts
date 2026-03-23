@@ -102,7 +102,7 @@ export interface GameDayReportResponse {
   stockRemaining: number;
   stockDisposedCount: number;
   capture_rate: number;
-  reputationChange: number;
+  change_capture_rate: number;
   dailyRevenue: {
     first: number;
     second: number;
