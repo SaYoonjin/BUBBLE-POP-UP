@@ -263,15 +263,6 @@ function buildPromotionOptions(prices?: Partial<Record<PromotionType, number>>):
   }));
 }
 
-function isPromotionUsed(actionStatus: GameStateResponse["actionStatus"]) {
-  return (
-    actionStatus.influencerUsed ||
-    actionStatus.snsUsed ||
-    actionStatus.leafletUsed ||
-    actionStatus.friendUsed
-  );
-}
-
 const LOCATION_ICON_MAP: Record<string, string> = {
   홍대: "🎸",
   신도림: "🚉",
@@ -547,10 +538,7 @@ function PlayPageSession({
   const discountCurrentPrice = currentOrder?.sellingPrice ?? 0;
   const discountMinimumPrice = currentOrder?.costPrice ?? discountCurrentPrice;
 
-  const syncPersistentActionState = (
-    action: Extract<ActionType, "discount" | "promotion" | "share">,
-    isUsed: boolean,
-  ) => {
+  const syncActionUsageState = (action: ActionType, isUsed: boolean) => {
     setUsedActions((prev) => {
       const next = new Set(prev);
 
@@ -562,6 +550,10 @@ function PlayPageSession({
 
       return next;
     });
+
+    if (!persistentActionTypes.has(action)) {
+      return;
+    }
 
     setActiveEffects((prev) => {
       const next = new Set(prev);
@@ -577,15 +569,19 @@ function PlayPageSession({
   };
 
   const syncDiscountActionState = (discountUsed: boolean) => {
-    syncPersistentActionState("discount", discountUsed);
+    syncActionUsageState("discount", discountUsed);
   };
 
   const syncPromotionActionState = (promotionUsed: boolean) => {
-    syncPersistentActionState("promotion", promotionUsed);
+    syncActionUsageState("promotion", promotionUsed);
   };
 
   const syncShareActionState = (donationUsed: boolean) => {
-    syncPersistentActionState("share", donationUsed);
+    syncActionUsageState("share", donationUsed);
+  };
+
+  const syncEmergencyActionState = (emergencyUsed: boolean) => {
+    syncActionUsageState("emergency", emergencyUsed);
   };
 
   const [guestsDelta, setGuestsDelta] = useState<number | null>(null);
@@ -797,17 +793,9 @@ function PlayPageSession({
       return Date.now() < currentArriveMs ? current : null;
     });
     syncDiscountActionState(state.actionStatus.discountUsed);
-    syncPromotionActionState(isPromotionUsed(state.actionStatus));
+    syncPromotionActionState(state.actionStatus.promotionUsed);
     syncShareActionState(state.actionStatus.donationUsed);
-
-    // 긴급발주 사용 여부 동기화
-    if (state.actionStatus.emergencyOrderPending || state.actionStatus.emergencyOrderArriveAt) {
-      setUsedActions((prev) => {
-        const next = new Set(prev);
-        next.add("emergency");
-        return next;
-      });
-    }
+    syncEmergencyActionState(state.actionStatus.emergencyUsed);
 
     // 이전 일차에서 이어지는 이벤트를 carry-over 알림으로 표시 (최초 1회)
     if (!hasLoadedCarryOverRef.current && state.appliedEvents.length > 0) {
@@ -949,6 +937,7 @@ function PlayPageSession({
         syncDiscountActionState(false);
         syncPromotionActionState(false);
         syncShareActionState(false);
+        syncEmergencyActionState(false);
       }
 
       if (orderResult.status === "fulfilled") {

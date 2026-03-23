@@ -20,7 +20,7 @@ import {
 } from "../utils/dashboardItems";
 
 const DEFAULT_PREP_DAY = 1;
-const INITIAL_CAPITAL = 10_000_000;
+const INITIAL_CAPITAL = 5_000_000;
 const PREP_SECONDS = 50;
 const BUSINESS_SECONDS = 120;
 const REPORT_SECONDS = 10;
