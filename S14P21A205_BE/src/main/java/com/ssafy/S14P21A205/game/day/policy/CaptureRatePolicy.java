@@ -7,7 +7,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class CaptureRatePolicy {
 
-    private static final BigDecimal BASE_CAPTURE_RATE = new BigDecimal("0.10");
+    private static final BigDecimal BASE_CAPTURE_RATE = new BigDecimal("0.50");
     private static final BigDecimal DECIMAL_ZERO = new BigDecimal("0.00");
     private static final BigDecimal DECIMAL_ONE = new BigDecimal("1.00");
 

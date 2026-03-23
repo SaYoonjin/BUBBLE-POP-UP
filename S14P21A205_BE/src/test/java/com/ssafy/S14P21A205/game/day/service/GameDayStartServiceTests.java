@@ -208,13 +208,13 @@ class GameDayStartServiceTests {
         assertThat(response.startTime()).isEqualTo("10:00");
         assertThat(response.endTime()).isEqualTo("22:00");
         assertThat(response.weatherMultiplier()).isEqualByComparingTo("1.10");
-        assertThat(response.captureRate()).isEqualByComparingTo("0.10");
+        assertThat(response.captureRate()).isEqualByComparingTo("0.50");
         assertThat(response.hourlySchedule().get("10").population()).isEqualTo(500);
         assertThat(response.hourlySchedule().get("11").trafficMultiplier()).isEqualByComparingTo("0.86");
         assertThat(response.hourlySchedule().get("10").effectivePopulation()).isEqualTo(627);
         assertThat(response.hourlySchedule().get("11").effectivePopulation()).isEqualTo(615);
         assertThat(response.initialStock()).isEqualTo(0);
-        assertThat(response.initialBalance()).isEqualTo(9_660_000);
+        assertThat(response.initialBalance()).isEqualTo(4_670_000);
         assertThat(response.eventSchedule()).hasSize(2);
         assertThat(response.eventSchedule().get(0).type()).isEqualTo("celebrity");
         assertThat(response.eventSchedule().get(0).scope()).isNull();
@@ -225,7 +225,7 @@ class GameDayStartServiceTests {
         assertThat(response.marketSnapshot().avgMenuPrice()).isEqualTo(4_500);
         assertThat(response.marketSnapshot().regionStoreCount()).isEqualTo(1);
         assertThat(response.openingSummary().dailyRentApplied()).isEqualTo(130_000);
-        assertThat(response.openingSummary().interiorCost()).isEqualTo(200_000);
+        assertThat(response.openingSummary().interiorCost()).isZero();
         assertThat(response.openingSummary().appliedUnitCost()).isEqualTo(2_400);
 
         verify(gameDayStoreStateRedisRepository, never()).save(any(), any(), any());
@@ -447,7 +447,7 @@ class GameDayStartServiceTests {
         when(dailyEventRepository.findBySeasonIdAndDayBetweenOrderByDayAscIdAsc(9L, 1, 1)).thenReturn(List.of());
         GameDayStartResponse response = gameDayStartService.startDay(mock(Authentication.class));
 
-        assertThat(response.initialBalance()).isEqualTo(9_372_000);
+        assertThat(response.initialBalance()).isEqualTo(4_382_000);
         assertThat(response.initialStock()).isEqualTo(120);
         assertThat(response.openingSummary().regularOrderCost()).isEqualTo(288_000);
     }
@@ -505,7 +505,7 @@ class GameDayStartServiceTests {
 
         assertThat(response.marketSnapshot().locationPopularityRank()).isEqualTo(2);
         assertThat(response.marketSnapshot().menuTrendRank()).isEqualTo(2);
-        assertThat(response.captureRate()).isEqualByComparingTo("0.1100");
+        assertThat(response.captureRate()).isEqualByComparingTo("0.5500");
         assertThat(response.openingSummary().dailyRentApplied()).isEqualTo(120_000);
         assertThat(response.openingSummary().interiorCost()).isZero();
         assertThat(response.openingSummary().appliedUnitCost()).isEqualTo(2_200);

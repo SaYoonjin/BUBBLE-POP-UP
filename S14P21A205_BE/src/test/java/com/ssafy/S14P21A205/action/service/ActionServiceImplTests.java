@@ -133,7 +133,7 @@ class ActionServiceImplTests {
         assertThat(response.priceRange()).isEqualTo("ABOVE");
         assertThat(response.priceRangeMultiplier()).isEqualByComparingTo("0.01");
         verify(gameDayStoreStateRedisRepository).updateField(15L, 2, "sale_price", "4000");
-        verify(gameDayStoreStateRedisRepository).updateField(15L, 2, "capture_rate", "0.0010");
+        verify(gameDayStoreStateRedisRepository).updateField(15L, 2, "capture_rate", "0.0050");
         verify(gameDayStoreStateRedisRepository).markActionUsed(15L, 2, "discount");
         verify(gameDayStoreStateRedisRepository).saveBalance(15L, 2, 499_500L);
     }
@@ -156,7 +156,7 @@ class ActionServiceImplTests {
         assertThat(response.newPrice()).isEqualTo(4_600);
         assertThat(response.priceRange()).isEqualTo("ABOVE");
         assertThat(response.priceRangeMultiplier()).isEqualByComparingTo("0.80");
-        verify(gameDayStoreStateRedisRepository).updateField(15L, 2, "capture_rate", "0.0800");
+        verify(gameDayStoreStateRedisRepository).updateField(15L, 2, "capture_rate", "0.4000");
     }
 
     @Test
@@ -177,7 +177,7 @@ class ActionServiceImplTests {
         assertThat(response.newPrice()).isEqualTo(4_000);
         assertThat(response.priceRange()).isEqualTo("AVERAGE");
         assertThat(response.priceRangeMultiplier()).isEqualByComparingTo("1.00");
-        verify(gameDayStoreStateRedisRepository).updateField(15L, 2, "capture_rate", "0.1000");
+        verify(gameDayStoreStateRedisRepository).updateField(15L, 2, "capture_rate", "0.5000");
     }
 
     @Test
@@ -198,7 +198,7 @@ class ActionServiceImplTests {
         assertThat(response.newPrice()).isEqualTo(3_400);
         assertThat(response.priceRange()).isEqualTo("BELOW");
         assertThat(response.priceRangeMultiplier()).isEqualByComparingTo("1.20");
-        verify(gameDayStoreStateRedisRepository).updateField(15L, 2, "capture_rate", "0.1200");
+        verify(gameDayStoreStateRedisRepository).updateField(15L, 2, "capture_rate", "0.6000");
     }
 
     @Test
@@ -221,7 +221,7 @@ class ActionServiceImplTests {
         assertThat(response.priceRange()).isEqualTo("BELOW");
         assertThat(response.priceRangeMultiplier()).isEqualByComparingTo("1.30");
         verify(gameDayStoreStateRedisRepository).updateField(15L, 2, "sale_price", "1500");
-        verify(gameDayStoreStateRedisRepository).updateField(15L, 2, "capture_rate", "0.1300");
+        verify(gameDayStoreStateRedisRepository).updateField(15L, 2, "capture_rate", "0.6500");
         verify(gameDayStoreStateRedisRepository).markActionUsed(15L, 2, "discount");
     }
 
@@ -257,7 +257,7 @@ class ActionServiceImplTests {
         assertThat(response.quantity()).isEqualTo(25);
         assertThat(response.captureRateBonus()).isEqualByComparingTo("0.10");
         verify(gameDayStoreStateRedisRepository).updateField(15L, 2, "stock", "25");
-        verify(gameDayStoreStateRedisRepository).updateField(15L, 2, "capture_rate", "0.1100");
+        verify(gameDayStoreStateRedisRepository).updateField(15L, 2, "capture_rate", "0.5500");
         verify(gameDayStoreStateRedisRepository).markActionUsed(15L, 2, "donation");
         verify(gameDayStoreStateRedisRepository).saveBalance(15L, 2, 500_000L);
     }
@@ -455,7 +455,7 @@ class ActionServiceImplTests {
         verify(gameDayStoreStateRedisRepository).saveBalance(
                 GameDayTestFixtures.STORE_ID,
                 GameDayTestFixtures.CURRENT_DAY,
-                9_324_400L
+                4_914_400L
         );
     }
 
@@ -480,16 +480,16 @@ class ActionServiceImplTests {
                         "SUNNY",
                         BigDecimal.ONE,
                         BigDecimal.ONE,
-                        new BigDecimal("0.10"),
+                        new BigDecimal("0.50"),
                         List.of(),
-                        10_000_000,
+                        5_000_000,
                         50,
                         null,
                         null
                 ),
                 0,
                 0,
-                new BigDecimal("0.10"),
+                new BigDecimal("0.50"),
                 4_000,
                 0,
                 List.of(),

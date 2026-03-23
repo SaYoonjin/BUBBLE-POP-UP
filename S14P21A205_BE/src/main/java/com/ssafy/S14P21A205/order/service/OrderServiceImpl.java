@@ -294,9 +294,9 @@ public class OrderServiceImpl implements OrderService {
                 marketRankingPolicy.resolveRentMultiplier(locationRank),
                 getRentDiscountRate(store.getUser().getId())
         );
-        int interiorCost = resolveInteriorCost(store, day);
 
-        if (carriedBalance - dailyRentApplied - interiorCost < totalCost) {
+        // Interior costs are already deducted from the live balance when they are incurred.
+        if (carriedBalance - dailyRentApplied < totalCost) {
             throw new BaseException(ErrorCode.ORDER_INSUFFICIENT_BALANCE);
         }
     }
@@ -375,28 +375,6 @@ public class OrderServiceImpl implements OrderService {
 
         return Math.addExact(carriedStock, orderedStock);
     }
-
-    private int resolveInteriorCost(Store store, int day) {
-        if (store.getLocation() == null || store.getLocation().getInteriorCost() == null) {
-            return 0;
-        }
-        if (day == 1) {
-            return store.getLocation().getInteriorCost();
-        }
-
-        return dailyReportRepository.findByStoreIdAndDay(store.getId(), day - 1)
-                .map(report -> {
-                    String previousLocationName = report.getLocationName();
-                    if (previousLocationName == null || previousLocationName.isBlank()) {
-                        return 0;
-                    }
-                    return previousLocationName.equals(store.getLocation().getLocationName())
-                            ? 0
-                            : store.getLocation().getInteriorCost();
-                })
-                .orElseThrow(() -> new BaseException(ErrorCode.REPORT_NOT_FOUND, "Previous day report not found."));
-    }
-
     private record PricingPolicy(
             int costPrice,
             int minimumSellingPrice,
