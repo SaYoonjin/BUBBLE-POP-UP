@@ -1037,7 +1037,7 @@ public class SeasonLifecycleService {
 
     private RandomEvent upsertRandomEvent(WeightedEventSpec spec) {
         RandomEvent randomEvent = randomEventRepository
-                .findFirstByEventCategoryAndEventName(spec.category(), spec.eventName())
+                .findFirstByEventCategory(spec.category())
                 .orElseGet(() -> RandomEvent.create(
                         spec.category(),
                         spec.eventName(),

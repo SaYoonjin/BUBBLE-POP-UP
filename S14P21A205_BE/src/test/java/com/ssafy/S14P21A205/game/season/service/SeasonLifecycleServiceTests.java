@@ -118,7 +118,7 @@ class SeasonLifecycleServiceTests {
                 .when(trafficRepository.saveAll(any()))
                 .thenAnswer(invocation -> invocation.getArgument(0));
         org.mockito.Mockito.lenient()
-                .when(randomEventRepository.findFirstByEventCategoryAndEventName(any(), any()))
+                .when(randomEventRepository.findFirstByEventCategory(any()))
                 .thenReturn(Optional.empty());
         org.mockito.Mockito.lenient()
                 .when(randomEventRepository.save(any(RandomEvent.class)))
