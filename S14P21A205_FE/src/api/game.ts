@@ -128,7 +128,13 @@ export async function getAllDayReports(currentDay: number) {
   const promises = Array.from({ length: currentDay }, (_, i) =>
     getDayReport(i + 1),
   );
-  return Promise.all(promises);
+  const results = await Promise.allSettled(promises);
+  return results
+    .filter(
+      (r): r is PromiseFulfilledResult<GameDayReportResponse> =>
+        r.status === "fulfilled",
+    )
+    .map((r) => r.value);
 }
 
 // --- 영업 중 페이지용 ---
