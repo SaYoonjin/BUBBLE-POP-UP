@@ -41,7 +41,7 @@ import {
   type StoreMenuResponse,
 } from "../api/store";
 import { getNewsRanking, type AreaRankingItemResponse } from "../api/news";
-import { setWeather, startDay, spawnShopAtIndex } from "../utils/unity";
+import { setWeather, startDay, spawnShopAtIndex, sendToUnity, setCameraRegion } from "../utils/unity";
 import { BUSINESS_SECONDS, DAY_SECONDS, elapsedToGameTime } from "../constants/gameTime";
 import useBrandName from "../hooks/useBrandName";
 import { useUserStore } from "../stores/useUserStore";
@@ -383,6 +383,21 @@ function getTrafficStatusLabel(status: GameTrafficStatus | null | undefined) {
   }
 }
 
+type CongestionLevel = "very_crowded" | "crowded" | "normal" | "relaxed" | "very_relaxed";
+
+function toCongestion(pop: string): CongestionLevel {
+  const map: Record<string, CongestionLevel> = {
+    "매우 혼잡": "very_crowded",
+    "혼잡": "crowded",
+    "보통": "normal",
+    "여유": "relaxed",
+    "한산": "relaxed",
+    "매우 여유": "very_relaxed",
+    "매우 한산": "very_relaxed",
+  };
+  return map[pop] ?? "normal";
+}
+
 export default function PlayPage() {
   const { day } = useParams<{ day: string }>();
   const guardContext = useOutletContext<GameGuardContext>();
@@ -419,6 +434,7 @@ function PlayPageSession({
   const [balance, setBalance] = useState(0);
   const [stock, setStock] = useState(0);
   const [guests, setGuests] = useState(0);
+  const [population, setPopulation] = useState("");
   const [currentLocationName, setCurrentLocationName] = useState("");
   const [currentOrder, setCurrentOrder] = useState<CurrentOrderResponse | null>(null);
   const [menuItems, setMenuItems] = useState<EmergencyMenuItem[]>([]);
@@ -522,6 +538,7 @@ function PlayPageSession({
     prevBalanceRef.current = state.cash;
 
     setBalance(state.cash);
+    setPopulation(state.population ?? "");
     setStock(state.inventory.totalStock);
     setGuests(state.customerCount);
     setDeliveryTrafficLabel(getTrafficStatusLabel(state.traffic?.status));
@@ -635,6 +652,7 @@ function PlayPageSession({
   // Unity 준비 완료 + 데이터 있을 때 명령 전송
   useEffect(() => {
     if (!unityReady || dayWeatherType === null || storeRegionIndex === null) return;
+    setCameraRegion(unityIframeRef, storeRegionIndex);
     spawnShopAtIndex(unityIframeRef, storeRegionIndex);
     setWeather(unityIframeRef, dayWeatherType);
     startDay(unityIframeRef, BUSINESS_SECONDS);
@@ -827,6 +845,8 @@ function PlayPageSession({
     return () => window.clearInterval(timer);
   }, [playEndTimestampMs]);
 
+  // TODO: 테스트용 카메라 버튼 (확인 후 삭제)
+  const [showCameraTest, setShowCameraTest] = useState(false);
 
   // 10초마다 게임 상태 폴링 (유동인구, 손님, 재고, 잔액)
   useEffect(() => {
@@ -1044,7 +1064,7 @@ function PlayPageSession({
         day={dayNumber}
         remainingSeconds={remainingSeconds}
         remainingMilliseconds={remainingMilliseconds}
-        congestion="normal"
+        congestion={toCongestion(population)}
         guests={guests}
         stock={stock}
         balance={balance}
@@ -1068,6 +1088,42 @@ function PlayPageSession({
         <RankingSidebar rankings={rankings} />
         <EventSidebar alerts={alerts} />
         <ActionBar onAction={handleAction} usedActions={usedActions} activeEffects={activeEffects} />
+
+        {/* TODO: 카메라 테스트 패널 — 확인 후 삭제 */}
+        <button
+          onClick={() => setShowCameraTest((v) => !v)}
+          className="fixed bottom-4 left-4 z-50 bg-slate-800 text-white text-xs px-3 py-1.5 rounded-lg opacity-70 hover:opacity-100"
+        >
+          CAM
+        </button>
+        {showCameraTest && (
+          <div className="fixed bottom-12 left-4 z-50 bg-white rounded-xl shadow-xl p-3 flex flex-col gap-1.5">
+            <p className="text-[10px] font-bold text-slate-400 mb-1">Camera Index Test</p>
+            <div className="grid grid-cols-4 gap-1.5">
+              {Array.from({ length: 9 }, (_, i) => (
+                <button
+                  key={i}
+                  onClick={() => {
+                    console.log(`[Camera Test] → ${i}`);
+                    sendToUnity(unityIframeRef, "SetCameraRegion", String(i));
+                  }}
+                  className="bg-slate-100 hover:bg-primary hover:text-white text-xs font-bold px-3 py-2 rounded-lg transition-colors"
+                >
+                  {i}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={() => {
+                console.log("[Camera Test] → ReturnToMain");
+                sendToUnity(unityIframeRef, "ReturnToMain", "");
+              }}
+              className="bg-slate-800 text-white text-xs font-bold px-3 py-2 rounded-lg mt-1"
+            >
+              Main
+            </button>
+          </div>
+        )}
       </main>
 
       {activeModal === "discount" && (
