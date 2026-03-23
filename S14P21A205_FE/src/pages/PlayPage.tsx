@@ -1335,19 +1335,11 @@ function PlayPageSession({
         <div className="absolute inset-0 z-0 bg-transparent" />
         <UnityCanvas
           ref={unityBridgeRef}
+          iframeRef={unityIframeRef}
           className="relative z-0 flex-1 bg-slate-950"
           onReady={handleUnityReady}
           onPopupArrival={handlePopupArrival}
         />
-        <div className="relative z-0 flex-1 bg-slate-950">
-          <iframe
-            ref={unityIframeRef}
-            src="/unity/index.html"
-            title="Unity Game"
-            className="h-full w-full border-0"
-            allow="fullscreen"
-          />
-        </div>
 
         <RankingSidebar rankings={rankings} />
         <EventSidebar alerts={alerts} />

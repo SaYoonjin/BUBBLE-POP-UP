@@ -1,4 +1,11 @@
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
+import {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+  type MutableRefObject,
+} from "react";
 
 const UNITY_FRAME_MESSAGE_SOURCE = "unity-webgl";
 
@@ -27,6 +34,7 @@ export interface UnityBridgeHandle {
 interface UnityCanvasProps {
   className?: string;
   src?: string;
+  iframeRef?: MutableRefObject<HTMLIFrameElement | null>;
   onReady?: () => void;
   onPopupArrival?: (popupStoreIndex: number | null) => void;
 }
@@ -45,15 +53,23 @@ function getUnityApp(frame: HTMLIFrameElement | null) {
 }
 
 const UnityCanvas = forwardRef<UnityBridgeHandle, UnityCanvasProps>(function UnityCanvas(
-  { className = "", src = "/unity/index.html", onReady, onPopupArrival },
+  { className = "", src = "/unity/index.html", iframeRef: externalIframeRef, onReady, onPopupArrival },
   ref,
 ) {
-  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const internalIframeRef = useRef<HTMLIFrameElement | null>(null);
   const pendingMessagesRef = useRef<PendingUnityMessage[]>([]);
   const [isReady, setIsReady] = useState(false);
 
+  const setIframeRef = (element: HTMLIFrameElement | null) => {
+    internalIframeRef.current = element;
+
+    if (externalIframeRef) {
+      externalIframeRef.current = element;
+    }
+  };
+
   const sendMessage = (methodName: UnityMethodName, payload: string) => {
-    const unityApp = getUnityApp(iframeRef.current);
+    const unityApp = getUnityApp(internalIframeRef.current);
 
     if (!unityApp?.isReady) {
       return false;
@@ -140,7 +156,7 @@ const UnityCanvas = forwardRef<UnityBridgeHandle, UnityCanvasProps>(function Uni
   return (
     <div className={className}>
       <iframe
-        ref={iframeRef}
+        ref={setIframeRef}
         src={src}
         title="Unity Game"
         className="h-full w-full border-0"
