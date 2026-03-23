@@ -1018,7 +1018,14 @@ function PlayPageSession({
 
       <main className="relative flex flex-1 overflow-hidden">
         <div className="absolute inset-0 z-0 bg-transparent" />
-        <div className="relative z-0 flex-1" />
+        <div className="relative z-0 flex-1 bg-slate-950">
+          <iframe
+            src="/unity/index.html"
+            title="Unity Game"
+            className="h-full w-full border-0"
+            allow="fullscreen"
+          />
+        </div>
 
         <RankingSidebar rankings={rankings} />
         <EventSidebar alerts={alerts} />
