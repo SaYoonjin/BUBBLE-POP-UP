@@ -423,6 +423,7 @@ function PlayPageSession({
   );
   const [deliveryTrafficLabel, setDeliveryTrafficLabel] = useState<string | null>(null);
   const [emergencyArriveAt, setEmergencyArriveAt] = useState<string | null>(null);
+  const [estimatedEmergencyArriveAt, setEstimatedEmergencyArriveAt] = useState<string | null>(null);
   const [isEmergencyDataLoading, setIsEmergencyDataLoading] = useState(true);
   const [emergencyDataError, setEmergencyDataError] = useState<string | null>(null);
   const [isMoveDataLoading, setIsMoveDataLoading] = useState(true);
@@ -435,8 +436,9 @@ function PlayPageSession({
   const remainingSeconds = Math.max(0, Math.ceil(remainingMilliseconds / 1000));
   const playStoreName = brandName || "";
   const currentMenuName = currentOrder?.menuName ?? "";
-  const emergencyArrivalGameTime = emergencyArriveAt
-    ? formatEmergencyArrivalGameTime(emergencyArriveAt, playEndTimestampMs) || null
+  const displayedEmergencyArriveAt = emergencyArriveAt ?? estimatedEmergencyArriveAt;
+  const emergencyArrivalGameTime = displayedEmergencyArriveAt
+    ? formatEmergencyArrivalGameTime(displayedEmergencyArriveAt, playEndTimestampMs) || null
     : null;
   const currentMenuPricing: CurrentMenuPricing | null = currentOrder
     ? {
@@ -522,16 +524,23 @@ function PlayPageSession({
       state.serverTime,
       state.traffic?.delaySeconds,
     );
+    setEstimatedEmergencyArriveAt(estimatedEmergencyArriveAt);
     setEmergencyArriveAt((current) => {
       if (state.actionStatus.emergencyOrderArriveAt) {
         return state.actionStatus.emergencyOrderArriveAt;
       }
 
-      if (state.actionStatus.emergencyOrderPending) {
-        return current ?? estimatedEmergencyArriveAt;
+      if (!current) {
+        return null;
       }
 
-      return estimatedEmergencyArriveAt;
+      const currentArriveMs = new Date(current).getTime();
+
+      if (Number.isNaN(currentArriveMs)) {
+        return null;
+      }
+
+      return Date.now() < currentArriveMs ? current : null;
     });
     syncDiscountActionState(state.actionStatus.discountUsed);
     syncPromotionActionState(isPromotionUsed(state.actionStatus));
@@ -654,6 +663,7 @@ function PlayPageSession({
       } else {
         setDeliveryTrafficLabel(null);
         setEmergencyArriveAt(null);
+        setEstimatedEmergencyArriveAt(null);
         syncDiscountActionState(false);
         syncPromotionActionState(false);
         syncShareActionState(false);
