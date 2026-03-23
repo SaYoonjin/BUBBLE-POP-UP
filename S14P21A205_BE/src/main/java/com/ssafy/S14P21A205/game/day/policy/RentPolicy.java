@@ -19,7 +19,6 @@ import com.ssafy.S14P21A205.shop.entity.ItemCategory;
 import com.ssafy.S14P21A205.shop.entity.Menu;
 import com.ssafy.S14P21A205.shop.repository.ItemUserRepository;
 import com.ssafy.S14P21A205.store.entity.Store;
-import com.ssafy.S14P21A205.store.service.StoreLocationTransitionSupport;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
@@ -31,7 +30,6 @@ import org.springframework.stereotype.Component;
 public class RentPolicy {
 
     private static final BigDecimal DECIMAL_ONE = new BigDecimal("1.00");
-    private static final StoreLocationTransitionSupport STORE_LOCATION_TRANSITION_SUPPORT = new StoreLocationTransitionSupport();
     private final DailyReportRepository dailyReportRepository;
     private final DailyEventRepository dailyEventRepository;
     private final GameDayStoreStateRedisRepository gameDayStoreStateRedisRepository;
@@ -48,7 +46,6 @@ public class RentPolicy {
         int carriedBalance = carryOverState.balance();
         int carriedStock = carryOverState.stock();
         String previousMenuName = carryOverState.previousMenuName();
-        String previousLocationName = carryOverState.previousLocationName();
 
         BigDecimal rentMultiplier = marketRankingPolicy.resolveRentMultiplier(
                 marketSnapshot == null ? null : marketSnapshot.locationPopularityRank()
@@ -65,7 +62,8 @@ public class RentPolicy {
         OpeningEventAdjustment openingEventAdjustment = resolveOpeningEventAdjustment(store, day);
 
         int dailyRentApplied = marketRankingPolicy.apply(store.getLocation().getRent(), rentMultiplier, rentCouponMultiplier);
-        int interiorCost = resolveInteriorCost(store, day, previousLocationName);
+        // Interior costs are already charged when the store joins or reserves a relocation.
+        int interiorCost = 0;
         int regularOrderQuantity = regularOrders.stream()
                 .map(Order::getQuantity)
                 .filter(quantity -> quantity != null && quantity > 0)
@@ -156,7 +154,6 @@ public class RentPolicy {
             return new CarryOverState(
                     StoreStateCarryOverSupport.resolveInitialBalance(store),
                     StoreStateCarryOverSupport.resolveInitialStock(),
-                    null,
                     null
             );
         }
@@ -167,8 +164,7 @@ public class RentPolicy {
             return new CarryOverState(
                     previousDayReport.getBalance(),
                     previousDayReport.getStockRemaining(),
-                    previousDayReport.getMenuName(),
-                    previousDayReport.getLocationName()
+                    previousDayReport.getMenuName()
             );
         }
 
@@ -178,7 +174,6 @@ public class RentPolicy {
             return new CarryOverState(
                     safeInt(previousDayState.balance()),
                     previousDayState.stock() == null ? 0 : previousDayState.stock(),
-                    null,
                     null
             );
         }
@@ -186,27 +181,8 @@ public class RentPolicy {
         return new CarryOverState(
                 StoreStateCarryOverSupport.resolveInitialBalance(store),
                 StoreStateCarryOverSupport.resolveInitialStock(),
-                null,
                 null
         );
-    }
-
-    private int resolveInteriorCost(Store store, int day, String previousLocationName) {
-        if (store.getLocation() == null || store.getLocation().getInteriorCost() == null) {
-            return 0;
-        }
-        if (day == 1) {
-            return store.getLocation().getInteriorCost();
-        }
-        if (STORE_LOCATION_TRANSITION_SUPPORT.isLocationChangeApplyingToday(store, day)) {
-            return 0;
-        }
-        if (previousLocationName == null || previousLocationName.isBlank()) {
-            return 0;
-        }
-        return previousLocationName.equals(store.getLocation().getLocationName())
-                ? 0
-                : store.getLocation().getInteriorCost();
     }
 
     private int resolveAppliedUnitCost(
@@ -313,8 +289,7 @@ public class RentPolicy {
     private record CarryOverState(
             int balance,
             int stock,
-            String previousMenuName,
-            String previousLocationName
+            String previousMenuName
     ) {
     }
 }

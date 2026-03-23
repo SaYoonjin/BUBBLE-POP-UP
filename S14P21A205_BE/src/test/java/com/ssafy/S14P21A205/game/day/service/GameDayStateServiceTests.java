@@ -308,7 +308,7 @@ class GameDayStateServiceTests {
 
         assertThat(dummyStore.getPrice()).isEqualTo(2_000);
         assertThat(response.population()).isEqualTo("\uB9E4\uC6B0 \uD63C\uC7A1");
-        assertThat(response.cash()).isEqualTo(9_652_000L);
+        assertThat(response.cash()).isEqualTo(5_242_000L);
         assertThat(response.customerCount()).isEqualTo(10);
         assertThat(response.inventory().totalStock()).isEqualTo(117);
         assertThat(response.appliedEvents()).extracting(GameStateResponse.AppliedEvent::eventType)
@@ -492,7 +492,7 @@ class GameDayStateServiceTests {
 
         assertThat(response.actionStatus().emergencyOrderPending()).isFalse();
         assertThat(response.inventory().totalStock()).isEqualTo(130);
-        assertThat(response.cash()).isEqualTo(9_615_000L);
+        assertThat(response.cash()).isEqualTo(5_205_000L);
 
         ArgumentCaptor<GameDayLiveState> stateCaptor = ArgumentCaptor.forClass(GameDayLiveState.class);
         verify(gameDayStoreStateRedisRepository).saveStateAndTickLog(
