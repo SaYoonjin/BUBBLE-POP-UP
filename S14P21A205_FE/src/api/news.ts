@@ -7,7 +7,6 @@ export interface NewsArticleResponse {
 }
 
 export interface TodayNewsResponse {
-  day: number;
   news: NewsArticleResponse[];
 }
 
@@ -18,13 +17,12 @@ export interface AreaRankingItemResponse {
 }
 
 export interface NewsRankingResponse {
-  day: number;
   areaRevenueRanking: AreaRankingItemResponse[];
   areaTrafficRanking: AreaRankingItemResponse[];
 }
 
-export async function getTodayNews() {
-  const { data } = await client.get<TodayNewsResponse>("/api/news/today");
+export async function getTodayNews(day: number) {
+  const { data } = await client.get<TodayNewsResponse>(`/api/news/${day}`);
   return data;
 }
 

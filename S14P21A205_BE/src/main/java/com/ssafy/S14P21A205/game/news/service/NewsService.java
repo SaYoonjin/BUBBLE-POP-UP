@@ -98,31 +98,28 @@ public class NewsService {
     }
 
 
-    //오늘의 뉴스 조회. 현재 진행 중인 시즌의 currentDay 기준.
-    public NewsListResponse getTodayNews() {
+    //오늘의 뉴스 조회. 프론트에서 요청한 day 기준.
+    public NewsListResponse getTodayNews(int day) {
         Season season = seasonRepository.findFirstByStatusOrderByIdDesc(SeasonStatus.IN_PROGRESS)
                 .orElseThrow(() -> new BaseException(ErrorCode.SEASON_NOT_FOUND));
-        int day = season.getCurrentDay();
         List<NewsArticle> articles = newsArticleRepository
                 .findByNewsReport_Season_IdAndDayOrderByIdAsc(season.getId(), day);
         if (articles.isEmpty()) {
             throw new BaseException(ErrorCode.NEWS_NOT_FOUND);
         }
-        return NewsListResponse.of(day, articles);
+        return NewsListResponse.of(articles);
     }
 
     /**
      * 지역별 매출 순위 + 유동인구 순위 조회.
      */
-    public NewsRankingResponse getAreaRankings() {
+    public NewsRankingResponse getAreaRankings(int day) {
         Season season = findCurrentSeason();
 
-        int currentDay = season.getCurrentDay();
+        List<AreaRankingItemResponse> revenueRanking = limitTop3(buildRevenueRanking(season.getId(), day));
+        List<AreaRankingItemResponse> trafficRanking = buildTrafficRanking(season.getId(), day);
 
-        List<AreaRankingItemResponse> revenueRanking = limitTop3(buildRevenueRanking(season.getId(), currentDay));
-        List<AreaRankingItemResponse> trafficRanking = limitTop3(buildTrafficRanking(season.getId(), currentDay));
-
-        return new NewsRankingResponse(currentDay, revenueRanking, trafficRanking);
+        return new NewsRankingResponse(revenueRanking, trafficRanking);
     }
 
     private List<AreaRankingItemResponse> buildRevenueRanking(Long seasonId, int currentDay) {

@@ -416,7 +416,7 @@ export default function PrepPage() {
     const loadNews = async () => {
       try {
         const [todayNewsResult, rankingResult] = await Promise.allSettled([
-          getTodayNews(),
+          getTodayNews(day),
           getNewsRanking(day),
         ]);
 
