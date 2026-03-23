@@ -65,6 +65,7 @@ public class SeasonLifecycleService {
     private static final BigDecimal DECIMAL_ONE = new BigDecimal("1.00");
     private static final BigDecimal ZERO_DECIMAL = new BigDecimal("0.00");
     private static final BigDecimal DISASTER_STOCK_HALF = new BigDecimal("0.50");
+    private static final int DEFAULT_TOTAL_DAYS = 7;
     private static final int EVENTS_PER_DAY = 2;
     private static final int FIRST_EVENT_OFFSET_SECONDS = 40;
     private static final int SECOND_EVENT_OFFSET_SECONDS = 80;
@@ -103,8 +104,11 @@ public class SeasonLifecycleService {
 
         Season scheduledSeason = seasonRepository.findFirstByStatusOrderByStartTimeAscIdAsc(SeasonStatus.SCHEDULED).orElse(null);
         if (scheduledSeason == null) {
-            logNoActiveSeason(now);
-            return;
+            scheduledSeason = bootstrapInitialSeasonIfNeeded(now);
+            if (scheduledSeason == null) {
+                logNoActiveSeason(now);
+                return;
+            }
         }
         if (scheduledSeason.getStartTime() == null) {
             logScheduledSeasonState(
@@ -315,6 +319,26 @@ public class SeasonLifecycleService {
                 "-",
                 "-"
         );
+    }
+
+    private Season bootstrapInitialSeasonIfNeeded(LocalDateTime now) {
+        if (seasonRepository.findFirstByOrderByIdDesc().isPresent()) {
+            return null;
+        }
+
+        LocalDateTime initialSeasonStartAt = now.plus(seasonTimelineService.nextSeasonWaitDuration());
+        LocalDateTime initialSeasonEndAt = initialSeasonStartAt.plus(seasonTimelineService.seasonCycleDuration(DEFAULT_TOTAL_DAYS));
+        Season initialSeason = seasonRepository.save(
+                Season.createScheduled(DEFAULT_TOTAL_DAYS, initialSeasonStartAt, initialSeasonEndAt)
+        );
+        log.info(
+                "Bootstrapped initial scheduled season. seasonId={} startTime={} endTime={} totalDays={}",
+                initialSeason.getId(),
+                initialSeason.getStartTime(),
+                initialSeason.getEndTime(),
+                initialSeason.getTotalDays()
+        );
+        return initialSeason;
     }
 
     private String describeLifecycleStage(SeasonPhase phase) {
