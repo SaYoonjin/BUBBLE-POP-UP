@@ -110,13 +110,54 @@ const IMMEDIATE_EVENT_NAMES = new Set([
 /** 일반 이벤트 고정 발생 게임 시간 (최대 2개) */
 const REGULAR_EVENT_TIMES = ["14:00", "18:00"] as const;
 
-function getDaysAgoLabel(appliedAt: string): string {
+const SEASON_LONG_ALERT_KEYWORDS = [
+  "원재료 가격",
+  "Price Down",
+  "Price Up",
+  "감염병",
+  "Infectious",
+  "지진",
+  "Earthquake",
+  "침수",
+  "Flood",
+  "태풍",
+  "Typhoon",
+  "화재",
+  "Fire",
+  "정책 변경",
+  "Policy Change",
+] as const;
+
+function getElapsedAppliedEventSeconds(appliedAt: string) {
   const appliedMs = new Date(appliedAt).getTime();
-  if (Number.isNaN(appliedMs)) return "이전";
-  const elapsedSec = (Date.now() - appliedMs) / 1000;
-  const daysAgo = Math.max(1, Math.round(elapsedSec / DAY_SECONDS));
+  if (Number.isNaN(appliedMs)) return null;
+  return Math.max(0, (Date.now() - appliedMs) / 1000);
+}
+
+function getDaysAgoLabel(appliedAt: string): string {
+  const elapsedSec = getElapsedAppliedEventSeconds(appliedAt);
+  if (elapsedSec === null) return "이전";
+  if (elapsedSec < DAY_SECONDS) return "오늘";
+  const daysAgo = Math.max(1, Math.floor(elapsedSec / DAY_SECONDS));
   if (daysAgo === 1) return "어제";
   return `${daysAgo}일 전`;
+}
+
+function isSeasonLongAlertEvent(eventName: string, newsTitle: string) {
+  const candidates = [eventName, newsTitle].filter(Boolean);
+  return candidates.some((candidate) =>
+    SEASON_LONG_ALERT_KEYWORDS.some((keyword) => candidate.includes(keyword)),
+  );
+}
+
+function shouldDisplayCarryOverAlert(appliedAt: string, eventName: string, newsTitle: string) {
+  const elapsedSec = getElapsedAppliedEventSeconds(appliedAt);
+
+  if (elapsedSec !== null && elapsedSec < DAY_SECONDS) {
+    return true;
+  }
+
+  return isSeasonLongAlertEvent(eventName, newsTitle);
 }
 
 /** 악재 이벤트 (populationMultiplier < 1, 재난, 원가 상승 등) */
@@ -203,6 +244,16 @@ function getEventInfo(
 ): { title: string; description: string } {
   const template = EVENT_INFO[event.type] ?? EVENT_INFO[event.newsTitle];
   if (!template) {
+    const fallbackSource = [event.type, event.newsTitle].find(Boolean) ?? "";
+
+    if (/price down|가격 하락/i.test(fallbackSource)) {
+      return { title: "원가 하락", description: "원재료 시세가 하락했습니다." };
+    }
+
+    if (/price up|가격 상승/i.test(fallbackSource)) {
+      return { title: "원가 상승", description: "원재료 시세가 상승했습니다." };
+    }
+
     return { title: event.newsTitle, description: "새로운 이벤트가 발생했습니다." };
   }
   let description = template.description.replace("$LOC", locationName);
@@ -261,15 +312,6 @@ function buildPromotionOptions(prices?: Partial<Record<PromotionType, number>>):
     ...PROMOTION_OPTION_META[type],
     price: prices?.[type] ?? DEFAULT_PROMOTION_PRICES[type],
   }));
-}
-
-function isPromotionUsed(actionStatus: GameStateResponse["actionStatus"]) {
-  return (
-    actionStatus.influencerUsed ||
-    actionStatus.snsUsed ||
-    actionStatus.leafletUsed ||
-    actionStatus.friendUsed
-  );
 }
 
 const LOCATION_ICON_MAP: Record<string, string> = {
@@ -547,10 +589,7 @@ function PlayPageSession({
   const discountCurrentPrice = currentOrder?.sellingPrice ?? 0;
   const discountMinimumPrice = currentOrder?.costPrice ?? discountCurrentPrice;
 
-  const syncPersistentActionState = (
-    action: Extract<ActionType, "discount" | "promotion" | "share">,
-    isUsed: boolean,
-  ) => {
+  const syncActionUsageState = (action: ActionType, isUsed: boolean) => {
     setUsedActions((prev) => {
       const next = new Set(prev);
 
@@ -562,6 +601,10 @@ function PlayPageSession({
 
       return next;
     });
+
+    if (!persistentActionTypes.has(action)) {
+      return;
+    }
 
     setActiveEffects((prev) => {
       const next = new Set(prev);
@@ -577,15 +620,19 @@ function PlayPageSession({
   };
 
   const syncDiscountActionState = (discountUsed: boolean) => {
-    syncPersistentActionState("discount", discountUsed);
+    syncActionUsageState("discount", discountUsed);
   };
 
   const syncPromotionActionState = (promotionUsed: boolean) => {
-    syncPersistentActionState("promotion", promotionUsed);
+    syncActionUsageState("promotion", promotionUsed);
   };
 
   const syncShareActionState = (donationUsed: boolean) => {
-    syncPersistentActionState("share", donationUsed);
+    syncActionUsageState("share", donationUsed);
+  };
+
+  const syncEmergencyActionState = (emergencyUsed: boolean) => {
+    syncActionUsageState("emergency", emergencyUsed);
   };
 
   const [guestsDelta, setGuestsDelta] = useState<number | null>(null);
@@ -806,40 +853,34 @@ function PlayPageSession({
       return Date.now() < currentArriveMs ? current : null;
     });
     syncDiscountActionState(state.actionStatus.discountUsed);
-    syncPromotionActionState(isPromotionUsed(state.actionStatus));
+    syncPromotionActionState(state.actionStatus.promotionUsed);
     syncShareActionState(state.actionStatus.donationUsed);
-
-    // 긴급발주 사용 여부 동기화
-    if (state.actionStatus.emergencyOrderPending || state.actionStatus.emergencyOrderArriveAt) {
-      setUsedActions((prev) => {
-        const next = new Set(prev);
-        next.add("emergency");
-        return next;
-      });
-    }
+    syncEmergencyActionState(state.actionStatus.emergencyUsed);
 
     // 이전 일차에서 이어지는 이벤트를 carry-over 알림으로 표시 (최초 1회)
     if (!hasLoadedCarryOverRef.current && state.appliedEvents.length > 0) {
       hasLoadedCarryOverRef.current = true;
-      const carryOverAlerts: GameAlert[] = state.appliedEvents.map((ae) => {
-        const fakeSchedule: EventScheduleItem = {
-          time: "10:00",
-          type: ae.eventName,
-          scope: null,
-          newsTitle: ae.newsTitle,
-          populationMultiplier: 1,
-          balanceChange: 0,
-        };
-        const info = getEventInfo(fakeSchedule, currentLocationName, currentMenuName);
-        return {
-          id: Date.now() + Math.floor(Math.random() * 10000),
-          type: isBadEvent(fakeSchedule) ? "bad_event" as const : "event" as const,
-          title: info.title,
-          description: info.description,
-          createdAt: Date.now(),
-          timeLabel: getDaysAgoLabel(ae.appliedAt),
-        };
-      });
+      const carryOverAlerts: GameAlert[] = state.appliedEvents
+        .filter((ae) => shouldDisplayCarryOverAlert(ae.appliedAt, ae.eventName, ae.newsTitle))
+        .map((ae) => {
+          const fakeSchedule: EventScheduleItem = {
+            time: "10:00",
+            type: ae.eventName,
+            scope: null,
+            newsTitle: ae.newsTitle,
+            populationMultiplier: 1,
+            balanceChange: 0,
+          };
+          const info = getEventInfo(fakeSchedule, currentLocationName, currentMenuName);
+          return {
+            id: Date.now() + Math.floor(Math.random() * 10000),
+            type: isBadEvent(fakeSchedule) ? "bad_event" as const : "event" as const,
+            title: info.title,
+            description: info.description,
+            createdAt: Date.now(),
+            timeLabel: getDaysAgoLabel(ae.appliedAt),
+          };
+        });
       if (carryOverAlerts.length > 0) {
         setAlerts((prev) => [...prev, ...carryOverAlerts]);
       }
@@ -949,6 +990,7 @@ function PlayPageSession({
         syncDiscountActionState(false);
         syncPromotionActionState(false);
         syncShareActionState(false);
+        syncEmergencyActionState(false);
       }
 
       if (orderResult.status === "fulfilled") {
