@@ -44,7 +44,6 @@ import {
   type StoreMenuResponse,
 } from "../api/store";
 import { getNewsRanking, type AreaRankingItemResponse } from "../api/news";
-import { sendToUnity, setCameraRegion, setWeather, spawnShopAtIndex, startDay } from "../utils/unity";
 import {
   BUSINESS_CLOSE_HOUR,
   BUSINESS_OPEN_HOUR,
@@ -52,6 +51,7 @@ import {
   DAY_SECONDS,
   elapsedToGameTime,
 } from "../constants/gameTime";
+import { setWeather, startDay, spawnShopAtIndex, setCameraRegion } from "../utils/unity";
 import useBrandName from "../hooks/useBrandName";
 import { useUserStore } from "../stores/useUserStore";
 import { normalizeDiscountMultiplier } from "../utils/dashboardItems";
@@ -111,13 +111,54 @@ const IMMEDIATE_EVENT_NAMES = new Set([
 /** 일반 이벤트 고정 발생 게임 시간 (최대 2개) */
 const REGULAR_EVENT_TIMES = ["14:00", "18:00"] as const;
 
-function getDaysAgoLabel(appliedAt: string): string {
+const SEASON_LONG_ALERT_KEYWORDS = [
+  "원재료 가격",
+  "Price Down",
+  "Price Up",
+  "감염병",
+  "Infectious",
+  "지진",
+  "Earthquake",
+  "침수",
+  "Flood",
+  "태풍",
+  "Typhoon",
+  "화재",
+  "Fire",
+  "정책 변경",
+  "Policy Change",
+] as const;
+
+function getElapsedAppliedEventSeconds(appliedAt: string) {
   const appliedMs = new Date(appliedAt).getTime();
-  if (Number.isNaN(appliedMs)) return "이전";
-  const elapsedSec = (Date.now() - appliedMs) / 1000;
-  const daysAgo = Math.max(1, Math.round(elapsedSec / DAY_SECONDS));
+  if (Number.isNaN(appliedMs)) return null;
+  return Math.max(0, (Date.now() - appliedMs) / 1000);
+}
+
+function getDaysAgoLabel(appliedAt: string): string {
+  const elapsedSec = getElapsedAppliedEventSeconds(appliedAt);
+  if (elapsedSec === null) return "이전";
+  if (elapsedSec < DAY_SECONDS) return "오늘";
+  const daysAgo = Math.max(1, Math.floor(elapsedSec / DAY_SECONDS));
   if (daysAgo === 1) return "어제";
   return `${daysAgo}일 전`;
+}
+
+function isSeasonLongAlertEvent(eventName: string, newsTitle: string) {
+  const candidates = [eventName, newsTitle].filter(Boolean);
+  return candidates.some((candidate) =>
+    SEASON_LONG_ALERT_KEYWORDS.some((keyword) => candidate.includes(keyword)),
+  );
+}
+
+function shouldDisplayCarryOverAlert(appliedAt: string, eventName: string, newsTitle: string) {
+  const elapsedSec = getElapsedAppliedEventSeconds(appliedAt);
+
+  if (elapsedSec !== null && elapsedSec < DAY_SECONDS) {
+    return true;
+  }
+
+  return isSeasonLongAlertEvent(eventName, newsTitle);
 }
 
 /** 악재 이벤트 (populationMultiplier < 1, 재난, 원가 상승 등) */
@@ -204,6 +245,16 @@ function getEventInfo(
 ): { title: string; description: string } {
   const template = EVENT_INFO[event.type] ?? EVENT_INFO[event.newsTitle];
   if (!template) {
+    const fallbackSource = [event.type, event.newsTitle].find(Boolean) ?? "";
+
+    if (/price down|가격 하락/i.test(fallbackSource)) {
+      return { title: "원가 하락", description: "원재료 시세가 하락했습니다." };
+    }
+
+    if (/price up|가격 상승/i.test(fallbackSource)) {
+      return { title: "원가 상승", description: "원재료 시세가 상승했습니다." };
+    }
+
     return { title: event.newsTitle, description: "새로운 이벤트가 발생했습니다." };
   }
   let description = template.description.replace("$LOC", locationName);
@@ -262,15 +313,6 @@ function buildPromotionOptions(prices?: Partial<Record<PromotionType, number>>):
     ...PROMOTION_OPTION_META[type],
     price: prices?.[type] ?? DEFAULT_PROMOTION_PRICES[type],
   }));
-}
-
-function isPromotionUsed(actionStatus: GameStateResponse["actionStatus"]) {
-  return (
-    actionStatus.influencerUsed ||
-    actionStatus.snsUsed ||
-    actionStatus.leafletUsed ||
-    actionStatus.friendUsed
-  );
 }
 
 const LOCATION_ICON_MAP: Record<string, string> = {
@@ -548,10 +590,7 @@ function PlayPageSession({
   const discountCurrentPrice = currentOrder?.sellingPrice ?? 0;
   const discountMinimumPrice = currentOrder?.costPrice ?? discountCurrentPrice;
 
-  const syncPersistentActionState = (
-    action: Extract<ActionType, "discount" | "promotion" | "share">,
-    isUsed: boolean,
-  ) => {
+  const syncActionUsageState = (action: ActionType, isUsed: boolean) => {
     setUsedActions((prev) => {
       const next = new Set(prev);
 
@@ -563,6 +602,10 @@ function PlayPageSession({
 
       return next;
     });
+
+    if (!persistentActionTypes.has(action)) {
+      return;
+    }
 
     setActiveEffects((prev) => {
       const next = new Set(prev);
@@ -578,15 +621,19 @@ function PlayPageSession({
   };
 
   const syncDiscountActionState = (discountUsed: boolean) => {
-    syncPersistentActionState("discount", discountUsed);
+    syncActionUsageState("discount", discountUsed);
   };
 
   const syncPromotionActionState = (promotionUsed: boolean) => {
-    syncPersistentActionState("promotion", promotionUsed);
+    syncActionUsageState("promotion", promotionUsed);
   };
 
   const syncShareActionState = (donationUsed: boolean) => {
-    syncPersistentActionState("share", donationUsed);
+    syncActionUsageState("share", donationUsed);
+  };
+
+  const syncEmergencyActionState = (emergencyUsed: boolean) => {
+    syncActionUsageState("emergency", emergencyUsed);
   };
 
   const [guestsDelta, setGuestsDelta] = useState<number | null>(null);
@@ -724,6 +771,15 @@ function PlayPageSession({
   };
 
   const handleUnityReady = () => {
+    if (storeRegionIndex !== null) {
+      spawnShopAtIndex(unityIframeRef, storeRegionIndex);
+      setCameraRegion(unityIframeRef, storeRegionIndex);
+    }
+    if (dayWeatherType !== null) {
+      setWeather(unityIframeRef, dayWeatherType);
+    }
+    const remaining = Math.max(0, Math.ceil((playEndTimestampMs - Date.now()) / 1000));
+    startDay(unityIframeRef, remaining);
     lastUnityCongestionLevelRef.current = null;
     syncUnityCongestionLevel(latestTrafficStatusRef.current);
     schedulePlannedVisitors(latestCustomerPlanRef.current, latestBackendCustomerCountRef.current);
@@ -798,40 +854,34 @@ function PlayPageSession({
       return Date.now() < currentArriveMs ? current : null;
     });
     syncDiscountActionState(state.actionStatus.discountUsed);
-    syncPromotionActionState(isPromotionUsed(state.actionStatus));
+    syncPromotionActionState(state.actionStatus.promotionUsed);
     syncShareActionState(state.actionStatus.donationUsed);
-
-    // 긴급발주 사용 여부 동기화
-    if (state.actionStatus.emergencyOrderPending || state.actionStatus.emergencyOrderArriveAt) {
-      setUsedActions((prev) => {
-        const next = new Set(prev);
-        next.add("emergency");
-        return next;
-      });
-    }
+    syncEmergencyActionState(state.actionStatus.emergencyUsed);
 
     // 이전 일차에서 이어지는 이벤트를 carry-over 알림으로 표시 (최초 1회)
     if (!hasLoadedCarryOverRef.current && state.appliedEvents.length > 0) {
       hasLoadedCarryOverRef.current = true;
-      const carryOverAlerts: GameAlert[] = state.appliedEvents.map((ae) => {
-        const fakeSchedule: EventScheduleItem = {
-          time: "10:00",
-          type: ae.eventName,
-          scope: null,
-          newsTitle: ae.newsTitle,
-          populationMultiplier: 1,
-          balanceChange: 0,
-        };
-        const info = getEventInfo(fakeSchedule, currentLocationName, currentMenuName);
-        return {
-          id: Date.now() + Math.floor(Math.random() * 10000),
-          type: isBadEvent(fakeSchedule) ? "bad_event" as const : "event" as const,
-          title: info.title,
-          description: info.description,
-          createdAt: Date.now(),
-          timeLabel: getDaysAgoLabel(ae.appliedAt),
-        };
-      });
+      const carryOverAlerts: GameAlert[] = state.appliedEvents
+        .filter((ae) => shouldDisplayCarryOverAlert(ae.appliedAt, ae.eventName, ae.newsTitle))
+        .map((ae) => {
+          const fakeSchedule: EventScheduleItem = {
+            time: "10:00",
+            type: ae.eventName,
+            scope: null,
+            newsTitle: ae.newsTitle,
+            populationMultiplier: 1,
+            balanceChange: 0,
+          };
+          const info = getEventInfo(fakeSchedule, currentLocationName, currentMenuName);
+          return {
+            id: Date.now() + Math.floor(Math.random() * 10000),
+            type: isBadEvent(fakeSchedule) ? "bad_event" as const : "event" as const,
+            title: info.title,
+            description: info.description,
+            createdAt: Date.now(),
+            timeLabel: getDaysAgoLabel(ae.appliedAt),
+          };
+        });
       if (carryOverAlerts.length > 0) {
         setAlerts((prev) => [...prev, ...carryOverAlerts]);
       }
@@ -871,7 +921,7 @@ function PlayPageSession({
     };
   }, [nickname]);
 
-  // Unity ready 시그널 수신
+  // Unity ready 시그널 수신 (postMessage "unityReady" — 3초 대기 후)
   useEffect(() => {
     const handler = (e: MessageEvent) => {
       if (e.data?.type === "unityReady") {
@@ -881,15 +931,6 @@ function PlayPageSession({
     window.addEventListener("message", handler);
     return () => window.removeEventListener("message", handler);
   }, []);
-
-  // Unity 준비 완료 + 데이터 있을 때 명령 전송
-  useEffect(() => {
-    if (!unityReady || dayWeatherType === null || storeRegionIndex === null) return;
-    setCameraRegion(unityIframeRef, storeRegionIndex);
-    spawnShopAtIndex(unityIframeRef, storeRegionIndex);
-    setWeather(unityIframeRef, dayWeatherType);
-    startDay(unityIframeRef, BUSINESS_SECONDS);
-  }, [unityReady, dayWeatherType, storeRegionIndex]);
 
   useEffect(() => {
     let isActive = true;
@@ -968,6 +1009,7 @@ function PlayPageSession({
         syncDiscountActionState(false);
         syncPromotionActionState(false);
         syncShareActionState(false);
+        syncEmergencyActionState(false);
       }
 
       if (orderResult.status === "fulfilled") {
@@ -1119,8 +1161,6 @@ function PlayPageSession({
     return () => window.clearInterval(timer);
   }, [playEndTimestampMs]);
 
-  // TODO: 테스트용 카메라 버튼 (확인 후 삭제)
-  const [showCameraTest, setShowCameraTest] = useState(false);
 
   // 10초마다 게임 상태 폴링 (유동인구, 손님, 재고, 잔액)
   useEffect(() => {
@@ -1370,42 +1410,6 @@ function PlayPageSession({
         <RankingSidebar rankings={rankings} />
         <EventSidebar alerts={alerts} />
         <ActionBar onAction={handleAction} usedActions={usedActions} activeEffects={activeEffects} />
-
-        {/* TODO: 카메라 테스트 패널 — 확인 후 삭제 */}
-        <button
-          onClick={() => setShowCameraTest((v) => !v)}
-          className="fixed bottom-4 left-4 z-50 bg-slate-800 text-white text-xs px-3 py-1.5 rounded-lg opacity-70 hover:opacity-100"
-        >
-          CAM
-        </button>
-        {showCameraTest && (
-          <div className="fixed bottom-12 left-4 z-50 bg-white rounded-xl shadow-xl p-3 flex flex-col gap-1.5">
-            <p className="text-[10px] font-bold text-slate-400 mb-1">Camera Index Test</p>
-            <div className="grid grid-cols-4 gap-1.5">
-              {Array.from({ length: 9 }, (_, i) => (
-                <button
-                  key={i}
-                  onClick={() => {
-                    console.log(`[Camera Test] → ${i}`);
-                    sendToUnity(unityIframeRef, "SetCameraRegion", String(i));
-                  }}
-                  className="bg-slate-100 hover:bg-primary hover:text-white text-xs font-bold px-3 py-2 rounded-lg transition-colors"
-                >
-                  {i}
-                </button>
-              ))}
-            </div>
-            <button
-              onClick={() => {
-                console.log("[Camera Test] → ReturnToMain");
-                sendToUnity(unityIframeRef, "ReturnToMain", "");
-              }}
-              className="bg-slate-800 text-white text-xs font-bold px-3 py-2 rounded-lg mt-1"
-            >
-              Main
-            </button>
-          </div>
-        )}
       </main>
 
       {activeModal === "discount" && (
