@@ -5,7 +5,6 @@ import com.ssafy.S14P21A205.exception.ErrorCode;
 import com.ssafy.S14P21A205.game.day.scheduler.SeasonDayClosingScheduler;
 import com.ssafy.S14P21A205.game.news.repository.NewsReportRepository;
 import com.ssafy.S14P21A205.game.news.service.NewsService;
-import com.ssafy.S14P21A205.game.news.service.SparkNewsDataService;
 import com.ssafy.S14P21A205.game.scheduler.SparkEtlScheduler;
 import com.ssafy.S14P21A205.game.environment.entity.Festival;
 import com.ssafy.S14P21A205.game.environment.entity.Population;
@@ -88,7 +87,6 @@ public class SeasonLifecycleService {
     private final FestivalRepository festivalRepository;
     private final NewsReportRepository newsReportRepository;
     private final NewsService newsService;
-    private final SparkNewsDataService sparkNewsDataService;
     private final SparkEtlScheduler sparkEtlScheduler;
 
     private final SeasonTimelineService seasonTimelineService = new SeasonTimelineService();
@@ -145,14 +143,14 @@ public class SeasonLifecycleService {
             return;
         }
 
+        prepareDailyEventsIfMissing(scheduledSeason, locations);
+
         scheduledSeason.startAt(now, sourceBatchKey);
-        List<Menu> menus = requireMenus();
         Random random = new Random(resolveSeed(scheduledSeason));
 
         List<WeatherLocation> weatherSchedule = rebuildWeatherSchedule(scheduledSeason, locations, random);
         List<Traffic> trafficSchedule = rebuildTrafficSchedule(scheduledSeason, locations, sourceBatchKey);
         rebuildPopulationSchedule(scheduledSeason, locations, sourceBatchKey);
-        rebuildDailyEvents(scheduledSeason, menus, random);
         preloadWeatherDay(scheduledSeason.getId(), weatherSchedule, 1);
         preloadTrafficDay(scheduledSeason, trafficSchedule, 1);
         scheduledSeason.updateEndTime(resolveSeasonEndAt(scheduledSeason));
@@ -184,16 +182,25 @@ public class SeasonLifecycleService {
         if (!scheduledSeason.getStartTime().isAfter(LocalDateTime.now(clock))) return;
 
         // 이미 뉴스가 생성된 시즌이면 스킵 (재진입 방지)
-        if (newsReportRepository.existsBySeasonId(scheduledSeason.getId())) return;
+        Long seasonId = scheduledSeason.getId();
+        boolean newsPrepared = newsReportRepository.existsBySeasonId(seasonId);
+        boolean dailyEventsPrepared = dailyEventRepository.existsBySeasonId(seasonId);
+        if (newsPrepared && dailyEventsPrepared) return;
 
         try {
-            if (scheduledSeason.getSourceBatchKey() == null) {
+            if (!newsPrepared && scheduledSeason.getSourceBatchKey() == null) {
                 sparkEtlScheduler.runEtl();
             }
-            sparkNewsDataService.runNewsEtl();
-            newsService.generateSeasonNews(scheduledSeason.getId());
+            if (!dailyEventsPrepared) {
+                prepareDailyEventsIfMissing(scheduledSeason, requireLocations());
+            }
+            if (!newsPrepared) {
+                newsService.generateSeasonNews(seasonId);
+                return;
+            }
+            newsService.generateEventPreviewNewsIfMissing(seasonId);
         } catch (Exception e) {
-            log.error("Failed to prepare scheduled season. seasonId={}", scheduledSeason.getId(), e);
+            log.error("Failed to prepare scheduled season. seasonId={}", seasonId, e);
         }
     }
 
@@ -494,6 +501,27 @@ public class SeasonLifecycleService {
         }
 
         dailyEventRepository.saveAll(dailyEvents);
+    }
+
+    private void prepareDailyEventsIfMissing(Season season, List<Location> locations) {
+        if (season.getId() == null || dailyEventRepository.existsBySeasonId(season.getId())) {
+            return;
+        }
+
+        List<Menu> menus = requireMenus();
+        Random random = createDailyEventRandom(season, locations);
+        rebuildDailyEvents(season, menus, random);
+    }
+
+    private Random createDailyEventRandom(Season season, List<Location> locations) {
+        Random random = new Random(resolveSeed(season));
+        // Keep event selection aligned with the previous flow, which consumed weather rolls first.
+        for (Location ignored : locations) {
+            for (int day = 1; day <= season.getTotalDays(); day++) {
+                drawWeatherType(random);
+            }
+        }
+        return random;
     }
 
     private void preloadWeatherDay(Long seasonId, List<WeatherLocation> weatherSchedule, int day) {
