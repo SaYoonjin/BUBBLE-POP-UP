@@ -110,13 +110,54 @@ const IMMEDIATE_EVENT_NAMES = new Set([
 /** 일반 이벤트 고정 발생 게임 시간 (최대 2개) */
 const REGULAR_EVENT_TIMES = ["14:00", "18:00"] as const;
 
-function getDaysAgoLabel(appliedAt: string): string {
+const SEASON_LONG_ALERT_KEYWORDS = [
+  "원재료 가격",
+  "Price Down",
+  "Price Up",
+  "감염병",
+  "Infectious",
+  "지진",
+  "Earthquake",
+  "침수",
+  "Flood",
+  "태풍",
+  "Typhoon",
+  "화재",
+  "Fire",
+  "정책 변경",
+  "Policy Change",
+] as const;
+
+function getElapsedAppliedEventSeconds(appliedAt: string) {
   const appliedMs = new Date(appliedAt).getTime();
-  if (Number.isNaN(appliedMs)) return "이전";
-  const elapsedSec = (Date.now() - appliedMs) / 1000;
-  const daysAgo = Math.max(1, Math.round(elapsedSec / DAY_SECONDS));
+  if (Number.isNaN(appliedMs)) return null;
+  return Math.max(0, (Date.now() - appliedMs) / 1000);
+}
+
+function getDaysAgoLabel(appliedAt: string): string {
+  const elapsedSec = getElapsedAppliedEventSeconds(appliedAt);
+  if (elapsedSec === null) return "이전";
+  if (elapsedSec < DAY_SECONDS) return "오늘";
+  const daysAgo = Math.max(1, Math.floor(elapsedSec / DAY_SECONDS));
   if (daysAgo === 1) return "어제";
   return `${daysAgo}일 전`;
+}
+
+function isSeasonLongAlertEvent(eventName: string, newsTitle: string) {
+  const candidates = [eventName, newsTitle].filter(Boolean);
+  return candidates.some((candidate) =>
+    SEASON_LONG_ALERT_KEYWORDS.some((keyword) => candidate.includes(keyword)),
+  );
+}
+
+function shouldDisplayCarryOverAlert(appliedAt: string, eventName: string, newsTitle: string) {
+  const elapsedSec = getElapsedAppliedEventSeconds(appliedAt);
+
+  if (elapsedSec !== null && elapsedSec < DAY_SECONDS) {
+    return true;
+  }
+
+  return isSeasonLongAlertEvent(eventName, newsTitle);
 }
 
 /** 악재 이벤트 (populationMultiplier < 1, 재난, 원가 상승 등) */
@@ -203,6 +244,16 @@ function getEventInfo(
 ): { title: string; description: string } {
   const template = EVENT_INFO[event.type] ?? EVENT_INFO[event.newsTitle];
   if (!template) {
+    const fallbackSource = [event.type, event.newsTitle].find(Boolean) ?? "";
+
+    if (/price down|가격 하락/i.test(fallbackSource)) {
+      return { title: "원가 하락", description: "원재료 시세가 하락했습니다." };
+    }
+
+    if (/price up|가격 상승/i.test(fallbackSource)) {
+      return { title: "원가 상승", description: "원재료 시세가 상승했습니다." };
+    }
+
     return { title: event.newsTitle, description: "새로운 이벤트가 발생했습니다." };
   }
   let description = template.description.replace("$LOC", locationName);
@@ -800,25 +851,27 @@ function PlayPageSession({
     // 이전 일차에서 이어지는 이벤트를 carry-over 알림으로 표시 (최초 1회)
     if (!hasLoadedCarryOverRef.current && state.appliedEvents.length > 0) {
       hasLoadedCarryOverRef.current = true;
-      const carryOverAlerts: GameAlert[] = state.appliedEvents.map((ae) => {
-        const fakeSchedule: EventScheduleItem = {
-          time: "10:00",
-          type: ae.eventName,
-          scope: null,
-          newsTitle: ae.newsTitle,
-          populationMultiplier: 1,
-          balanceChange: 0,
-        };
-        const info = getEventInfo(fakeSchedule, currentLocationName, currentMenuName);
-        return {
-          id: Date.now() + Math.floor(Math.random() * 10000),
-          type: isBadEvent(fakeSchedule) ? "bad_event" as const : "event" as const,
-          title: info.title,
-          description: info.description,
-          createdAt: Date.now(),
-          timeLabel: getDaysAgoLabel(ae.appliedAt),
-        };
-      });
+      const carryOverAlerts: GameAlert[] = state.appliedEvents
+        .filter((ae) => shouldDisplayCarryOverAlert(ae.appliedAt, ae.eventName, ae.newsTitle))
+        .map((ae) => {
+          const fakeSchedule: EventScheduleItem = {
+            time: "10:00",
+            type: ae.eventName,
+            scope: null,
+            newsTitle: ae.newsTitle,
+            populationMultiplier: 1,
+            balanceChange: 0,
+          };
+          const info = getEventInfo(fakeSchedule, currentLocationName, currentMenuName);
+          return {
+            id: Date.now() + Math.floor(Math.random() * 10000),
+            type: isBadEvent(fakeSchedule) ? "bad_event" as const : "event" as const,
+            title: info.title,
+            description: info.description,
+            createdAt: Date.now(),
+            timeLabel: getDaysAgoLabel(ae.appliedAt),
+          };
+        });
       if (carryOverAlerts.length > 0) {
         setAlerts((prev) => [...prev, ...carryOverAlerts]);
       }
