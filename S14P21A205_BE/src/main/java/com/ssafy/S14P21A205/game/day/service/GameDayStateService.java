@@ -153,12 +153,13 @@ public class GameDayStateService {
 
         gameDayStoreStateRedisRepository.saveStateAndTickLog(store.getId(), day, calculatedState.liveState());
         log.info(
-                "state-updated storeId={} seasonId={} day={} tick={} populationPerStore={} cash={} stock={}",
+                "state-updated storeId={} seasonId={} day={} tick={} populationPerStore={} customerCount={} cash={} stock={}",
                 store.getId(),
                 store.getSeason().getId(),
                 day,
                 tick,
                 calculatedState.populationPerStore(),
+                calculatedState.liveState().cumulativeCustomerCount(),
                 calculatedState.cash(),
                 calculatedState.totalStock()
         );
@@ -502,7 +503,8 @@ public class GameDayStateService {
                     day,
                     nextTick,
                     populationSnapshot,
-                    regionStoreCount
+                    regionStoreCount,
+                    captureRate
             );
             int desiredCustomerCount = customerScore.customerCount();
             int nextCursor = stockEngine.advancePurchaseCursor(state.purchaseList(), purchaseCursor, desiredCustomerCount);
@@ -561,7 +563,8 @@ public class GameDayStateService {
                 day,
                 currentTick,
                 currentPopulationSnapshot,
-                regionStoreCount
+                regionStoreCount,
+                captureRate
         );
         int currentPopulationPerStore = currentCustomerScore.populationPerStore();
 
@@ -624,7 +627,8 @@ public class GameDayStateService {
             int day,
             int tick,
             PopulationPolicy.PopulationSnapshot populationSnapshot,
-            int regionStoreCount
+            int regionStoreCount,
+            BigDecimal captureRate
     ) {
         if (regionStoreCount <= 0) {
             log.warn(
@@ -636,7 +640,7 @@ public class GameDayStateService {
             );
             return CustomerScorePolicy.CustomerScoreResult.empty();
         }
-        return customerScorePolicy.calculate(populationSnapshot, regionStoreCount);
+        return customerScorePolicy.calculate(populationSnapshot, regionStoreCount, captureRate);
     }
 
     private int applyStockEventDelta(
