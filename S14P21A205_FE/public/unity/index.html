@@ -186,6 +186,20 @@
                   unityInstance.SetFullscreen(1);
                 };
 
+                // FE에서 postMessage로 Unity 제어 가능하게
+                window.addEventListener("message", function(event) {
+                  if (event.data && event.data.type === "unity") {
+                    unityInstance.SendMessage(
+                      event.data.gameObject || "WebGLBridge",
+                      event.data.method,
+                      event.data.payload || ""
+                    );
+                  }
+                });
+
+                // 준비 완료 알림
+                window.parent.postMessage({ type: "unity-ready" }, "*");
+
               }).catch((message) => {
                 alert(message);
               });
