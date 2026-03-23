@@ -602,6 +602,18 @@ function PlayPageSession({
     scheduledVisitorTimersRef.current = [];
   };
 
+  const spawnPopupVisitorsImmediately = (popupStoreIndex: number, count: number) => {
+    const totalCount = Math.max(0, Math.floor(count));
+    let didSendAny = false;
+
+    for (let index = 0; index < totalCount; index += 1) {
+      const didSend = unityBridgeRef.current?.spawnSinglePopupVisitor(popupStoreIndex) ?? false;
+      didSendAny = didSend || didSendAny;
+    }
+
+    return didSendAny;
+  };
+
   const schedulePlannedVisitors = (
     customerPlanByHour: CustomerPlanByHourItem[] | null | undefined,
     backendCustomerCount: number,
@@ -670,33 +682,22 @@ function PlayPageSession({
       }
 
       const scheduleWindowStart = Math.max(elapsedBusinessSeconds, hourWindow.start);
-      const scheduleWindowSeconds = hourWindow.end - scheduleWindowStart;
+      const delayMs = Math.max(0, Math.round((scheduleWindowStart - elapsedBusinessSeconds) * 1000));
 
-      if (scheduleWindowSeconds <= 0) {
-        continue;
-      }
+      const timerId = window.setTimeout(() => {
+        const didSend = spawnPopupVisitorsImmediately(popupStoreIndex, remainingCustomers);
 
-      for (let index = 0; index < remainingCustomers; index += 1) {
-        const spawnAtSeconds =
-          scheduleWindowStart +
-          (scheduleWindowSeconds * (index + 1)) / (remainingCustomers + 1);
-        const delayMs = Math.max(0, Math.round((spawnAtSeconds - elapsedBusinessSeconds) * 1000));
+        if (!didSend) {
+          return;
+        }
 
-        const timerId = window.setTimeout(() => {
-          const didSend = unityBridgeRef.current?.spawnPopupVisitors(popupStoreIndex, 1) ?? false;
+        dispatchedVisitorsByHourRef.current.set(
+          planItem.gameHour,
+          (dispatchedVisitorsByHourRef.current.get(planItem.gameHour) ?? 0) + remainingCustomers,
+        );
+      }, delayMs);
 
-          if (!didSend) {
-            return;
-          }
-
-          dispatchedVisitorsByHourRef.current.set(
-            planItem.gameHour,
-            (dispatchedVisitorsByHourRef.current.get(planItem.gameHour) ?? 0) + 1,
-          );
-        }, delayMs);
-
-        scheduledVisitorTimersRef.current.push(timerId);
-      }
+      scheduledVisitorTimersRef.current.push(timerId);
     }
   };
 
@@ -751,7 +752,7 @@ function PlayPageSession({
         const popupStoreIndex = resolvePopupStoreIndex(currentLocationIdRef.current);
 
         if (popupStoreIndex !== null) {
-          unityBridgeRef.current?.spawnPopupVisitors(popupStoreIndex, gd);
+          spawnPopupVisitorsImmediately(popupStoreIndex, gd);
         }
       }
     }
