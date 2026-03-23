@@ -50,7 +50,7 @@ import {
   DAY_SECONDS,
   elapsedToGameTime,
 } from "../constants/gameTime";
-import { setWeather, startDay, spawnShopAtIndex } from "../utils/unity";
+import { setWeather, startDay, spawnShopAtIndex, setCameraRegion } from "../utils/unity";
 import useBrandName from "../hooks/useBrandName";
 import { useUserStore } from "../stores/useUserStore";
 import { normalizeDiscountMultiplier } from "../utils/dashboardItems";
@@ -723,6 +723,15 @@ function PlayPageSession({
   };
 
   const handleUnityReady = () => {
+    if (storeRegionIndex !== null) {
+      spawnShopAtIndex(unityIframeRef, storeRegionIndex);
+      setCameraRegion(unityIframeRef, storeRegionIndex);
+    }
+    if (dayWeatherType !== null) {
+      setWeather(unityIframeRef, dayWeatherType);
+    }
+    const remaining = Math.max(0, Math.ceil((playEndTimestampMs - Date.now()) / 1000));
+    startDay(unityIframeRef, remaining);
     lastUnityCongestionLevelRef.current = null;
     syncUnityCongestionLevel(latestTrafficStatusRef.current);
     schedulePlannedVisitors(latestCustomerPlanRef.current, latestBackendCustomerCountRef.current);
@@ -870,7 +879,7 @@ function PlayPageSession({
     };
   }, [nickname]);
 
-  // Unity ready 시그널 수신
+  // Unity ready 시그널 수신 (postMessage "unityReady" — 3초 대기 후)
   useEffect(() => {
     const handler = (e: MessageEvent) => {
       if (e.data?.type === "unityReady") {
@@ -880,14 +889,6 @@ function PlayPageSession({
     window.addEventListener("message", handler);
     return () => window.removeEventListener("message", handler);
   }, []);
-
-  // Unity 준비 완료 + 데이터 있을 때 명령 전송
-  useEffect(() => {
-    if (!unityReady || dayWeatherType === null || storeRegionIndex === null) return;
-    spawnShopAtIndex(unityIframeRef, storeRegionIndex);
-    setWeather(unityIframeRef, dayWeatherType);
-    startDay(unityIframeRef, BUSINESS_SECONDS);
-  }, [unityReady, dayWeatherType, storeRegionIndex]);
 
   useEffect(() => {
     let isActive = true;
