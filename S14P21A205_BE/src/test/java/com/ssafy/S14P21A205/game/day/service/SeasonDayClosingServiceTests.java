@@ -52,7 +52,8 @@ class SeasonDayClosingServiceTests {
                 storeRepository,
                 gameDayReportService,
                 seasonFinalRankingService,
-                newsService
+                newsService,
+                Runnable::run
         );
     }
 
@@ -63,7 +64,7 @@ class SeasonDayClosingServiceTests {
         Store secondStore = store(16L, season);
 
         when(seasonRepository.findByIdAndStatus(9L, SeasonStatus.IN_PROGRESS)).thenReturn(Optional.of(season));
-        when(storeRepository.findBySeason_IdOrderByIdAsc(9L)).thenReturn(List.of(firstStore, secondStore));
+        when(storeRepository.findAllBySeason_IdOrderByIdAsc(9L)).thenReturn(List.of(firstStore, secondStore));
 
         seasonDayClosingService.handleBusinessEnd(9L, 3);
 
@@ -78,7 +79,7 @@ class SeasonDayClosingServiceTests {
         Store secondStore = store(16L, season);
 
         when(seasonRepository.findByIdAndStatus(9L, SeasonStatus.IN_PROGRESS)).thenReturn(Optional.of(season));
-        when(storeRepository.findBySeason_IdOrderByIdAsc(9L)).thenReturn(List.of(firstStore, secondStore));
+        when(storeRepository.findAllBySeason_IdOrderByIdAsc(9L)).thenReturn(List.of(firstStore, secondStore));
 
         seasonDayClosingService.handleBusinessEnd(9L, 7);
 

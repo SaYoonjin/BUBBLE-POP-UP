@@ -53,7 +53,8 @@ public class SeasonFinalRankingService {
         int totalDays = season.getTotalDays() == null || season.getTotalDays() <= 0
                 ? DEFAULT_TOTAL_DAYS
                 : season.getTotalDays();
-        List<Store> stores = storeRepository.findBySeason_IdOrderByIdAsc(season.getId());
+        // Final ranking is based on the full season history, so bankrupt stores stay included here.
+        List<Store> stores = storeRepository.findAllBySeason_IdOrderByIdAsc(season.getId());
         if (stores.isEmpty()) {
             log.info("Skipping final season rankings save. seasonId={} reason=no_stores", season.getId());
             return;
