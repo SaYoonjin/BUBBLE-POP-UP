@@ -109,7 +109,7 @@ export default function PromotionModal({
           홍보하기
         </h3>
         <p className="mt-2 text-sm text-slate-500">
-          홍보 채널별 비용과 유입 효과를 비교해서 선택해보세요.
+          홍보 채널별 비용을 비교해서 선택해보세요.
         </p>
       </div>
 
@@ -161,17 +161,7 @@ export default function PromotionModal({
                     </div>
                   </div>
 
-                  <div className="ml-4 flex shrink-0 items-center gap-3">
-                    <div className="text-right">
-                      <p className="text-[11px] font-medium text-slate-400">유입 배수</p>
-                      <p
-                        className={`mt-1 text-sm font-bold ${
-                          isSelected ? "text-primary-dark" : "text-slate-700"
-                        }`}
-                      >
-                        x{option.multiplier.toFixed(2)}
-                      </p>
-                    </div>
+                  <div className="ml-4 flex shrink-0 items-center">
                     {isSelected && (
                       <span
                         className="material-symbols-outlined text-[20px] text-primary"

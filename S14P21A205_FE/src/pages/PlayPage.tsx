@@ -40,6 +40,7 @@ import {
   type LocationItem,
   type StoreMenuResponse,
 } from "../api/store";
+import { getNewsRanking, type AreaRankingItemResponse } from "../api/news";
 import { BUSINESS_SECONDS, DAY_SECONDS, elapsedToGameTime } from "../constants/gameTime";
 import useBrandName from "../hooks/useBrandName";
 import { useUserStore } from "../stores/useUserStore";
@@ -263,13 +264,17 @@ function isPromotionUsed(actionStatus: GameStateResponse["actionStatus"]) {
 }
 
 const LOCATION_ICON_MAP: Record<string, string> = {
-  홍대: "🎨",
-  성수: "🧋",
+  홍대: "🎸",
+  신도림: "🚉",
+  성수: "🏭",
+  "서울숲/성수": "🌳",
+  성수동: "🏭",
   명동: "🛍️",
-  이태원: "🌃",
+  이태원: "🌍",
   건대: "🎓",
-  강남: "🏙️",
-  여의도: "🏢",
+  강남: "💎",
+  여의도: "💼",
+  잠실: "🎡",
   사의동: "🍽️",
 };
 
@@ -277,13 +282,26 @@ function getMoveCost(rent: number) {
   return Math.round(rent * 7 * 0.1);
 }
 
-function mapLocationToMoveRegion(location: LocationItem): MoveRegion {
+function normalizeAreaName(value: string) {
+  return value.trim();
+}
+
+function buildAreaTrafficRankMap(items: AreaRankingItemResponse[]) {
+  return new Map(
+    items.map((item) => [normalizeAreaName(item.areaName), item.rank] as const),
+  );
+}
+
+function mapLocationToMoveRegion(
+  location: LocationItem,
+  trafficRankByAreaName: ReadonlyMap<string, number>,
+): MoveRegion {
   return {
     id: location.locationId,
     name: location.locationName,
     rent: location.rent,
     moveCost: getMoveCost(location.rent),
-    congestionLabel: "연동 예정",
+    trafficRank: trafficRankByAreaName.get(normalizeAreaName(location.locationName)) ?? null,
     icon: LOCATION_ICON_MAP[location.locationName] ?? "📍",
   };
 }
@@ -405,6 +423,7 @@ function PlayPageSession({
   );
   const [deliveryTrafficLabel, setDeliveryTrafficLabel] = useState<string | null>(null);
   const [emergencyArriveAt, setEmergencyArriveAt] = useState<string | null>(null);
+  const [estimatedEmergencyArriveAt, setEstimatedEmergencyArriveAt] = useState<string | null>(null);
   const [isEmergencyDataLoading, setIsEmergencyDataLoading] = useState(true);
   const [emergencyDataError, setEmergencyDataError] = useState<string | null>(null);
   const [isMoveDataLoading, setIsMoveDataLoading] = useState(true);
@@ -417,6 +436,10 @@ function PlayPageSession({
   const remainingSeconds = Math.max(0, Math.ceil(remainingMilliseconds / 1000));
   const playStoreName = brandName || "";
   const currentMenuName = currentOrder?.menuName ?? "";
+  const displayedEmergencyArriveAt = emergencyArriveAt ?? estimatedEmergencyArriveAt;
+  const emergencyArrivalGameTime = displayedEmergencyArriveAt
+    ? formatEmergencyArrivalGameTime(displayedEmergencyArriveAt, playEndTimestampMs) || null
+    : null;
   const currentMenuPricing: CurrentMenuPricing | null = currentOrder
     ? {
         costPrice: currentOrder.costPrice,
@@ -497,10 +520,28 @@ function PlayPageSession({
     setStock(state.inventory.totalStock);
     setGuests(state.customerCount);
     setDeliveryTrafficLabel(getTrafficStatusLabel(state.traffic?.status));
-    setEmergencyArriveAt(
-      state.actionStatus.emergencyOrderArriveAt ??
-        getEstimatedEmergencyArrivalTime(state.serverTime, state.traffic?.delaySeconds),
+    const estimatedEmergencyArriveAt = getEstimatedEmergencyArrivalTime(
+      state.serverTime,
+      state.traffic?.delaySeconds,
     );
+    setEstimatedEmergencyArriveAt(estimatedEmergencyArriveAt);
+    setEmergencyArriveAt((current) => {
+      if (state.actionStatus.emergencyOrderArriveAt) {
+        return state.actionStatus.emergencyOrderArriveAt;
+      }
+
+      if (!current) {
+        return null;
+      }
+
+      const currentArriveMs = new Date(current).getTime();
+
+      if (Number.isNaN(currentArriveMs)) {
+        return null;
+      }
+
+      return Date.now() < currentArriveMs ? current : null;
+    });
     syncDiscountActionState(state.actionStatus.discountUsed);
     syncPromotionActionState(isPromotionUsed(state.actionStatus));
     syncShareActionState(state.actionStatus.donationUsed);
@@ -602,6 +643,7 @@ function PlayPageSession({
         promotionPriceResult,
         storeResult,
         locationResult,
+        rankingResult,
       ] = await Promise.allSettled([
         getGameDayState(),
         getCurrentOrder(),
@@ -609,6 +651,7 @@ function PlayPageSession({
         getPromotionPrice(),
         getStore(),
         getLocationList(),
+        getNewsRanking(dayNumber),
       ]);
 
       if (!isActive) {
@@ -620,6 +663,7 @@ function PlayPageSession({
       } else {
         setDeliveryTrafficLabel(null);
         setEmergencyArriveAt(null);
+        setEstimatedEmergencyArriveAt(null);
         syncDiscountActionState(false);
         syncPromotionActionState(false);
         syncShareActionState(false);
@@ -657,8 +701,17 @@ function PlayPageSession({
         setCurrentLocationName(storeResult.value.location);
       }
 
+      const trafficRankByAreaName =
+        rankingResult.status === "fulfilled"
+          ? buildAreaTrafficRankMap(rankingResult.value.areaTrafficRanking)
+          : new Map<string, number>();
+
       if (locationResult.status === "fulfilled") {
-        setMoveRegions(locationResult.value.locations.map(mapLocationToMoveRegion));
+        setMoveRegions(
+          locationResult.value.locations.map((location) =>
+            mapLocationToMoveRegion(location, trafficRankByAreaName),
+          ),
+        );
       } else {
         setMoveRegions([]);
       }
@@ -1031,7 +1084,7 @@ function PlayPageSession({
           currentMenuId={currentOrder?.menuId ?? null}
           currentMenuPricing={currentMenuPricing}
           deliveryTrafficLabel={deliveryTrafficLabel}
-          estimatedArrivalTime={emergencyArriveAt}
+          estimatedArrivalLabel={emergencyArrivalGameTime}
           isInitializing={isEmergencyDataLoading}
           initializationError={emergencyDataError}
           onClose={closeModal}

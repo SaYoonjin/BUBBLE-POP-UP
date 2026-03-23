@@ -37,7 +37,7 @@ interface EmergencyOrderModalProps {
   currentMenuId: number | null;
   currentMenuPricing: CurrentMenuPricing | null;
   deliveryTrafficLabel?: string | null;
-  estimatedArrivalTime?: string | null;
+  estimatedArrivalLabel?: string | null;
   isInitializing?: boolean;
   initializationError?: string | null;
   onClose: () => void;
@@ -90,23 +90,6 @@ function formatWon(amount: number) {
 
 function formatExpenseWon(amount: number) {
   return `- ${formatWon(amount)}`;
-}
-
-function formatEstimatedArrivalTime(arrivedTime: string | null | undefined) {
-  if (!arrivedTime) {
-    return null;
-  }
-
-  const parsed = new Date(arrivedTime);
-
-  if (Number.isNaN(parsed.getTime())) {
-    return null;
-  }
-
-  return parsed.toLocaleTimeString("ko-KR", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
 }
 
 function EmergencyQuantityCard({
@@ -176,7 +159,7 @@ export default function EmergencyOrderModal({
   currentMenuId,
   currentMenuPricing,
   deliveryTrafficLabel,
-  estimatedArrivalTime,
+  estimatedArrivalLabel,
   isInitializing = false,
   initializationError = null,
   onClose,
@@ -237,7 +220,6 @@ export default function EmergencyOrderModal({
   const totalCost = materialsCost + surcharge;
   const remainingBalance = currentBalance - totalCost;
   const canAfford = currentBalance >= totalCost;
-  const estimatedArrivalLabel = formatEstimatedArrivalTime(estimatedArrivalTime);
 
   useEffect(() => {
     setPrice(defaultSalePrice);
