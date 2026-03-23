@@ -82,6 +82,25 @@
         updateBannerVisibility();
       }
 
+      var unityInstanceRef = null;
+      var messageQueue = [];
+
+      function handleUnityMessage(method, payload) {
+        console.log("[WebGLBridge] SendMessage:", method, payload);
+        unityInstanceRef.SendMessage("WebGLBridge", method, payload);
+      }
+
+      window.addEventListener("message", function (event) {
+        if (!event.data || event.data.type !== "unity") return;
+        console.log("[WebGLBridge] Received postMessage:", event.data.method, event.data.payload, "unityReady:", !!unityInstanceRef);
+        if (!unityInstanceRef) {
+          messageQueue.push(event.data);
+          console.log("[WebGLBridge] Queued, queue size:", messageQueue.length);
+          return;
+        }
+        handleUnityMessage(event.data.method, event.data.payload);
+      });
+
       var buildUrl = "Build";
       var loaderUrl = buildUrl + "/unity.loader.js";
       var config = {
@@ -147,6 +166,17 @@
         createUnityInstance(canvas, config, (progress) => {
           document.querySelector("#unity-progress-bar-full").style.width = 100 * progress + "%";
               }).then((unityInstance) => {
+                unityInstanceRef = unityInstance;
+                // Unity 내부 초기화 완료 대기 후 큐 flush + ready 시그널
+                setTimeout(function () {
+                  console.log("[WebGLBridge] Flushing queue, size:", messageQueue.length);
+                  messageQueue.forEach(function (msg) {
+                    handleUnityMessage(msg.method, msg.payload);
+                  });
+                  messageQueue = [];
+                  console.log("[WebGLBridge] Sending unityReady to parent");
+                  parent.postMessage({ type: "unityReady" }, "*");
+                }, 3000);
                 document.querySelector("#unity-loading-bar").style.display = "none";
                 window.unityApp.instance = unityInstance;
                 window.unityApp.isReady = true;
