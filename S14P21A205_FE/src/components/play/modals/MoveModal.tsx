@@ -295,7 +295,7 @@ export default function MoveModal({
               }`}
             >
               <div className="mb-4 grid grid-cols-2 gap-3">
-                <div className="rounded-xl border border-slate-100 bg-white/80 p-3">
+                <div className="flex flex-col items-center justify-center rounded-xl border border-slate-100 bg-white/80 p-3 text-center">
                   <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
                     일일 임대료
                   </p>
@@ -303,7 +303,7 @@ export default function MoveModal({
                     {formatCurrency(selectedRegion.rent)}
                   </p>
                 </div>
-                <div className="rounded-xl border border-slate-100 bg-white/80 p-3">
+                <div className="flex flex-col items-center justify-center rounded-xl border border-slate-100 bg-white/80 p-3 text-center">
                   <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
                     혼잡도 순위
                   </p>
