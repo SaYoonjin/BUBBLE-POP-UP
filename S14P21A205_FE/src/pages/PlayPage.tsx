@@ -41,6 +41,7 @@ import {
   type StoreMenuResponse,
 } from "../api/store";
 import { getNewsRanking, type AreaRankingItemResponse } from "../api/news";
+import { setWeather, startDay, spawnShopAtIndex } from "../utils/unity";
 import { BUSINESS_SECONDS, DAY_SECONDS, elapsedToGameTime } from "../constants/gameTime";
 import useBrandName from "../hooks/useBrandName";
 import { useUserStore } from "../stores/useUserStore";
@@ -410,6 +411,10 @@ function PlayPageSession({
   const [activeEffects, setActiveEffects] = useState<Set<ActionType>>(new Set());
   const [alerts, setAlerts] = useState<GameAlert[]>([]);
   const [eventSchedule, setEventSchedule] = useState<EventScheduleItem[]>([]);
+  const unityIframeRef = useRef<HTMLIFrameElement>(null);
+  const [unityReady, setUnityReady] = useState(false);
+  const [dayWeatherType, setDayWeatherType] = useState<string | null>(null);
+  const [storeRegionIndex, setStoreRegionIndex] = useState<number | null>(null);
   const hasLoadedCarryOverRef = useRef(false);
   const [balance, setBalance] = useState(0);
   const [stock, setStock] = useState(0);
@@ -616,6 +621,25 @@ function PlayPageSession({
     };
   }, [nickname]);
 
+  // Unity ready 시그널 수신
+  useEffect(() => {
+    const handler = (e: MessageEvent) => {
+      if (e.data?.type === "unityReady") {
+        setUnityReady(true);
+      }
+    };
+    window.addEventListener("message", handler);
+    return () => window.removeEventListener("message", handler);
+  }, []);
+
+  // Unity 준비 완료 + 데이터 있을 때 명령 전송
+  useEffect(() => {
+    if (!unityReady || dayWeatherType === null || storeRegionIndex === null) return;
+    spawnShopAtIndex(unityIframeRef, storeRegionIndex);
+    setWeather(unityIframeRef, dayWeatherType);
+    startDay(unityIframeRef, BUSINESS_SECONDS);
+  }, [unityReady, dayWeatherType, storeRegionIndex]);
+
   useEffect(() => {
     let isActive = true;
 
@@ -631,6 +655,9 @@ function PlayPageSession({
         const dayStartRes = await startGameDay();
         if (isActive && dayStartRes.eventSchedule) {
           setEventSchedule(dayStartRes.eventSchedule);
+        }
+        if (isActive) {
+          setDayWeatherType(dayStartRes.weatherType ?? null);
         }
       } catch (error) {
         startErrorMessage = getErrorMessage(error, "영업 상태를 준비하지 못했습니다.");
@@ -699,6 +726,15 @@ function PlayPageSession({
 
       if (storeResult.status === "fulfilled") {
         setCurrentLocationName(storeResult.value.location);
+        // 매장 지역의 Unity 인덱스 계산 (locationId - 1 = 0-based index)
+        if (locationResult.status === "fulfilled") {
+          const matched = locationResult.value.locations.find(
+            (loc) => loc.locationName === storeResult.value.location,
+          );
+          if (matched) {
+            setStoreRegionIndex(matched.locationId - 1);
+          }
+        }
       }
 
       const trafficRankByAreaName =
@@ -790,6 +826,7 @@ function PlayPageSession({
 
     return () => window.clearInterval(timer);
   }, [playEndTimestampMs]);
+
 
   // 10초마다 게임 상태 폴링 (유동인구, 손님, 재고, 잔액)
   useEffect(() => {
@@ -1020,6 +1057,7 @@ function PlayPageSession({
         <div className="absolute inset-0 z-0 bg-transparent" />
         <div className="relative z-0 flex-1 bg-slate-950">
           <iframe
+            ref={unityIframeRef}
             src="/unity/index.html"
             title="Unity Game"
             className="h-full w-full border-0"
