@@ -142,6 +142,7 @@ public class NewsDataSaver {
         long countBefore = newsArticleRepository.countByNewsReportId(report.getId());
         log.info("[NEWS] Starting opening news for season {} currentDay {} -> targetDay {}", seasonId, day, targetDay);
         generateOpeningNewsInternal(report, seasonId, day);
+        newsArticleRepository.flush();
         long countAfter = newsArticleRepository.countByNewsReportId(report.getId());
         boolean generated = countAfter > countBefore;
         log.info("[NEWS] Completed opening news for season {} currentDay {} -> targetDay {} (generated={})",
@@ -178,6 +179,7 @@ public class NewsDataSaver {
         for (Runnable candidate : candidates) {
             try {
                 candidate.run();
+                newsArticleRepository.flush();
                 if (newsArticleRepository.countByNewsReportId(report.getId()) > countBefore) {
                     return;
                 }
@@ -452,6 +454,7 @@ public class NewsDataSaver {
         for (Runnable candidate : candidates) {
             try {
                 candidate.run();
+                newsArticleRepository.flush();
                 if (newsArticleRepository.countByNewsReportId(report.getId()) > countBefore) {
                     return;
                 }
