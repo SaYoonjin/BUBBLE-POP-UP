@@ -17,6 +17,7 @@ export interface StoreMenuResponse {
 
 export interface StoreMenuListResponse {
   menus: StoreMenuResponse[];
+  previousSalePrice: number | null;
 }
 
 export interface LocationItem {

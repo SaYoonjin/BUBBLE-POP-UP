@@ -110,7 +110,7 @@ public class StoreServiceImpl implements StoreService {
 
     @Override
     public MenuListResponse getMenus(Integer userId) {
-        getStoreByUserId(userId);
+        Store store = getStoreByUserId(userId);
         float discount = getDisplayedIngredientDiscountRate(userId).floatValue();
 
         List<MenuListResponse.MenuInfo> menuInfos = menuRepository.findAllByOrderByIdAsc().stream()
@@ -124,6 +124,7 @@ public class StoreServiceImpl implements StoreService {
 
         return MenuListResponse.builder()
                 .menus(menuInfos)
+                .previousSalePrice(store.getPrice())
                 .build();
     }
 

@@ -166,14 +166,13 @@ function getRecommendedPrice(costPrice: number) {
 function getSellingPriceDefault(
   costPrice: number,
   previousSalePrice: number,
-  day: number,
-  playableday: number | null,
 ) {
-  if (playableday !== null && day > playableday) {
+  const recommendedPrice = getRecommendedPrice(costPrice);
+  // 이전 판매가가 권장가와 다르면 이전 판매가 사용
+  if (previousSalePrice > 0 && previousSalePrice !== recommendedPrice) {
     return previousSalePrice;
   }
-
-  return getRecommendedPrice(costPrice);
+  return recommendedPrice;
 }
 
 function isRegularOrderDay(day: number) {
@@ -217,7 +216,7 @@ function resolveSelectedMenuId(
   );
 }
 
-function mapStoreMenusToPrepMenus(menus: StoreMenuResponse[]) {
+function mapStoreMenusToPrepMenus(menus: StoreMenuResponse[], previousSalePrice: number | null) {
   return menus.map((menu) => {
     const fallbackMenu = fallbackMenus.find((entry) => entry.id === menu.menuId);
 
@@ -227,7 +226,7 @@ function mapStoreMenusToPrepMenus(menus: StoreMenuResponse[]) {
       name: menu.menuName,
       costPrice: menu.ingredientPrice,
       previousSalePrice:
-        fallbackMenu?.previousSalePrice ?? getRecommendedPrice(menu.ingredientPrice),
+        previousSalePrice ?? fallbackMenu?.previousSalePrice ?? getRecommendedPrice(menu.ingredientPrice),
       ingredientDiscountMultiplier: normalizeDiscountMultiplier(menu.discount),
     } satisfies PrepMenu;
   });
@@ -270,8 +269,6 @@ export default function PrepPage() {
   const defaultSellingPrice = getSellingPriceDefault(
     originalCostPrice,
     selectedMenuData.previousSalePrice,
-    day,
-    playableday,
   );
   const [price, setPrice] = useState(defaultSellingPrice);
   const totalCost = originalCostPrice * quantity;
@@ -390,7 +387,7 @@ export default function PrepPage() {
           return;
         }
 
-        const nextMenus = mapStoreMenusToPrepMenus(fetchedMenus);
+        const nextMenus = mapStoreMenusToPrepMenus(fetchedMenus, menusResult.value.previousSalePrice);
         setMenus(nextMenus);
         setSelectedMenu((currentMenuId) =>
           resolveSelectedMenuId(nextMenus, currentMenuId, day, nextStoreMenuName),
@@ -721,7 +718,7 @@ export default function PrepPage() {
                       discountedCostPrice={discountedCostPrice}
                       hasItemDiscount={hasItemDiscount}
                       defaultPrice={defaultSellingPrice}
-                      defaultPriceLabel={playableday !== null && day > playableday ? "이전 판매가" : "권장가"}
+                      defaultPriceLabel={defaultSellingPrice !== recommendedPrice ? "이전 판매가" : "권장가"}
                       onChange={setPrice}
                     />
                     <div className="flex flex-col gap-5">

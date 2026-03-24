@@ -796,11 +796,15 @@ function PlayPageSession({
   const handlePopupArrival = (popupStoreIndex: number | null) => {
     const currentPopupStoreIndex = resolvePopupStoreIndex(currentLocationIdRef.current);
 
+    console.log("[PopupArrival] received:", popupStoreIndex, "current:", currentPopupStoreIndex, "locationId:", currentLocationIdRef.current, "queueSize:", arrivalQueueRef.current.length);
+
     if (currentPopupStoreIndex === null) {
+      console.log("[PopupArrival] SKIP: currentPopupStoreIndex is null");
       return;
     }
 
     if (popupStoreIndex !== null && popupStoreIndex !== currentPopupStoreIndex) {
+      console.log("[PopupArrival] SKIP: index mismatch", popupStoreIndex, "!==", currentPopupStoreIndex);
       return;
     }
 
