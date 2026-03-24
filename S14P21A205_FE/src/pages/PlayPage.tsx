@@ -401,21 +401,20 @@ function formatEmergencyArrivalGameTime(arrivedTime: string, businessEndMs: numb
   return elapsedToGameTime(elapsedSec);
 }
 
-function getEstimatedEmergencyArrivalTime(
-  serverTime: string | null | undefined,
+function getEstimatedEmergencyArrivalGameTime(
+  remainingMilliseconds: number,
   delaySeconds: number | null | undefined,
 ) {
-  if (!serverTime || typeof delaySeconds !== "number" || delaySeconds < 0) {
+  if (typeof delaySeconds !== "number" || delaySeconds < 0) {
     return null;
   }
 
-  const parsedServerTime = new Date(serverTime);
-
-  if (Number.isNaN(parsedServerTime.getTime())) {
-    return null;
-  }
-
-  return new Date(parsedServerTime.getTime() + delaySeconds * 1000).toISOString();
+  const currentElapsedBusinessSeconds = Math.floor(getElapsedBusinessSeconds(remainingMilliseconds));
+  const estimatedElapsedBusinessSeconds = Math.min(
+    BUSINESS_SECONDS,
+    currentElapsedBusinessSeconds + delaySeconds,
+  );
+  return elapsedToGameTime(estimatedElapsedBusinessSeconds);
 }
 
 function getDiscountedPrice(
@@ -537,7 +536,7 @@ function PlayPageSession({
   const [alerts, setAlerts] = useState<GameAlert[]>([]);
   const [eventSchedule, setEventSchedule] = useState<EventScheduleItem[]>([]);
   const unityIframeRef = useRef<HTMLIFrameElement>(null);
-  const [unityReady, setUnityReady] = useState(false);
+  const [, setUnityReady] = useState(false);
   const [dayWeatherType, setDayWeatherType] = useState<string | null>(null);
   const [storeRegionIndex, setStoreRegionIndex] = useState<number | null>(null);
   const hasLoadedCarryOverRef = useRef(false);
@@ -560,7 +559,7 @@ function PlayPageSession({
   const [trafficStatus, setTrafficStatus] = useState<GameTrafficStatus | null>(null);
   const [deliveryTrafficLabel, setDeliveryTrafficLabel] = useState<string | null>(null);
   const [emergencyArriveAt, setEmergencyArriveAt] = useState<string | null>(null);
-  const [estimatedEmergencyArriveAt, setEstimatedEmergencyArriveAt] = useState<string | null>(null);
+  const [estimatedEmergencyDelaySeconds, setEstimatedEmergencyDelaySeconds] = useState<number | null>(null);
   const [isEmergencyDataLoading, setIsEmergencyDataLoading] = useState(true);
   const [emergencyDataError, setEmergencyDataError] = useState<string | null>(null);
   const [isMoveDataLoading, setIsMoveDataLoading] = useState(true);
@@ -575,10 +574,9 @@ function PlayPageSession({
   remainingMillisecondsRef.current = remainingMilliseconds;
   const playStoreName = brandName || "";
   const currentMenuName = currentOrder?.menuName ?? "";
-  const displayedEmergencyArriveAt = emergencyArriveAt ?? estimatedEmergencyArriveAt;
-  const emergencyArrivalGameTime = displayedEmergencyArriveAt
-    ? formatEmergencyArrivalGameTime(displayedEmergencyArriveAt, playEndTimestampMs) || null
-    : null;
+  const emergencyArrivalGameTime = emergencyArriveAt
+    ? formatEmergencyArrivalGameTime(emergencyArriveAt, playEndTimestampMs) || null
+    : getEstimatedEmergencyArrivalGameTime(remainingMilliseconds, estimatedEmergencyDelaySeconds);
   const currentMenuPricing: CurrentMenuPricing | null = currentOrder
     ? {
         costPrice: currentOrder.costPrice,
@@ -886,11 +884,7 @@ function PlayPageSession({
     setDeliveryTrafficLabel(getTrafficStatusLabel(state.traffic?.status));
     syncUnityCongestionLevel(state.traffic?.status);
     schedulePlannedVisitors(state.customerPlanByHour, state.customerCount);
-    const estimatedEmergencyArriveAt = getEstimatedEmergencyArrivalTime(
-      state.serverTime,
-      state.traffic?.delaySeconds,
-    );
-    setEstimatedEmergencyArriveAt(estimatedEmergencyArriveAt);
+    setEstimatedEmergencyDelaySeconds(state.traffic?.delaySeconds ?? null);
     setEmergencyArriveAt((current) => {
       if (state.actionStatus.emergencyOrderArriveAt) {
         return state.actionStatus.emergencyOrderArriveAt;
@@ -1056,7 +1050,7 @@ function PlayPageSession({
         setTrafficStatus(null);
         setDeliveryTrafficLabel(null);
         setEmergencyArriveAt(null);
-        setEstimatedEmergencyArriveAt(null);
+        setEstimatedEmergencyDelaySeconds(null);
         latestCustomerPlanRef.current = [];
         latestBackendCustomerCountRef.current = 0;
         dispatchedVisitorsByHourRef.current.clear();

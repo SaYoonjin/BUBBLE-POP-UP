@@ -426,6 +426,9 @@ export default function EmergencyOrderModal({
                 <p className="mt-1 text-xs text-slate-400">
                   현재 교통량과 예상 도착 시간을 실시간으로 안내합니다.
                 </p>
+                <p className="mt-1 text-[11px] leading-relaxed text-slate-400">
+                  교통 상황에 따라 예상 도착 시간과 실제 도착 시간은 달라질 수 있습니다.
+                </p>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
