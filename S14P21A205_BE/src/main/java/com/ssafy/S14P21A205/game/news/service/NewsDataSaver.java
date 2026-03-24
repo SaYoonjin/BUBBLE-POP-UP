@@ -393,28 +393,6 @@ public class NewsDataSaver {
     }
 
     /**
-     * 시즌 준비 시간에 트렌드 뉴스가 먼저 생성됐을 때,
-     * IN_PROGRESS 전환 후 이벤트가 빌드되면 축제 예고 뉴스만 보충.
-     */
-    @Transactional
-    public void generateMissingEventPreviewNews(Long seasonId, int totalDays) {
-        for (int day = 1; day <= totalDays; day++) {
-            NewsReport report = newsReportRepository.findBySeasonIdAndDay(seasonId, day).orElse(null);
-            if (report == null) continue;
-
-            // 이미 해당 day에 EXTRA(축제 예고) 뉴스가 있으면 건너뜀
-            boolean hasExtra = newsArticleRepository.existsByNewsReportIdAndCategory(report.getId(), NewsCategory.EXTRA);
-            if (hasExtra) continue;
-
-            try {
-                generateEventPreviewNews(report, seasonId, day, totalDays);
-            } catch (Exception e) {
-                log.error("Failed to generate missing event preview. seasonId={} day={}", seasonId, day, e);
-            }
-        }
-    }
-
-    /**
      * Redis state에서 직접 지역별 매출 순위를 집계하여 NewsReport에 저장하고, 마감 뉴스도 생성.
      * daily_report 의존 없이 독립 실행 가능.
      */
