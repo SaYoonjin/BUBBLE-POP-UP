@@ -648,7 +648,6 @@ function PlayPageSession({
   const prevBalanceRef = useRef<number | null>(null);
   // Unity arrival 시 고객별 재고/잔액 변동 큐
   const arrivalQueueRef = useRef<Array<{ stockDelta: number; balanceDelta: number }>>([]);
-  const arrivalDrainTimerRef = useRef<number | null>(null);
 
   const clearScheduledVisitorTimers = () => {
     for (const timerId of scheduledVisitorTimersRef.current) {
@@ -817,40 +816,13 @@ function PlayPageSession({
     setGuests((prev) => prev + 1);
 
     const change = arrivalQueueRef.current.shift();
-    if (change) {
-      if (change.stockDelta !== 0) {
-        setStock((prev) => prev + change.stockDelta);
-        setStockDelta(change.stockDelta);
-      }
-      if (change.balanceDelta !== 0) {
-        setBalance((prev) => prev + change.balanceDelta);
-        setBalanceDelta(change.balanceDelta);
-      }
+    if (change && (change.stockDelta !== 0 || change.balanceDelta !== 0)) {
+      setStock((prev) => prev + change.stockDelta);
+      setBalance((prev) => prev + change.balanceDelta);
     }
   };
 
-  /** 큐를 일정 간격으로 자동 소진하는 타이머 시작 (Unity 이벤트 fallback) */
-  const startDrainTimer = (count: number) => {
-    if (arrivalDrainTimerRef.current !== null) {
-      window.clearInterval(arrivalDrainTimerRef.current);
-    }
-    if (count <= 0) return;
-
-    // 폴링 간격(10초) 안에 균등 분배
-    const intervalMs = Math.max(200, Math.floor(8000 / count));
-    arrivalDrainTimerRef.current = window.setInterval(() => {
-      if (arrivalQueueRef.current.length === 0) {
-        if (arrivalDrainTimerRef.current !== null) {
-          window.clearInterval(arrivalDrainTimerRef.current);
-          arrivalDrainTimerRef.current = null;
-        }
-        return;
-      }
-      applyOneArrival();
-    }, intervalMs);
-  };
-
-  // Unity UNITY_POPUP_ARRIVAL 이벤트 수신 (오면 큐에서 즉시 소비)
+  // Unity UNITY_POPUP_ARRIVAL 이벤트 수신
   useEffect(() => {
     const handleUnityMessage = (event: MessageEvent) => {
       if (event.origin !== window.location.origin) return;
@@ -874,12 +846,8 @@ function PlayPageSession({
     if (prevGuestsRef.current !== null) {
       const gd = state.customerCount - prevGuestsRef.current;
 
-      // 이전 큐/타이머 클리어
+      // 이전 큐 클리어
       arrivalQueueRef.current = [];
-      if (arrivalDrainTimerRef.current !== null) {
-        window.clearInterval(arrivalDrainTimerRef.current);
-        arrivalDrainTimerRef.current = null;
-      }
 
       // 새 손님이 있으면: 재고/잔액은 이전 값 유지, 큐로 점진 반영
       if (gd > 0) {
@@ -890,8 +858,6 @@ function PlayPageSession({
             balanceDelta: units * unitPrice,
           });
         }
-        // 큐 자동 소진 타이머 시작 (Unity 이벤트가 안 오는 경우 fallback)
-        startDrainTimer(gd);
 
         if (!hasCustomerPlan) {
           const popupStoreIndex = resolvePopupStoreIndex(currentLocationIdRef.current);
@@ -1481,9 +1447,9 @@ function PlayPageSession({
         guests={guests}
         stock={stock}
         balance={balance}
-        guestsDelta={guestsDelta}
-        stockDelta={stockDelta}
-        balanceDelta={balanceDelta}
+        guestsDelta={null}
+        stockDelta={null}
+        balanceDelta={null}
       />
 
       <main className="relative flex flex-1 overflow-hidden">

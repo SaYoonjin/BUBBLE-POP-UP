@@ -124,7 +124,6 @@ public class StoreServiceImpl implements StoreService {
 
         return MenuListResponse.builder()
                 .menus(menuInfos)
-                .previousSalePrice(store.getPrice())
                 .build();
     }
 

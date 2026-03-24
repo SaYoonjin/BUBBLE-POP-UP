@@ -13,8 +13,6 @@ public class MenuListResponse {
 
     private List<MenuInfo> menus;
 
-    private Integer previousSalePrice;
-
     @Getter
     @Builder
     @AllArgsConstructor
