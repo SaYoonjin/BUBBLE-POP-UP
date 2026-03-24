@@ -12,6 +12,7 @@ import FloatingBubbles from "../components/common/FloatingBubbles";
 import ItemSelector from "../components/common/ItemSelector";
 import Modal from "../components/common/Modal";
 import SeasonCTA from "../components/common/SeasonCTA";
+import { useGameStore } from "../stores/useGameStore";
 import {
   getDiscountLabel,
   getStoredSelectedDashboardItemIds,
@@ -70,8 +71,6 @@ const SHOP_ITEM_UI_BY_ID: Partial<
 };
 
 interface DashboardRouteState {
-  showBankruptWarning?: boolean;
-  bankruptSeasonNumber?: number;
   showMidSeasonSetupExpiredModal?: boolean;
 }
 
@@ -198,11 +197,6 @@ function parseDashboardRouteState(value: unknown): DashboardRouteState {
   const state = value as DashboardRouteState;
 
   return {
-    showBankruptWarning: Boolean(state.showBankruptWarning),
-    bankruptSeasonNumber:
-      typeof state.bankruptSeasonNumber === "number"
-        ? state.bankruptSeasonNumber
-        : undefined,
     showMidSeasonSetupExpiredModal: Boolean(state.showMidSeasonSetupExpiredModal),
   };
 }
@@ -287,8 +281,9 @@ export default function DashboardPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [gameReturnPath, setGameReturnPath] = useState<string | null>(null);
-  const [bankruptWarningSeasonNumber, setBankruptWarningSeasonNumber] = useState<number | null>(null);
   const [isBankruptWarningVisible, setIsBankruptWarningVisible] = useState(false);
+  const bankruptNoticeSeasonNumber = useGameStore((state) => state.bankruptNoticeSeasonNumber);
+  const clearBankruptNotice = useGameStore((state) => state.clearBankruptNotice);
 
   const routeState = useMemo(
     () => parseDashboardRouteState(location.state),
@@ -371,30 +366,6 @@ export default function DashboardPage() {
   );
 
   useEffect(() => {
-    if (!routeState.showBankruptWarning) {
-      return;
-    }
-
-    if (typeof routeState.bankruptSeasonNumber === "number") {
-      setBankruptWarningSeasonNumber(routeState.bankruptSeasonNumber);
-      setIsBankruptWarningVisible(true);
-    }
-
-    navigate(location.pathname, {
-      replace: true,
-      state: routeState.showMidSeasonSetupExpiredModal
-        ? { showMidSeasonSetupExpiredModal: true }
-        : null,
-    });
-  }, [
-    location.pathname,
-    navigate,
-    routeState.bankruptSeasonNumber,
-    routeState.showBankruptWarning,
-    routeState.showMidSeasonSetupExpiredModal,
-  ]);
-
-  useEffect(() => {
     if (shopItems.length === 0) {
       return;
     }
@@ -445,23 +416,27 @@ export default function DashboardPage() {
 
       // 게임 참여 중이면 돌아가기 경로 계산
       try {
-        const storeData = await getStore(); // 성공하면 참여 중
-        const timeData = await getSeasonTime();
-        const phase = timeData.seasonPhase as SeasonPhase;
-        const day = timeData.currentDay;
+        const storeData = await getStore(); // 성공하면 현재 시즌 store를 읽을 수 있음
+        try {
+          const timeData = await getSeasonTime();
+          const phase = timeData.seasonPhase as SeasonPhase;
+          const day = timeData.currentDay;
 
-        // playableFromDay > currentDay면 아직 대기 중 → /game/waiting으로
-        const pfd = storeData.playableFromDay;
-        if (typeof pfd === "number" && day < pfd) {
-          setGameReturnPath("/game/waiting");
-        } else {
-          const path = phaseToRoute(phase, day);
-          if (path && path !== "/") {
-            setGameReturnPath(path);
+          // playableFromDay > currentDay면 아직 대기 중 → /game/waiting으로
+          const pfd = storeData.playableFromDay;
+          if (typeof pfd === "number" && day < pfd) {
+            setGameReturnPath("/game/waiting");
+          } else {
+            const path = phaseToRoute(phase, day);
+            if (path && path !== "/") {
+              setGameReturnPath(path);
+            }
           }
+        } catch {
+          setGameReturnPath(null);
         }
       } catch {
-        // getStore 실패 = 미참여 → 무시
+        setGameReturnPath(null);
       }
     }
 
@@ -509,7 +484,7 @@ export default function DashboardPage() {
   }, [waitingStatus?.status]);
 
   useEffect(() => {
-    if (bankruptWarningSeasonNumber === null) {
+    if (bankruptNoticeSeasonNumber === null) {
       setIsBankruptWarningVisible(false);
       return;
     }
@@ -518,10 +493,9 @@ export default function DashboardPage() {
       return;
     }
 
-    if (waitingStatus.status === "WAITING") {
-      setIsBankruptWarningVisible(
-        waitingStatus.nextSeasonNumber === bankruptWarningSeasonNumber + 1,
-      );
+    if (waitingStatus.status !== "IN_PROGRESS") {
+      clearBankruptNotice();
+      setIsBankruptWarningVisible(false);
       return;
     }
 
@@ -529,9 +503,23 @@ export default function DashboardPage() {
       return;
     }
 
-    setIsBankruptWarningVisible(currentSeasonNumber === bankruptWarningSeasonNumber);
+    if (currentSeasonNumber === null) {
+      return;
+    }
+
+    const isBankruptSeason = currentSeasonNumber === bankruptNoticeSeasonNumber;
+    const isBeforeDaySix = (waitingStatus.currentDay ?? 0) < 6;
+
+    if (isBankruptSeason && isBeforeDaySix) {
+      setIsBankruptWarningVisible(true);
+      return;
+    }
+
+    clearBankruptNotice();
+    setIsBankruptWarningVisible(false);
   }, [
-    bankruptWarningSeasonNumber,
+    bankruptNoticeSeasonNumber,
+    clearBankruptNotice,
     currentSeasonNumber,
     isResolvingCurrentSeasonNumber,
     waitingStatus,
