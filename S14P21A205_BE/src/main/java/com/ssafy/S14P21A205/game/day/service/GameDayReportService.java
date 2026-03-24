@@ -215,6 +215,15 @@ public class GameDayReportService {
             return applyPendingLocationIfDue(inProgressStore.get());
         }
 
+        Optional<Store> bankruptInProgressStore = storeRepository.findFirstIncludingBankruptByUserIdAndSeasonStatusOrderByIdDesc(
+                userId,
+                SeasonStatus.IN_PROGRESS
+        );
+        if (bankruptInProgressStore.isPresent()) {
+            STORE_LOCATION_TRANSITION_SUPPORT.applyPendingLocationIfDue(bankruptInProgressStore.get(), LocalDateTime.now(clock));
+            return bankruptInProgressStore.get();
+        }
+
         return storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(userId, SeasonStatus.FINISHED)
                 .map(this::applyPendingLocationIfDue)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_PARTICIPATING));

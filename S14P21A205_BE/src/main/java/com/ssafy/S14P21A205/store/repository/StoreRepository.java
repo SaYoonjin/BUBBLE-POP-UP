@@ -75,6 +75,19 @@ public interface StoreRepository extends JpaRepository<Store, Long> {
 
     Optional<Store> findFirstByUser_IdAndSeason_IdOrderByIdDesc(Integer userId, Long seasonId);
 
+    @EntityGraph(attributePaths = {"user", "location", "menu", "season"})
+    @Query("""
+            select s
+            from Store s
+            where s.user.id = :userId
+              and s.season.status = :seasonStatus
+            order by s.id desc
+            """)
+    Optional<Store> findFirstIncludingBankruptByUserIdAndSeasonStatusOrderByIdDesc(
+            @Param("userId") Integer userId,
+            @Param("seasonStatus") SeasonStatus seasonStatus
+    );
+
     boolean existsByUser_IdAndSeason_Id(Integer userId, Long seasonId);
 
     Optional<Store> findByUser_Id(Integer userId);
