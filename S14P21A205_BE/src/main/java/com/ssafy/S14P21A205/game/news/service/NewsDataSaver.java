@@ -136,9 +136,9 @@ public class NewsDataSaver {
             return;
         }
 
-        log.info("[NEWS] Starting opening news for season {} day {} -> targetDay {}", seasonId, day, targetDay);
-        generateOpeningNewsInternal(report, seasonId, day);
-        log.info("[NEWS] Completed opening news for season {} day {} -> targetDay {}", seasonId, day, targetDay);
+        log.info("[NEWS] Starting opening news for season {} currentDay {} -> targetDay {}", seasonId, day, targetDay);
+        generateOpeningNewsInternal(report, seasonId, targetDay);
+        log.info("[NEWS] Completed opening news for season {} currentDay {} -> targetDay {}", seasonId, day, targetDay);
     }
 
     // ---- 영업 중 뉴스 (메뉴 입점수 + 지역 입점수) ----
@@ -420,7 +420,7 @@ public class NewsDataSaver {
         }
 
         log.info("[NEWS] Starting closing news from Redis for season {} day {} -> targetDay {}", seasonId, day, targetDay);
-        generateClosingNewsFromRedis(targetReport, seasonId, day, stores);
+        generateClosingNewsFromRedis(targetReport, seasonId, targetDay, stores);
         log.info("[NEWS] Completed closing news from Redis for season {} day {} -> targetDay {}", seasonId, day, targetDay);
     }
 

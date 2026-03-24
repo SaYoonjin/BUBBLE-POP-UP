@@ -471,9 +471,7 @@ export default function PrepPage() {
     setNewsError(null);
     setNewsItems([]);
 
-    // 최소 5초간 스켈레톤 표시 (BE 뉴스 생성 대기)
-    // 5초 후 fetch → state에 반영 + 스켈레톤 해제
-    // 10초에 한 번 더 조용히 갱신 (추가 뉴스 반영)
+    // 2초 후 fetch → state에 반영 + 스켈레톤 해제
     const showTimer = setTimeout(async () => {
       if (!isActive) return;
       try {
@@ -487,20 +485,8 @@ export default function PrepPage() {
       } finally {
         if (isActive) setIsNewsLoading(false);
       }
-    }, 5000);
+    }, 2000);
     timers.push(showTimer);
-
-    const silentRefreshTimer = setTimeout(async () => {
-      if (!isActive) return;
-      try {
-        const [todayResult, rankingResult] = await Promise.allSettled([
-          getTodayNews(day),
-          getNewsRanking(day),
-        ]);
-        applyNewsData(todayResult, rankingResult);
-      } catch { /* 조용히 무시 */ }
-    }, 10000);
-    timers.push(silentRefreshTimer);
 
     return () => {
       isActive = false;

@@ -36,10 +36,13 @@ public class AiNewsGenerator {
             "너는 '버블팝업' 팝업스토어 음식게임 전문 기자다. "
             + "게임 이름은 반드시 '버블팝업'이다. 다른 이름을 만들어내지 마. "
             + "출력: {\"title\":\"제목\",\"content\":\"본문\"} JSON만. 다른 텍스트 금지. "
+            + "제목은 핵심 정보를 담아 독자가 제목만 읽어도 기사 내용을 파악할 수 있게 써. "
+            + "예: 지역명+현상, 메뉴명+변동, 매장명+성과 등 구체적 사실 포함. "
             + "제목 15~25자. 본문 150~250자 이내로 짧게. "
             + "순수 한국어만 사용(영어·한자·아랍어·외국어 절대 금지). "
             + "숫자 직접 쓰지 말고 간접 표현. 괄호·이모지·따옴표 금지. "
             + "마크다운 금지(**, *, #, ```, - 등 절대 쓰지 마). "
+            + "백슬래시 사용 금지. 줄바꿈 넣지 마. "
             + "짧은 문장 위주, 자연스럽고 읽기 쉬운 한국어로 써. "
             + "가상의 인물명·매장명·브랜드명을 만들어내지 마.";
 
@@ -53,8 +56,8 @@ public class AiNewsGenerator {
         this.model = model;
         log.info("GMS AI base-url={}, model={}", baseUrl, model);
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
-        factory.setConnectTimeout(Duration.ofSeconds(10));
-        factory.setReadTimeout(Duration.ofSeconds(60));
+        factory.setConnectTimeout(Duration.ofSeconds(5));
+        factory.setReadTimeout(Duration.ofSeconds(15));
         this.restClient = RestClient.builder()
                 .baseUrl(baseUrl)
                 .requestFactory(factory)
@@ -75,7 +78,7 @@ public class AiNewsGenerator {
                 .mapToObj(i -> (i + 1) + "위 " + rankedMenus.get(i).menuName())
                 .collect(Collectors.joining(", "));
 
-        String prompt = "인기메뉴: %s. 순위 직접 언급 말고 인기도 간접 표현. 상위 메뉴 모두 언급. 스타일: %s"
+        String prompt = "인기메뉴: %s. 순위 직접 언급 말고 인기도 간접 표현. 상위 메뉴 모두 언급. 제목에 인기 메뉴명과 트렌드 포함. 스타일: %s"
                 .formatted(rankingText, style);
         try {
             return callAi(prompt);
@@ -102,7 +105,7 @@ public class AiNewsGenerator {
                 .map(item -> item.get("name") + " " + item.get("storeCount") + "개")
                 .collect(Collectors.joining(", "));
 
-        String prompt = "메뉴별 매장수: %s. 많은 메뉴는 원재료비 상승, 적은 메뉴는 틈새 기회. 상위·하위 대비. 스타일: %s"
+        String prompt = "메뉴별 매장수: %s. 많은 메뉴는 원재료비 상승, 적은 메뉴는 틈새 기회. 상위·하위 대비. 제목에 1위 메뉴명과 매장 동향 포함. 스타일: %s"
                 .formatted(rankingText, style);
         try {
             return callAi(prompt);
@@ -124,7 +127,7 @@ public class AiNewsGenerator {
                 .map(item -> item.get("name") + " " + item.get("storeCount") + "개")
                 .collect(Collectors.joining(", "));
 
-        String prompt = "지역별 매장수: %s. 밀집 지역은 임대료 폭등, 한산한 지역은 안정. 상위·하위 대비. 스타일: %s"
+        String prompt = "지역별 매장수: %s. 밀집 지역은 임대료 폭등, 한산한 지역은 안정. 상위·하위 대비. 제목에 1위 지역명과 입점 현황 포함. 스타일: %s"
                 .formatted(rankingText, style);
         try {
             return callAi(prompt);
@@ -169,7 +172,7 @@ public class AiNewsGenerator {
     public NewsGenerationResult generateTopStoreNews(long seasonId, int day, String storeName, String menuName,
             int revenue, int salesCount) {
         String style = getRandomStyle();
-        String prompt = "매출1위: %s(%s), 매출%d원, %d개. 사장님 인터뷰 포함. 스타일: %s"
+        String prompt = "매출1위: %s(%s), 매출%d원, %d개. 사장님 인터뷰 포함. 제목에 매장명과 매출 1위 사실 포함. 스타일: %s"
                 .formatted(storeName, menuName, revenue, salesCount, style);
         try {
             return callAi(prompt);
@@ -187,7 +190,7 @@ public class AiNewsGenerator {
     public NewsGenerationResult generateCumulativeSalesNews(long seasonId, int day, String storeName, String menuName,
             long totalSales, int milestone) {
         String style = getRandomStyle();
-        String prompt = "%s 매장 %s 누적%d개(마일스톤:%d개). 단골 코멘트 포함. 스타일: %s"
+        String prompt = "%s 매장 %s 누적%d개(마일스톤:%d개). 단골 코멘트 포함. 제목에 매장명과 판매 마일스톤 포함. 스타일: %s"
                 .formatted(storeName, menuName, totalSales, milestone, style);
         try {
             return callAi(prompt);
@@ -211,7 +214,7 @@ public class AiNewsGenerator {
                 })
                 .collect(Collectors.joining(", "));
 
-        String prompt = "지역별 매장이동: %s(+유입,-유출). 유입=경쟁심화, 유출=기회. 스타일: %s"
+        String prompt = "지역별 매장이동: %s(+유입,-유출). 유입=경쟁심화, 유출=기회. 제목에 이동이 큰 지역명과 변화 방향 포함. 스타일: %s"
                 .formatted(changesText, style);
         try {
             return callAi(prompt);
@@ -403,16 +406,15 @@ public class AiNewsGenerator {
             jsonStr = jsonStr.replaceAll("(?s)```json?\\s*", "").replaceAll("(?s)```", "").trim();
         }
 
-        // 이중 이스케이프 정리: "" → "
-        if (jsonStr.contains("\"\"")) {
-            jsonStr = jsonStr.replace("\"\"", "\"");
-        }
-
         // 키 누락 패턴 복원: {:"val1", :"val2"} → {"title":"val1","content":"val2"}
+        // 이중 따옴표 치환보다 먼저 실행해야 JSON 구조가 깨지지 않음
         if (jsonStr.matches("(?s)\\{\\s*:.*")) {
             jsonStr = jsonStr.replaceFirst("\\{\\s*:", "{\"title\":");
             jsonStr = jsonStr.replaceFirst(",\\s*:", ",\"content\":");
         }
+
+        // 이중 이스케이프 정리: "" → " (JSON 키/값 경계의 "" 은 제외)
+        jsonStr = jsonStr.replaceAll("(?<=[^:{,\\[])\"\"(?=[^:}\\],])", "\"");
 
         // 중첩 브레이스 카운팅으로 첫 번째 완전한 JSON 객체 추출
         int braceStart = jsonStr.indexOf('{');
@@ -572,7 +574,9 @@ public class AiNewsGenerator {
         // 아랍어·키릴 등 비한글·비숫자·비구두점 외국어 제거
         text = text.replaceAll("[\\u0600-\\u06FF\\u0400-\\u04FF]+", "");
         // 백슬래시 이스케이프 정리
-        text = text.replace("\\n", " ").replace("\\\"", "\"");
+        text = text.replace("\\n", " ").replace("\\\"", "\"").replace("\\\\", "");
+        // 남은 단독 백슬래시 제거
+        text = text.replace("\\", "");
         // 연속 공백 정리
         text = text.replaceAll("\\s{2,}", " ");
         // 빈 따옴표·괄호 정리
