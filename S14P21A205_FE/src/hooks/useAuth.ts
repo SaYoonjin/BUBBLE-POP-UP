@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useGameStore } from "../stores/useGameStore";
 
 export function isAuthenticated() {
   return Boolean(localStorage.getItem("accessToken"));
@@ -8,6 +9,8 @@ export function clearAuthSession() {
   localStorage.removeItem("accessToken");
   localStorage.removeItem("tokenType");
   localStorage.removeItem("profileNickname");
+  useGameStore.getState().clearGame();
+  useGameStore.getState().clearBankruptNotice();
 }
 
 export default function useAuth() {

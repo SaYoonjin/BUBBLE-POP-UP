@@ -1,9 +1,9 @@
 package com.ssafy.S14P21A205.game.day.service;
 
+import com.ssafy.S14P21A205.game.news.service.NewsService;
 import com.ssafy.S14P21A205.game.season.entity.Season;
 import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
 import com.ssafy.S14P21A205.game.season.repository.SeasonRepository;
-import com.ssafy.S14P21A205.game.news.service.NewsService;
 import com.ssafy.S14P21A205.game.season.service.SeasonFinalRankingService;
 import com.ssafy.S14P21A205.store.entity.Store;
 import com.ssafy.S14P21A205.store.repository.StoreRepository;
@@ -51,7 +51,6 @@ public class SeasonDayClosingService {
             return;
         }
 
-        // Day closing must still persist reports for stores that already went bankrupt.
         List<Store> stores = storeRepository.findAllBySeason_IdOrderByIdAsc(seasonId);
         if (stores.isEmpty()) {
             log.info("Skipping day closing. seasonId={} day={} reason=no_stores", seasonId, day);
@@ -60,22 +59,50 @@ public class SeasonDayClosingService {
 
         boolean isLastDay = day == season.getTotalDays();
 
-        // 일일 리포트 저장 (동기 — 스케줄러 catch-up 시 순서 보장 필요)
-        for (Store store : stores) {
-            gameDayReportService.recordClosedDayReport(store, day);
-        }
-        if (isLastDay) {
-            seasonFinalRankingService.saveFinalRankings(season);
-        }
-        log.info("Daily reports saved. seasonId={} day={} storeCount={}", seasonId, day, stores.size());
+        CompletableFuture<Void> reportFuture = CompletableFuture.runAsync(() -> {
+            int successCount = 0;
+            int failureCount = 0;
 
-        // 순위 집계 + 마감 뉴스는 비동기 (Redis 기반, daily_report 의존 없음)
-        CompletableFuture.runAsync(() -> {
+            for (Store store : stores) {
+                try {
+                    gameDayReportService.recordClosedDayReport(store, day);
+                    successCount++;
+                } catch (Exception e) {
+                    failureCount++;
+                    log.error(
+                            "Failed to save daily report. seasonId={} day={} storeId={}",
+                            seasonId,
+                            day,
+                            store.getId(),
+                            e
+                    );
+                }
+            }
+            if (isLastDay) {
+                seasonFinalRankingService.saveFinalRankings(season);
+            }
+            log.info(
+                    "Daily reports saved. seasonId={} day={} storeCount={} successCount={} failureCount={}",
+                    seasonId,
+                    day,
+                    stores.size(),
+                    successCount,
+                    failureCount
+            );
+        }, dayClosingExecutor);
+
+        CompletableFuture<Void> newsFuture = CompletableFuture.runAsync(() -> {
             try {
                 newsService.updateDayRankingsFromRedis(seasonId, day, stores);
             } catch (Exception e) {
                 log.error("Failed to update rankings/news from Redis. seasonId={} day={}", seasonId, day, e);
             }
         }, dayClosingExecutor);
+
+        try {
+            CompletableFuture.allOf(reportFuture, newsFuture).join();
+        } catch (Exception e) {
+            log.error("Day closing tasks failed. seasonId={} day={}", seasonId, day, e);
+        }
     }
 }

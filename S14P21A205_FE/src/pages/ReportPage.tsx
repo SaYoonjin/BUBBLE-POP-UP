@@ -10,6 +10,7 @@ import StatCard from "../components/common/StatCard";
 import ProfitChart from "../components/report/ProfitChart";
 import WeatherCard from "../components/report/WeatherCard";
 import useBrandName from "../hooks/useBrandName";
+import { useGameStore } from "../stores/useGameStore";
 
 function getNetProfit(report: GameDayReportResponse) {
   return (report.revenue ?? 0) - (report.totalCost ?? 0);
@@ -99,10 +100,11 @@ export default function ReportPage() {
   }, [day]);
 
   const handleBankruptExit = () => {
-    navigate("/", {
-      replace: true,
-      state: { showBankruptWarning: true },
-    });
+    if (report?.seasonId != null) {
+      useGameStore.getState().setBankruptNoticeSeasonNumber(report.seasonId);
+    }
+
+    navigate("/", { replace: true });
   };
 
   if (loading) {

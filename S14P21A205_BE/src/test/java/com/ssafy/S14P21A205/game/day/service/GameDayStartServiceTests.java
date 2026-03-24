@@ -214,7 +214,7 @@ class GameDayStartServiceTests {
         assertThat(response.hourlySchedule().get("10").effectivePopulation()).isEqualTo(627);
         assertThat(response.hourlySchedule().get("11").effectivePopulation()).isEqualTo(615);
         assertThat(response.initialStock()).isEqualTo(0);
-        assertThat(response.initialBalance()).isEqualTo(4_670_000);
+        assertThat(response.initialBalance()).isEqualTo(4_800_000);
         assertThat(response.eventSchedule()).hasSize(2);
         assertThat(response.eventSchedule().get(0).type()).isEqualTo("celebrity");
         assertThat(response.eventSchedule().get(0).scope()).isNull();
@@ -226,6 +226,7 @@ class GameDayStartServiceTests {
         assertThat(response.marketSnapshot().regionStoreCount()).isEqualTo(1);
         assertThat(response.openingSummary().dailyRentApplied()).isEqualTo(130_000);
         assertThat(response.openingSummary().interiorCost()).isZero();
+        assertThat(response.openingSummary().fixedCostTotal()).isZero();
         assertThat(response.openingSummary().appliedUnitCost()).isEqualTo(2_400);
 
         verify(gameDayStoreStateRedisRepository, never()).save(any(), any(), any());
@@ -314,7 +315,7 @@ class GameDayStartServiceTests {
         when(dailyEventRepository.findBySeasonIdAndDayBetweenOrderByDayAscIdAsc(9L, 1, 2)).thenReturn(List.of());
         GameDayStartResponse response = gameDayStartService.startDay(mock(Authentication.class));
 
-        assertThat(response.initialBalance()).isEqualTo(9_570_000);
+        assertThat(response.initialBalance()).isEqualTo(9_700_000);
         assertThat(response.initialStock()).isEqualTo(15);
         assertThat(response.openingSummary().previousClosingBalance()).isEqualTo(9_700_000);
         assertThat(response.openingSummary().previousClosingStock()).isEqualTo(15);
@@ -447,9 +448,10 @@ class GameDayStartServiceTests {
         when(dailyEventRepository.findBySeasonIdAndDayBetweenOrderByDayAscIdAsc(9L, 1, 1)).thenReturn(List.of());
         GameDayStartResponse response = gameDayStartService.startDay(mock(Authentication.class));
 
-        assertThat(response.initialBalance()).isEqualTo(4_382_000);
+        assertThat(response.initialBalance()).isEqualTo(4_512_000);
         assertThat(response.initialStock()).isEqualTo(120);
         assertThat(response.openingSummary().regularOrderCost()).isEqualTo(288_000);
+        assertThat(response.openingSummary().fixedCostTotal()).isEqualTo(288_000);
     }
 
     @Test
@@ -510,7 +512,7 @@ class GameDayStartServiceTests {
         assertThat(response.openingSummary().interiorCost()).isZero();
         assertThat(response.openingSummary().appliedUnitCost()).isEqualTo(2_200);
         assertThat(response.openingSummary().trendCostMultiplier()).isEqualByComparingTo("1.10");
-        assertThat(response.initialBalance()).isEqualTo(8_880_000);
+        assertThat(response.initialBalance()).isEqualTo(9_000_000);
     }
 
     @Test
@@ -546,7 +548,7 @@ class GameDayStartServiceTests {
 
         GameDayStartResponse response = gameDayStartService.startDay(mock(Authentication.class));
 
-        assertThat(response.initialBalance()).isZero();
+        assertThat(response.initialBalance()).isEqualTo(130_000);
         assertThat(response.initialStock()).isZero();
         assertThat(response.openingSummary().disposalQuantity()).isEqualTo(10);
         assertThat(response.openingSummary().disposalLoss()).isZero();
@@ -555,7 +557,7 @@ class GameDayStartServiceTests {
     }
 
     @Test
-    void startDayThrowsWhenBalanceCannotCoverRentEvenWithoutDisposalLoss() {
+    void startDayAllowsEnteringDayWhenBalanceIsBelowDailyRent() {
         User user = user(1);
         Store store = store(user, 15L, 3L, 1L, 9L, 2, 7, 5_000, 100_000, 2_000);
         com.ssafy.S14P21A205.game.season.entity.DailyReport previousReport = previousDailyReport(store, 129_999, 10);
@@ -585,10 +587,11 @@ class GameDayStartServiceTests {
         when(dailyReportRepository.findByStoreIdAndDay(15L, 1)).thenReturn(Optional.of(previousReport));
         when(dailyEventRepository.findBySeasonIdAndDayBetweenOrderByDayAscIdAsc(9L, 1, 2)).thenReturn(List.of());
 
-        assertThatThrownBy(() -> gameDayStartService.startDay(mock(Authentication.class)))
-                .isInstanceOf(BaseException.class)
-                .satisfies(exception -> assertThat(((BaseException) exception).getErrorCode())
-                        .isEqualTo(ErrorCode.INVALID_INPUT_VALUE));
+        GameDayStartResponse response = gameDayStartService.startDay(mock(Authentication.class));
+
+        assertThat(response.initialBalance()).isEqualTo(129_999);
+        assertThat(response.openingSummary().dailyRentApplied()).isEqualTo(130_000);
+        assertThat(response.openingSummary().fixedCostTotal()).isZero();
     }
 
     @Test
