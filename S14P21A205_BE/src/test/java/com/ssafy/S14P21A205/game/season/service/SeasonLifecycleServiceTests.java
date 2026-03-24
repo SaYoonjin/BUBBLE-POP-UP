@@ -3,16 +3,16 @@ package com.ssafy.S14P21A205.game.season.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.ssafy.S14P21A205.game.day.scheduler.SeasonDayClosingScheduler;
 import com.ssafy.S14P21A205.game.news.repository.NewsReportRepository;
 import com.ssafy.S14P21A205.game.news.service.NewsService;
-import com.ssafy.S14P21A205.game.news.service.SparkNewsDataService;
-import com.ssafy.S14P21A205.game.news.repository.NewsReportRepository;
-import com.ssafy.S14P21A205.game.scheduler.SparkEtlScheduler;
 import com.ssafy.S14P21A205.game.environment.entity.Festival;
 import com.ssafy.S14P21A205.game.environment.entity.Population;
 import com.ssafy.S14P21A205.game.environment.entity.Traffic;
@@ -27,6 +27,7 @@ import com.ssafy.S14P21A205.game.environment.repository.TrafficRepository;
 import com.ssafy.S14P21A205.game.environment.repository.WeatherDayRedisRepository;
 import com.ssafy.S14P21A205.game.environment.repository.WeatherLocationRepository;
 import com.ssafy.S14P21A205.game.environment.repository.WeatherRepository;
+import com.ssafy.S14P21A205.game.event.entity.DailyEvent;
 import com.ssafy.S14P21A205.game.event.entity.RandomEvent;
 import com.ssafy.S14P21A205.game.event.repository.DailyEventRepository;
 import com.ssafy.S14P21A205.game.event.repository.RandomEventRepository;
@@ -46,10 +47,11 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
-import org.mockito.ArgumentCaptor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -103,9 +105,6 @@ class SeasonLifecycleServiceTests {
     private NewsService newsService;
 
     @Mock
-    private SparkNewsDataService sparkNewsDataService;
-
-    @Mock
     private SparkEtlScheduler sparkEtlScheduler;
 
     private SeasonLifecycleService seasonLifecycleService;
@@ -120,7 +119,7 @@ class SeasonLifecycleServiceTests {
                 .when(trafficRepository.saveAll(any()))
                 .thenAnswer(invocation -> invocation.getArgument(0));
         org.mockito.Mockito.lenient()
-                .when(randomEventRepository.findFirstByEventCategoryAndEventName(any(), any()))
+                .when(randomEventRepository.findFirstByEventCategory(any()))
                 .thenReturn(Optional.empty());
         org.mockito.Mockito.lenient()
                 .when(randomEventRepository.save(any(RandomEvent.class)))
@@ -135,7 +134,6 @@ class SeasonLifecycleServiceTests {
         ReflectionTestUtils.setField(scheduledSeason, "id", 11L);
 
         Location location = location(3L);
-        Menu menu = menu(5L, "bread");
         String batchKey = "spark-20260318-01";
 
         seasonLifecycleService = createService(Clock.fixed(now.atZone(ZoneId.of("Asia/Seoul")).toInstant(), ZoneId.of("Asia/Seoul")));
@@ -144,7 +142,7 @@ class SeasonLifecycleServiceTests {
         when(seasonRepository.findFirstByStatusOrderByStartTimeAscIdAsc(SeasonStatus.SCHEDULED))
                 .thenReturn(Optional.of(scheduledSeason));
         when(locationRepository.findAllByOrderByIdAsc()).thenReturn(List.of(location));
-        when(menuRepository.findAllByOrderByIdAsc()).thenReturn(List.of(menu));
+        when(menuRepository.findAllByOrderByIdAsc()).thenReturn(allMenus());
         when(weatherRepository.findAllByOrderByIdAsc()).thenReturn(allWeatherMasters());
         when(festivalRepository.findAllByOrderByIdAsc()).thenReturn(List.of(festival(location)));
         when(populationRepository.findByLocationIdOrderByDateAsc(3L))
@@ -161,6 +159,162 @@ class SeasonLifecycleServiceTests {
         verify(weatherDayRedisRepository).saveDay(eq(11L), eq(1), any());
         verify(trafficDayRedisRepository).saveDay(eq(11L), eq(3L), eq(1), any());
         verify(seasonDayClosingScheduler).synchronize(scheduledSeason);
+    }
+
+    @Test
+    void synchronizeBootstrapsInitialScheduledSeasonWhenNoSeasonExists() {
+        LocalDateTime now = LocalDateTime.of(2026, 3, 18, 10, 0, 0);
+        LocalDateTime expectedSeasonStartAt = now.plusMinutes(5);
+        LocalDateTime expectedSeasonEndAt = expectedSeasonStartAt.plusMinutes(30);
+
+        seasonLifecycleService = createService(Clock.fixed(now.atZone(ZoneId.of("Asia/Seoul")).toInstant(), ZoneId.of("Asia/Seoul")));
+
+        when(seasonRepository.findFirstByStatusOrderByIdDesc(SeasonStatus.IN_PROGRESS)).thenReturn(Optional.empty());
+        when(seasonRepository.findFirstByStatusOrderByStartTimeAscIdAsc(SeasonStatus.SCHEDULED)).thenReturn(Optional.empty());
+        when(seasonRepository.findFirstByOrderByIdDesc()).thenReturn(Optional.empty());
+        when(seasonRepository.save(any(Season.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        seasonLifecycleService.synchronize();
+
+        ArgumentCaptor<Season> initialSeasonCaptor = ArgumentCaptor.forClass(Season.class);
+        verify(seasonRepository).save(initialSeasonCaptor.capture());
+        Season initialSeason = initialSeasonCaptor.getValue();
+        assertThat(initialSeason.getStatus()).isEqualTo(SeasonStatus.SCHEDULED);
+        assertThat(initialSeason.getCurrentDay()).isEqualTo(1);
+        assertThat(initialSeason.getTotalDays()).isEqualTo(7);
+        assertThat(initialSeason.getStartTime()).isEqualTo(expectedSeasonStartAt);
+        assertThat(initialSeason.getEndTime()).isEqualTo(expectedSeasonEndAt);
+    }
+
+    @Test
+    void prepareScheduledSeasonIfNeededBuildsDailyEventsBeforeGeneratingNews() {
+        LocalDateTime seasonStartAt = LocalDateTime.of(2026, 3, 18, 10, 0, 0);
+        LocalDateTime now = seasonStartAt.minusMinutes(1);
+        Season scheduledSeason = Season.createScheduled(7, seasonStartAt, seasonStartAt.plusMinutes(30));
+        ReflectionTestUtils.setField(scheduledSeason, "id", 41L);
+
+        Location location = location(3L);
+
+        seasonLifecycleService = createService(Clock.fixed(now.atZone(ZoneId.of("Asia/Seoul")).toInstant(), ZoneId.of("Asia/Seoul")));
+
+        when(seasonRepository.findFirstByStatusOrderByStartTimeAscIdAsc(SeasonStatus.SCHEDULED))
+                .thenReturn(Optional.of(scheduledSeason));
+        when(newsReportRepository.existsBySeasonId(41L)).thenReturn(false);
+        when(dailyEventRepository.existsBySeasonId(41L)).thenReturn(false, false);
+        when(locationRepository.findAllByOrderByIdAsc()).thenReturn(List.of(location));
+        when(menuRepository.findAllByOrderByIdAsc()).thenReturn(allMenus());
+        when(festivalRepository.findAllByOrderByIdAsc()).thenReturn(List.of(festival(location)));
+
+        seasonLifecycleService.prepareScheduledSeasonIfNeeded();
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<DailyEvent>> savedEventsCaptor = ArgumentCaptor.forClass(List.class);
+        InOrder inOrder = inOrder(dailyEventRepository, newsService);
+        inOrder.verify(dailyEventRepository).deleteBySeasonId(41L);
+        inOrder.verify(dailyEventRepository).saveAll(savedEventsCaptor.capture());
+        inOrder.verify(newsService).generateSeasonNews(41L);
+        verify(sparkEtlScheduler).runEtl();
+        verify(newsService, never()).generateEventPreviewNewsIfMissing(41L);
+
+        assertThat(savedEventsCaptor.getValue()).hasSize(15);
+        assertThat(savedEventsCaptor.getValue())
+                .extracting(dailyEvent -> dailyEvent.getEvent().getEventCategory())
+                .doesNotHaveDuplicates();
+    }
+
+    @Test
+    void prepareScheduledSeasonIfNeededAllowsLastDayFallbackWhenOnlyNextDayUniqueEventsRemain() {
+        LocalDateTime seasonStartAt = LocalDateTime.of(2026, 3, 18, 10, 0, 0);
+        LocalDateTime now = seasonStartAt.minusMinutes(1);
+        Season scheduledSeason = Season.createScheduled(6, seasonStartAt, seasonStartAt.plusMinutes(27));
+        ReflectionTestUtils.setField(scheduledSeason, "id", 42L);
+
+        Location location = location(3L);
+        Menu menu = menu(5L, "bread");
+
+        seasonLifecycleService = createService(Clock.fixed(now.atZone(ZoneId.of("Asia/Seoul")).toInstant(), ZoneId.of("Asia/Seoul")));
+
+        when(seasonRepository.findFirstByStatusOrderByStartTimeAscIdAsc(SeasonStatus.SCHEDULED))
+                .thenReturn(Optional.of(scheduledSeason));
+        when(newsReportRepository.existsBySeasonId(42L)).thenReturn(false);
+        when(dailyEventRepository.existsBySeasonId(42L)).thenReturn(false, false);
+        when(locationRepository.findAllByOrderByIdAsc()).thenReturn(List.of(location));
+        when(menuRepository.findAllByOrderByIdAsc()).thenReturn(List.of(menu));
+        when(festivalRepository.findAllByOrderByIdAsc()).thenReturn(List.of(festival(location)));
+
+        seasonLifecycleService.prepareScheduledSeasonIfNeeded();
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<DailyEvent>> savedEventsCaptor = ArgumentCaptor.forClass(List.class);
+        verify(dailyEventRepository).saveAll(savedEventsCaptor.capture());
+
+        List<DailyEvent> savedEvents = savedEventsCaptor.getValue();
+        List<?> eventCategories = savedEvents.stream()
+                .map(dailyEvent -> dailyEvent.getEvent().getEventCategory())
+                .toList();
+        assertThat(savedEvents).hasSize(13);
+        assertThat(eventCategories).hasSize(13);
+        assertThat(eventCategories.stream().distinct().count()).isLessThan((long) eventCategories.size());
+        assertThat(savedEvents.stream()
+                .filter(dailyEvent -> dailyEvent.getDay() == 6)
+                .map(dailyEvent -> dailyEvent.getEvent().getEventCategory())
+                .toList()).doesNotHaveDuplicates();
+    }
+
+    @Test
+    void prepareScheduledSeasonIfNeededFailsWhenFallbackStillCannotFillSeason() {
+        LocalDateTime seasonStartAt = LocalDateTime.of(2026, 3, 18, 10, 0, 0);
+        LocalDateTime now = seasonStartAt.minusMinutes(1);
+        Season scheduledSeason = Season.createScheduled(7, seasonStartAt, seasonStartAt.plusMinutes(30));
+        ReflectionTestUtils.setField(scheduledSeason, "id", 43L);
+
+        Location location = location(3L);
+        Menu menu = menu(5L, "bread");
+
+        seasonLifecycleService = createService(Clock.fixed(now.atZone(ZoneId.of("Asia/Seoul")).toInstant(), ZoneId.of("Asia/Seoul")));
+
+        when(seasonRepository.findFirstByStatusOrderByStartTimeAscIdAsc(SeasonStatus.SCHEDULED))
+                .thenReturn(Optional.of(scheduledSeason));
+        when(newsReportRepository.existsBySeasonId(43L)).thenReturn(false);
+        when(dailyEventRepository.existsBySeasonId(43L)).thenReturn(false, false);
+        when(locationRepository.findAllByOrderByIdAsc()).thenReturn(List.of(location));
+        when(menuRepository.findAllByOrderByIdAsc()).thenReturn(List.of(menu));
+
+        seasonLifecycleService.prepareScheduledSeasonIfNeeded();
+
+        verify(dailyEventRepository).deleteBySeasonId(43L);
+        verify(dailyEventRepository, never()).saveAll(any());
+        verify(newsService, never()).generateSeasonNews(43L);
+    }
+
+    @Test
+    void synchronizeSkipsDailyEventRebuildWhenAlreadyPrepared() {
+        LocalDateTime seasonStartAt = LocalDateTime.of(2026, 3, 18, 10, 0, 0);
+        LocalDateTime now = seasonStartAt.plusSeconds(1);
+        Season scheduledSeason = Season.createScheduled(7, seasonStartAt, seasonStartAt.plusMinutes(30));
+        ReflectionTestUtils.setField(scheduledSeason, "id", 51L);
+
+        Location location = location(3L);
+        String batchKey = "spark-20260318-11";
+
+        seasonLifecycleService = createService(Clock.fixed(now.atZone(ZoneId.of("Asia/Seoul")).toInstant(), ZoneId.of("Asia/Seoul")));
+
+        when(seasonRepository.findFirstByStatusOrderByIdDesc(SeasonStatus.IN_PROGRESS)).thenReturn(Optional.empty());
+        when(seasonRepository.findFirstByStatusOrderByStartTimeAscIdAsc(SeasonStatus.SCHEDULED))
+                .thenReturn(Optional.of(scheduledSeason));
+        when(locationRepository.findAllByOrderByIdAsc()).thenReturn(List.of(location));
+        when(weatherRepository.findAllByOrderByIdAsc()).thenReturn(allWeatherMasters());
+        when(populationRepository.findByLocationIdOrderByDateAsc(3L))
+                .thenReturn(populations(location, batchKey, seasonStartAt.toLocalDate()));
+        when(trafficRepository.findByLocationIdOrderByDateAsc(3L))
+                .thenReturn(traffics(location, batchKey, seasonStartAt.toLocalDate()));
+        when(dailyEventRepository.existsBySeasonId(51L)).thenReturn(true);
+
+        seasonLifecycleService.synchronize();
+
+        verify(dailyEventRepository, never()).deleteBySeasonId(anyLong());
+        verify(dailyEventRepository, never()).saveAll(any());
+        verify(menuRepository, never()).findAllByOrderByIdAsc();
     }
 
     @Test
@@ -190,14 +344,15 @@ class SeasonLifecycleServiceTests {
     }
 
     @Test
-    void synchronizeFinishesSeasonAndSchedulesNextSeasonAfterSeasonSummaryEnds() {
+    void synchronizeFinishesSeasonAndSchedulesNextSeasonWhenSeasonSummaryStarts() {
         LocalDateTime seasonStartAt = LocalDateTime.of(2026, 3, 18, 10, 0, 0);
-        LocalDateTime now = seasonStartAt.plusSeconds(120 + 7L * 180L + 120L);
-        LocalDateTime expectedNextSeasonStartAt = now.plusMinutes(5);
+        LocalDateTime now = seasonStartAt.plusSeconds(120 + 7L * 180L);
+        LocalDateTime expectedNextSeasonStartAt = now.plusMinutes(7);
 
         Season inProgressSeason = Season.createScheduled(7, seasonStartAt, seasonStartAt.plusMinutes(30));
         ReflectionTestUtils.setField(inProgressSeason, "id", 31L);
         inProgressSeason.start("spark-20260318-03");
+        inProgressSeason.advanceToDay(7);
 
         seasonLifecycleService = createService(Clock.fixed(now.atZone(ZoneId.of("Asia/Seoul")).toInstant(), ZoneId.of("Asia/Seoul")));
 
@@ -236,7 +391,6 @@ class SeasonLifecycleServiceTests {
                 festivalRepository,
                 newsReportRepository,
                 newsService,
-                sparkNewsDataService,
                 sparkEtlScheduler,
                 clock
         );
@@ -292,6 +446,21 @@ class SeasonLifecycleServiceTests {
         ReflectionTestUtils.setField(menu, "menuName", menuName);
         ReflectionTestUtils.setField(menu, "originPrice", 1_200);
         return menu;
+    }
+
+    private List<Menu> allMenus() {
+        return List.of(
+                menu(1L, "bread"),
+                menu(2L, "mala_skewer"),
+                menu(3L, "jelly"),
+                menu(4L, "tteokbokki"),
+                menu(5L, "hamburger"),
+                menu(6L, "ice_cream"),
+                menu(7L, "dakgangjeong"),
+                menu(8L, "taco"),
+                menu(9L, "hotdog"),
+                menu(10L, "bubble_tea")
+        );
     }
 
     private Weather weather(WeatherType type, Long id) {

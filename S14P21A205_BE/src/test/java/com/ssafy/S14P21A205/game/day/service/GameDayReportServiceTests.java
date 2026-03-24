@@ -195,6 +195,8 @@ class GameDayReportServiceTests {
         gameDayReportService.recordClosedDayReport(store, 3);
 
         verify(shopService).resetPurchasedItems(1);
+        verify(gameDayStoreStateRedisRepository).saveBalance(15L, 3, 0L);
+        verify(gameDayStoreStateRedisRepository).updateField(15L, 3, "stock", "0");
     }
 
     @Test
@@ -242,8 +244,8 @@ class GameDayReportServiceTests {
         assertThat(response.totalCost()).isEqualTo(1_300L);
         assertThat(response.visitors()).isEqualTo(42);
         assertThat(response.salesCount()).isEqualTo(20);
-        assertThat(response.stockRemaining()).isEqualTo(12);
-        assertThat(response.stockDisposedCount()).isZero();
+        assertThat(response.stockRemaining()).isZero();
+        assertThat(response.stockDisposedCount()).isEqualTo(12);
         assertThat(response.captureRate()).isEqualByComparingTo("0.10");
         assertThat(response.changeCaptureRate()).isEqualByComparingTo("0.0200");
         assertThat(response.dailyRevenue()).isEqualTo(new GameDayReportResponse.DailyRevenue(
@@ -318,6 +320,22 @@ class GameDayReportServiceTests {
         assertThatThrownBy(() -> gameDayReportService.getDayReport(mock(Authentication.class), 8))
                 .isInstanceOf(BaseException.class)
                 .satisfies(exception -> assertThat(((BaseException) exception).getErrorCode()).isEqualTo(ErrorCode.INVALID_DAY));
+    }
+
+    @Test
+    void getDayReportThrowsWhenUserHasNoActiveOrFinishedStore() {
+        User user = user(1);
+
+        when(userService.getCurrentUser(any())).thenReturn(user);
+        when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
+                .thenReturn(Optional.empty());
+        when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.FINISHED))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> gameDayReportService.getDayReport(mock(Authentication.class), 1))
+                .isInstanceOf(BaseException.class)
+                .satisfies(exception -> assertThat(((BaseException) exception).getErrorCode())
+                        .isEqualTo(ErrorCode.NOT_PARTICIPATING));
     }
 
     private User user(int id) {

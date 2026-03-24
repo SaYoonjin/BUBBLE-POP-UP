@@ -5,7 +5,6 @@ import com.ssafy.S14P21A205.exception.ErrorCode;
 import com.ssafy.S14P21A205.game.day.scheduler.SeasonDayClosingScheduler;
 import com.ssafy.S14P21A205.game.news.repository.NewsReportRepository;
 import com.ssafy.S14P21A205.game.news.service.NewsService;
-import com.ssafy.S14P21A205.game.news.service.SparkNewsDataService;
 import com.ssafy.S14P21A205.game.scheduler.SparkEtlScheduler;
 import com.ssafy.S14P21A205.game.environment.entity.Festival;
 import com.ssafy.S14P21A205.game.environment.entity.Population;
@@ -66,6 +65,7 @@ public class SeasonLifecycleService {
     private static final BigDecimal DECIMAL_ONE = new BigDecimal("1.00");
     private static final BigDecimal ZERO_DECIMAL = new BigDecimal("0.00");
     private static final BigDecimal DISASTER_STOCK_HALF = new BigDecimal("0.50");
+    private static final int DEFAULT_TOTAL_DAYS = 7;
     private static final int EVENTS_PER_DAY = 2;
     private static final int FIRST_EVENT_OFFSET_SECONDS = 40;
     private static final int SECOND_EVENT_OFFSET_SECONDS = 80;
@@ -88,7 +88,6 @@ public class SeasonLifecycleService {
     private final FestivalRepository festivalRepository;
     private final NewsReportRepository newsReportRepository;
     private final NewsService newsService;
-    private final SparkNewsDataService sparkNewsDataService;
     private final SparkEtlScheduler sparkEtlScheduler;
 
     private final SeasonTimelineService seasonTimelineService = new SeasonTimelineService();
@@ -105,8 +104,11 @@ public class SeasonLifecycleService {
 
         Season scheduledSeason = seasonRepository.findFirstByStatusOrderByStartTimeAscIdAsc(SeasonStatus.SCHEDULED).orElse(null);
         if (scheduledSeason == null) {
-            logNoActiveSeason(now);
-            return;
+            scheduledSeason = bootstrapInitialSeasonIfNeeded(now);
+            if (scheduledSeason == null) {
+                logNoActiveSeason(now);
+                return;
+            }
         }
         if (scheduledSeason.getStartTime() == null) {
             logScheduledSeasonState(
@@ -145,14 +147,14 @@ public class SeasonLifecycleService {
             return;
         }
 
+        prepareDailyEventsIfMissing(scheduledSeason, locations);
+
         scheduledSeason.startAt(now, sourceBatchKey);
-        List<Menu> menus = requireMenus();
         Random random = new Random(resolveSeed(scheduledSeason));
 
         List<WeatherLocation> weatherSchedule = rebuildWeatherSchedule(scheduledSeason, locations, random);
         List<Traffic> trafficSchedule = rebuildTrafficSchedule(scheduledSeason, locations, sourceBatchKey);
         rebuildPopulationSchedule(scheduledSeason, locations, sourceBatchKey);
-        rebuildDailyEvents(scheduledSeason, menus, random);
         preloadWeatherDay(scheduledSeason.getId(), weatherSchedule, 1);
         preloadTrafficDay(scheduledSeason, trafficSchedule, 1);
         scheduledSeason.updateEndTime(resolveSeasonEndAt(scheduledSeason));
@@ -184,16 +186,25 @@ public class SeasonLifecycleService {
         if (!scheduledSeason.getStartTime().isAfter(LocalDateTime.now(clock))) return;
 
         // 이미 뉴스가 생성된 시즌이면 스킵 (재진입 방지)
-        if (newsReportRepository.existsBySeasonId(scheduledSeason.getId())) return;
+        Long seasonId = scheduledSeason.getId();
+        boolean newsPrepared = newsReportRepository.existsBySeasonId(seasonId);
+        boolean dailyEventsPrepared = dailyEventRepository.existsBySeasonId(seasonId);
+        if (newsPrepared && dailyEventsPrepared) return;
 
         try {
-            if (scheduledSeason.getSourceBatchKey() == null) {
+            if (!newsPrepared && scheduledSeason.getSourceBatchKey() == null) {
                 sparkEtlScheduler.runEtl();
             }
-            sparkNewsDataService.runNewsEtl();
-            newsService.generateSeasonNews(scheduledSeason.getId());
+            if (!dailyEventsPrepared) {
+                prepareDailyEventsIfMissing(scheduledSeason, requireLocations());
+            }
+            if (!newsPrepared) {
+                newsService.generateSeasonNews(seasonId);
+                return;
+            }
+            newsService.generateEventPreviewNewsIfMissing(seasonId);
         } catch (Exception e) {
-            log.error("Failed to prepare scheduled season. seasonId={}", scheduledSeason.getId(), e);
+            log.error("Failed to prepare scheduled season. seasonId={}", seasonId, e);
         }
     }
 
@@ -308,6 +319,26 @@ public class SeasonLifecycleService {
                 "-",
                 "-"
         );
+    }
+
+    private Season bootstrapInitialSeasonIfNeeded(LocalDateTime now) {
+        if (seasonRepository.findFirstByOrderByIdDesc().isPresent()) {
+            return null;
+        }
+
+        LocalDateTime initialSeasonStartAt = now.plus(seasonTimelineService.nextSeasonWaitDuration());
+        LocalDateTime initialSeasonEndAt = initialSeasonStartAt.plus(seasonTimelineService.seasonCycleDuration(DEFAULT_TOTAL_DAYS));
+        Season initialSeason = seasonRepository.save(
+                Season.createScheduled(DEFAULT_TOTAL_DAYS, initialSeasonStartAt, initialSeasonEndAt)
+        );
+        log.info(
+                "Bootstrapped initial scheduled season. seasonId={} startTime={} endTime={} totalDays={}",
+                initialSeason.getId(),
+                initialSeason.getStartTime(),
+                initialSeason.getEndTime(),
+                initialSeason.getTotalDays()
+        );
+        return initialSeason;
     }
 
     private String describeLifecycleStage(SeasonPhase phase) {
@@ -445,12 +476,24 @@ public class SeasonLifecycleService {
         dailyEventRepository.deleteBySeasonId(season.getId());
 
         List<WeightedEventSpec> fullPool = buildWeightedEventPool(menus);
+        List<WeightedEventSpec> remainingPool = new ArrayList<>(fullPool);
         List<DailyEvent> dailyEvents = new ArrayList<>(season.getTotalDays() * EVENTS_PER_DAY + 1);
 
         for (int day = 1; day <= season.getTotalDays(); day++) {
-            List<WeightedEventSpec> eligiblePool = filterEligiblePool(fullPool, day, season.getTotalDays());
+            Set<EventCategory> selectedCategoriesForDay = new LinkedHashSet<>();
             for (int index = 0; index < EVENTS_PER_DAY; index++) {
-                WeightedEventSpec selectedEvent = selectWeightedEvent(eligiblePool, random)
+                WeightedEventSpec selectedBaseEvent = selectUniqueWeightedEvent(
+                        fullPool,
+                        remainingPool,
+                        selectedCategoriesForDay,
+                        day,
+                        season.getTotalDays(),
+                        random
+                );
+                removeSelectedCategory(remainingPool, selectedBaseEvent.category());
+                selectedCategoriesForDay.add(selectedBaseEvent.category());
+
+                WeightedEventSpec selectedEvent = selectedBaseEvent
                         .withApplyOffsetSeconds(index == 0 ? FIRST_EVENT_OFFSET_SECONDS : SECOND_EVENT_OFFSET_SECONDS);
                 RandomEvent randomEvent = upsertRandomEvent(selectedEvent);
                 dailyEvents.add(DailyEvent.create(
@@ -494,6 +537,75 @@ public class SeasonLifecycleService {
         }
 
         dailyEventRepository.saveAll(dailyEvents);
+    }
+
+    private WeightedEventSpec selectUniqueWeightedEvent(
+            List<WeightedEventSpec> fullPool,
+            List<WeightedEventSpec> remainingPool,
+            Set<EventCategory> selectedCategoriesForDay,
+            int day,
+            int totalDays,
+            Random random
+    ) {
+        List<WeightedEventSpec> eligiblePool = excludeAlreadySelectedForDay(
+                filterEligiblePool(remainingPool, day, totalDays),
+                selectedCategoriesForDay
+        );
+        if (!eligiblePool.isEmpty()) {
+            return selectWeightedEvent(eligiblePool, random);
+        }
+
+        if (day == totalDays) {
+            List<WeightedEventSpec> fallbackPool = excludeAlreadySelectedForDay(
+                    filterEligiblePool(fullPool, day, totalDays),
+                    selectedCategoriesForDay
+            );
+            if (!fallbackPool.isEmpty()) {
+                return selectWeightedEvent(fallbackPool, random);
+            }
+        }
+
+        throw new BaseException(
+                ErrorCode.INVALID_INPUT_VALUE,
+                "No eligible events remain for day " + day
+        );
+    }
+
+    private List<WeightedEventSpec> excludeAlreadySelectedForDay(
+            List<WeightedEventSpec> pool,
+            Set<EventCategory> selectedCategoriesForDay
+    ) {
+        if (selectedCategoriesForDay.isEmpty()) {
+            return pool;
+        }
+        return pool.stream()
+                .filter(event -> !selectedCategoriesForDay.contains(event.category()))
+                .toList();
+    }
+
+    private void removeSelectedCategory(List<WeightedEventSpec> remainingPool, EventCategory category) {
+        remainingPool.removeIf(event -> event.category() == category);
+    }
+
+    private void prepareDailyEventsIfMissing(Season season, List<Location> locations) {
+        if (season.getId() == null || dailyEventRepository.existsBySeasonId(season.getId())) {
+            return;
+        }
+
+        List<Menu> menus = requireMenus();
+        Random random = createDailyEventRandom(season, locations);
+        rebuildDailyEvents(season, menus, random);
+    }
+
+    private Random createDailyEventRandom(Season season, List<Location> locations) {
+        Random random = new Random(resolveSeed(season));
+        // Keep event selection aligned with the previous flow, which consumed weather rolls first.
+        for (Location ignored : locations) {
+            for (int day = 1; day <= season.getTotalDays(); day++) {
+                drawWeatherType(random);
+            }
+        }
+        return random;
     }
 
     private void preloadWeatherDay(Long seasonId, List<WeatherLocation> weatherSchedule, int day) {
@@ -886,7 +998,7 @@ public class SeasonLifecycleService {
                     resolveMenuPriceCategory(menu.getMenuName(), true),
                     menu.getMenuName() + " price down",
                     1.5,
-                    EventStartTime.IMMEDIATE,
+                    EventStartTime.NEXT_DAY,
                     EventEndTime.SEASON_END,
                     DECIMAL_ONE,
                     ZERO_DECIMAL,
@@ -985,7 +1097,7 @@ public class SeasonLifecycleService {
 
     private RandomEvent upsertRandomEvent(WeightedEventSpec spec) {
         RandomEvent randomEvent = randomEventRepository
-                .findFirstByEventCategoryAndEventName(spec.category(), spec.eventName())
+                .findFirstByEventCategory(spec.category())
                 .orElseGet(() -> RandomEvent.create(
                         spec.category(),
                         spec.eventName(),
@@ -1085,7 +1197,7 @@ public class SeasonLifecycleService {
     }
 
     private LocalDateTime resolveSeasonFinishAt(Season season) {
-        return seasonTimelineService.resolveSeasonSummaryEndAt(season);
+        return seasonTimelineService.resolveSeasonSummaryStartAt(season);
     }
 
     private void scheduleNextSeasonIfNeeded(Season finishedSeason, LocalDateTime nextSeasonStartAt) {

@@ -51,7 +51,8 @@ public class SeasonDayClosingService {
             return;
         }
 
-        List<Store> stores = storeRepository.findBySeason_IdOrderByIdAsc(seasonId);
+        // Day closing must still persist reports for stores that already went bankrupt.
+        List<Store> stores = storeRepository.findAllBySeason_IdOrderByIdAsc(seasonId);
         if (stores.isEmpty()) {
             log.info("Skipping day closing. seasonId={} day={} reason=no_stores", seasonId, day);
             return;

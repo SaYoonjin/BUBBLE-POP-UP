@@ -8,7 +8,7 @@ import CountdownTimer from "../components/common/CountdownTimer";
 import ProfitChart from "../components/report/ProfitChart";
 import WeatherCard from "../components/report/WeatherCard";
 import BankruptModal from "../components/report/BankruptModal";
-import { getAllDayReports, type GameDayReportResponse } from "../api/game";
+import { getDayReport, getAllDayReports, type GameDayReportResponse } from "../api/game";
 import useBrandName from "../hooks/useBrandName";
 
 function getNetProfit(r: GameDayReportResponse) {
@@ -20,7 +20,7 @@ function getIsBankrupt(r: GameDayReportResponse) {
 }
 
 function getReputation(r: GameDayReportResponse) {
-  return ((r.capture_rate ?? 0) / 2);
+  return Math.min((r.capture_rate ?? 0) * 5, 5);
 }
 
 function buildChartData(reports: GameDayReportResponse[], currentDay: number) {
@@ -63,15 +63,18 @@ export default function ReportPage() {
     setLoading(true);
     setError(null);
 
-    getAllDayReports(day)
-      .then((reports) => {
+    Promise.allSettled([getDayReport(day), getAllDayReports(day)])
+      .then(([todayResult, allResult]) => {
         if (cancelled) return;
+        const reports = allResult.status === "fulfilled" ? allResult.value : [];
         setAllReports(reports);
-        setReport(reports.find((r) => r.day === day) ?? reports[reports.length - 1]);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setError("리포트를 불러오지 못했습니다.");
+        if (todayResult.status === "fulfilled") {
+          setReport(todayResult.value);
+        } else {
+          const fallback = reports.find((r) => r.day === day) ?? reports[reports.length - 1] ?? null;
+          setReport(fallback);
+          if (!fallback) setError("리포트를 불러오지 못했습니다.");
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -105,7 +108,7 @@ export default function ReportPage() {
   const isBankrupt = getIsBankrupt(report);
   const disposal = isStockDisposalDay(report.day);
   const reputation = getReputation(report);
-  const reputationChange = (report.reputationChange ?? 0) / 2;
+  const reputationChange = (report.change_capture_rate ?? 0) * 5;
 
   const fmt = (v: number) => v < 0 ? `-₩${Math.abs(v).toLocaleString()}` : `₩${v.toLocaleString()}`;
 

@@ -208,13 +208,13 @@ class GameDayStartServiceTests {
         assertThat(response.startTime()).isEqualTo("10:00");
         assertThat(response.endTime()).isEqualTo("22:00");
         assertThat(response.weatherMultiplier()).isEqualByComparingTo("1.10");
-        assertThat(response.captureRate()).isEqualByComparingTo("0.10");
+        assertThat(response.captureRate()).isEqualByComparingTo("0.50");
         assertThat(response.hourlySchedule().get("10").population()).isEqualTo(500);
         assertThat(response.hourlySchedule().get("11").trafficMultiplier()).isEqualByComparingTo("0.86");
         assertThat(response.hourlySchedule().get("10").effectivePopulation()).isEqualTo(627);
         assertThat(response.hourlySchedule().get("11").effectivePopulation()).isEqualTo(615);
         assertThat(response.initialStock()).isEqualTo(0);
-        assertThat(response.initialBalance()).isEqualTo(9_660_000);
+        assertThat(response.initialBalance()).isEqualTo(4_670_000);
         assertThat(response.eventSchedule()).hasSize(2);
         assertThat(response.eventSchedule().get(0).type()).isEqualTo("celebrity");
         assertThat(response.eventSchedule().get(0).scope()).isNull();
@@ -225,7 +225,7 @@ class GameDayStartServiceTests {
         assertThat(response.marketSnapshot().avgMenuPrice()).isEqualTo(4_500);
         assertThat(response.marketSnapshot().regionStoreCount()).isEqualTo(1);
         assertThat(response.openingSummary().dailyRentApplied()).isEqualTo(130_000);
-        assertThat(response.openingSummary().interiorCost()).isEqualTo(200_000);
+        assertThat(response.openingSummary().interiorCost()).isZero();
         assertThat(response.openingSummary().appliedUnitCost()).isEqualTo(2_400);
 
         verify(gameDayStoreStateRedisRepository, never()).save(any(), any(), any());
@@ -447,7 +447,7 @@ class GameDayStartServiceTests {
         when(dailyEventRepository.findBySeasonIdAndDayBetweenOrderByDayAscIdAsc(9L, 1, 1)).thenReturn(List.of());
         GameDayStartResponse response = gameDayStartService.startDay(mock(Authentication.class));
 
-        assertThat(response.initialBalance()).isEqualTo(9_372_000);
+        assertThat(response.initialBalance()).isEqualTo(4_382_000);
         assertThat(response.initialStock()).isEqualTo(120);
         assertThat(response.openingSummary().regularOrderCost()).isEqualTo(288_000);
     }
@@ -505,12 +505,90 @@ class GameDayStartServiceTests {
 
         assertThat(response.marketSnapshot().locationPopularityRank()).isEqualTo(2);
         assertThat(response.marketSnapshot().menuTrendRank()).isEqualTo(2);
-        assertThat(response.captureRate()).isEqualByComparingTo("0.1100");
+        assertThat(response.captureRate()).isEqualByComparingTo("0.5500");
         assertThat(response.openingSummary().dailyRentApplied()).isEqualTo(120_000);
         assertThat(response.openingSummary().interiorCost()).isZero();
         assertThat(response.openingSummary().appliedUnitCost()).isEqualTo(2_200);
         assertThat(response.openingSummary().trendCostMultiplier()).isEqualByComparingTo("1.10");
         assertThat(response.initialBalance()).isEqualTo(8_880_000);
+    }
+
+    @Test
+    void startDayDiscardsPreviousStockWithoutReducingBalanceWhenMenuChanged() {
+        User user = user(1);
+        Store store = store(user, 15L, 3L, 1L, 9L, 2, 7, 5_000, 100_000, 2_000);
+        com.ssafy.S14P21A205.game.season.entity.DailyReport previousReport = previousDailyReport(store, 130_000, 10);
+        ReflectionTestUtils.setField(previousReport, "menuName", "old-menu");
+
+        when(userService.getCurrentUser(any())).thenReturn(user);
+        when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
+                .thenReturn(Optional.of(store));
+        when(storeRepository.findBySeason_IdOrderByIdAsc(9L)).thenReturn(List.of(store));
+        when(gameDayStoreStateRedisRepository.find(15L, 2)).thenReturn(Optional.empty());
+        when(orderRepository.findDailyStartOrders(15L, 2)).thenReturn(List.of());
+        when(valueOperations.get("season:9:weather:day:2")).thenReturn(
+                """
+                [
+                  {"locationId":3,"day":2,"weatherType":"SUNNY","populationMultiplier":1.00}
+                ]
+                """
+        );
+        when(populationRepository.findByLocationIdOrderByDateAsc(3L)).thenReturn(List.of(
+                population(store.getLocation(), LocalDateTime.of(2026, 3, 9, 10, 0), 500),
+                population(store.getLocation(), LocalDateTime.of(2026, 3, 10, 10, 0), 500)
+        ));
+        when(trafficRepository.findByLocationIdOrderByDateAsc(3L)).thenReturn(List.of(
+                traffic(store.getLocation(), LocalDateTime.of(2026, 3, 9, 10, 0), TrafficStatus.NORMAL),
+                traffic(store.getLocation(), LocalDateTime.of(2026, 3, 10, 10, 0), TrafficStatus.NORMAL)
+        ));
+        when(dailyReportRepository.findByStoreIdAndDay(15L, 1)).thenReturn(Optional.of(previousReport));
+        when(dailyEventRepository.findBySeasonIdAndDayBetweenOrderByDayAscIdAsc(9L, 1, 2)).thenReturn(List.of());
+
+        GameDayStartResponse response = gameDayStartService.startDay(mock(Authentication.class));
+
+        assertThat(response.initialBalance()).isZero();
+        assertThat(response.initialStock()).isZero();
+        assertThat(response.openingSummary().disposalQuantity()).isEqualTo(10);
+        assertThat(response.openingSummary().disposalLoss()).isZero();
+        assertThat(response.openingSummary().openingAgedStock()).isZero();
+        assertThat(response.openingSummary().openingFreshStock()).isZero();
+    }
+
+    @Test
+    void startDayThrowsWhenBalanceCannotCoverRentEvenWithoutDisposalLoss() {
+        User user = user(1);
+        Store store = store(user, 15L, 3L, 1L, 9L, 2, 7, 5_000, 100_000, 2_000);
+        com.ssafy.S14P21A205.game.season.entity.DailyReport previousReport = previousDailyReport(store, 129_999, 10);
+        ReflectionTestUtils.setField(previousReport, "menuName", "old-menu");
+
+        when(userService.getCurrentUser(any())).thenReturn(user);
+        when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
+                .thenReturn(Optional.of(store));
+        when(storeRepository.findBySeason_IdOrderByIdAsc(9L)).thenReturn(List.of(store));
+        when(gameDayStoreStateRedisRepository.find(15L, 2)).thenReturn(Optional.empty());
+        when(orderRepository.findDailyStartOrders(15L, 2)).thenReturn(List.of());
+        when(valueOperations.get("season:9:weather:day:2")).thenReturn(
+                """
+                [
+                  {"locationId":3,"day":2,"weatherType":"SUNNY","populationMultiplier":1.00}
+                ]
+                """
+        );
+        when(populationRepository.findByLocationIdOrderByDateAsc(3L)).thenReturn(List.of(
+                population(store.getLocation(), LocalDateTime.of(2026, 3, 9, 10, 0), 500),
+                population(store.getLocation(), LocalDateTime.of(2026, 3, 10, 10, 0), 500)
+        ));
+        when(trafficRepository.findByLocationIdOrderByDateAsc(3L)).thenReturn(List.of(
+                traffic(store.getLocation(), LocalDateTime.of(2026, 3, 9, 10, 0), TrafficStatus.NORMAL),
+                traffic(store.getLocation(), LocalDateTime.of(2026, 3, 10, 10, 0), TrafficStatus.NORMAL)
+        ));
+        when(dailyReportRepository.findByStoreIdAndDay(15L, 1)).thenReturn(Optional.of(previousReport));
+        when(dailyEventRepository.findBySeasonIdAndDayBetweenOrderByDayAscIdAsc(9L, 1, 2)).thenReturn(List.of());
+
+        assertThatThrownBy(() -> gameDayStartService.startDay(mock(Authentication.class)))
+                .isInstanceOf(BaseException.class)
+                .satisfies(exception -> assertThat(((BaseException) exception).getErrorCode())
+                        .isEqualTo(ErrorCode.INVALID_INPUT_VALUE));
     }
 
     @Test

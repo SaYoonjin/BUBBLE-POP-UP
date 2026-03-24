@@ -84,7 +84,7 @@ class SeasonJoinServiceTests {
     void joinCurrentSeasonReturnsJoinBalanceForNewSeasonStore() {
         User user = user(7);
         Season season = season(11L);
-        Location location = location(3L, 100_000);
+        Location location = location(3L, 100_000, 200_000);
         Menu menu = menu(5L, 2_000);
         Store savedStore = store(21L, user, season, location, menu, 2_000);
 
@@ -103,7 +103,7 @@ class SeasonJoinServiceTests {
         );
 
         assertThat(response.storeId()).isEqualTo(21L);
-        assertThat(response.balance()).isEqualTo(9_990_000);
+        assertThat(response.balance()).isEqualTo(4_800_000);
         assertThat(response.playableFromDay()).isEqualTo(1);
         assertThat(savedStore.getPurchaseSeed()).isEqualTo(9_876L);
         assertThat(savedStore.getPurchaseCursor()).isZero();
@@ -113,7 +113,7 @@ class SeasonJoinServiceTests {
     void joinCurrentSeasonAllowsRejoinAfterBankruptcyInSameSeason() {
         User user = user(7);
         Season season = season(11L);
-        Location location = location(3L, 100_000);
+        Location location = location(3L, 100_000, 200_000);
         Menu menu = menu(5L, 2_000);
         Store previousStore = store(20L, user, season, location, menu, 2_000);
         Store savedStore = store(21L, user, season, location, menu, 2_000);
@@ -137,6 +137,28 @@ class SeasonJoinServiceTests {
         assertThat(response.storeId()).isEqualTo(21L);
         assertThat(savedStore.getPurchaseSeed()).isEqualTo(4_321L);
         assertThat(savedStore.getPurchaseCursor()).isZero();
+    }
+
+    @Test
+    void joinCurrentSeasonRejectsWhenActiveStoreStillExists() {
+        User user = user(7);
+        Season season = season(11L);
+        Location location = location(3L, 100_000, 200_000);
+        Menu menu = menu(5L, 2_000);
+        Store activeStore = store(20L, user, season, location, menu, 2_000);
+
+        when(userService.getCurrentUser(any(Authentication.class))).thenReturn(user);
+        when(seasonRepository.findFirstByStatusOrderByIdDesc(SeasonStatus.IN_PROGRESS)).thenReturn(Optional.of(season));
+        when(storeRepository.findFirstByUser_IdAndSeason_IdOrderByIdDesc(7, 11L)).thenReturn(Optional.of(activeStore));
+        when(seasonRankingRecordRepository.existsByStore_Id(20L)).thenReturn(false);
+        when(dailyReportRepository.findFirstByStore_IdOrderByDayDesc(20L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> seasonJoinService.joinCurrentSeason(
+                org.mockito.Mockito.mock(Authentication.class),
+                new SeasonJoinRequest(3, "blocked join")
+        ))
+                .isInstanceOf(com.ssafy.S14P21A205.exception.BaseException.class)
+                .hasMessageContaining("already joined");
     }
 
     @Test
@@ -184,10 +206,11 @@ class SeasonJoinServiceTests {
         return season;
     }
 
-    private Location location(Long id, Integer rent) {
+    private Location location(Long id, Integer rent, Integer interiorCost) {
         Location location = instantiate(Location.class);
         ReflectionTestUtils.setField(location, "id", id);
         ReflectionTestUtils.setField(location, "rent", rent);
+        ReflectionTestUtils.setField(location, "interiorCost", interiorCost);
         return location;
     }
 

@@ -102,7 +102,7 @@ export interface GameDayReportResponse {
   stockRemaining: number;
   stockDisposedCount: number;
   capture_rate: number;
-  reputationChange: number;
+  change_capture_rate: number;
   dailyRevenue: {
     first: number;
     second: number;
@@ -128,7 +128,13 @@ export async function getAllDayReports(currentDay: number) {
   const promises = Array.from({ length: currentDay }, (_, i) =>
     getDayReport(i + 1),
   );
-  return Promise.all(promises);
+  const results = await Promise.allSettled(promises);
+  return results
+    .filter(
+      (r): r is PromiseFulfilledResult<GameDayReportResponse> =>
+        r.status === "fulfilled",
+    )
+    .map((r) => r.value);
 }
 
 // --- 영업 중 페이지용 ---
@@ -143,6 +149,11 @@ export interface CustomerTick {
   currentFloatingPopulation: number;
   regionStoreCount: number;
   rValue: number;
+}
+
+export interface CustomerPlanByHourItem {
+  gameHour: number;
+  customerCount: number;
 }
 
 export type GameTrafficStatus =
@@ -162,10 +173,8 @@ export interface GameTraffic {
 export interface GameActionStatus {
   discountUsed: boolean;
   donationUsed: boolean;
-  influencerUsed: boolean;
-  snsUsed: boolean;
-  leafletUsed: boolean;
-  friendUsed: boolean;
+  promotionUsed: boolean;
+  emergencyUsed: boolean;
   emergencyOrderPending: boolean;
   emergencyOrderArriveAt: string | null;
 }
@@ -187,6 +196,7 @@ export interface GameStateResponse {
   cash: number;
   customerCount: number;
   customerTick: CustomerTick;
+  customerPlanByHour?: CustomerPlanByHourItem[] | null;
   inventory: { totalStock: number };
   actionStatus: GameActionStatus;
   appliedEvents: AppliedEvent[];

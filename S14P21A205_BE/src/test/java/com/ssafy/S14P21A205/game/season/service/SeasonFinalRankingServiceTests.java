@@ -74,7 +74,7 @@ class SeasonFinalRankingServiceTests {
         }
 
         when(seasonRankingRecordRepository.existsByStore_Season_Id(11L)).thenReturn(false);
-        when(storeRepository.findBySeason_IdOrderByIdAsc(11L)).thenReturn(stores);
+        when(storeRepository.findAllBySeason_IdOrderByIdAsc(11L)).thenReturn(stores);
         when(dailyReportRepository.findByStore_Season_IdAndDayLessThanOrderByStore_IdAscDayAsc(11L, 8)).thenReturn(reports);
         when(userRepository.findByIdForUpdate(org.mockito.ArgumentMatchers.anyInt()))
                 .thenAnswer(invocation -> java.util.Optional.ofNullable(usersById.get(invocation.getArgument(0))));
@@ -120,7 +120,7 @@ class SeasonFinalRankingServiceTests {
 
         seasonFinalRankingService.saveFinalRankings(season);
 
-        verify(storeRepository, never()).findBySeason_IdOrderByIdAsc(anyLong());
+        verify(storeRepository, never()).findAllBySeason_IdOrderByIdAsc(anyLong());
         verify(dailyReportRepository, never()).findByStore_Season_IdAndDayLessThanOrderByStore_IdAscDayAsc(anyLong(), anyInt());
         verify(gameDayReportService, never()).recordClosedDayReport(any(Store.class), anyInt());
         verify(seasonRankingRecordRepository, never()).saveAll(any());

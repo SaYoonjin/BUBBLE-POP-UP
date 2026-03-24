@@ -18,6 +18,7 @@ import java.lang.reflect.Constructor;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.Executor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -27,6 +28,8 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
 class SeasonDayClosingServiceTests {
+
+    private static final Executor DIRECT_EXECUTOR = Runnable::run;
 
     @Mock
     private SeasonRepository seasonRepository;
@@ -52,7 +55,8 @@ class SeasonDayClosingServiceTests {
                 storeRepository,
                 gameDayReportService,
                 seasonFinalRankingService,
-                newsService
+                newsService,
+                DIRECT_EXECUTOR
         );
     }
 
@@ -63,7 +67,7 @@ class SeasonDayClosingServiceTests {
         Store secondStore = store(16L, season);
 
         when(seasonRepository.findByIdAndStatus(9L, SeasonStatus.IN_PROGRESS)).thenReturn(Optional.of(season));
-        when(storeRepository.findBySeason_IdOrderByIdAsc(9L)).thenReturn(List.of(firstStore, secondStore));
+        when(storeRepository.findAllBySeason_IdOrderByIdAsc(9L)).thenReturn(List.of(firstStore, secondStore));
 
         seasonDayClosingService.handleBusinessEnd(9L, 3);
 
@@ -78,7 +82,7 @@ class SeasonDayClosingServiceTests {
         Store secondStore = store(16L, season);
 
         when(seasonRepository.findByIdAndStatus(9L, SeasonStatus.IN_PROGRESS)).thenReturn(Optional.of(season));
-        when(storeRepository.findBySeason_IdOrderByIdAsc(9L)).thenReturn(List.of(firstStore, secondStore));
+        when(storeRepository.findAllBySeason_IdOrderByIdAsc(9L)).thenReturn(List.of(firstStore, secondStore));
 
         seasonDayClosingService.handleBusinessEnd(9L, 7);
 

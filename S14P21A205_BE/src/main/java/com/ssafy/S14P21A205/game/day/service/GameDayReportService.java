@@ -142,6 +142,8 @@ public class GameDayReportService {
         );
         if (bankruptcyResult.bankrupt()) {
             shopService.resetPurchasedItems(store.getUser().getId());
+            gameDayStoreStateRedisRepository.saveBalance(store.getId(), day, 0L);
+            gameDayStoreStateRedisRepository.updateField(store.getId(), day, "stock", "0");
         }
     }
 

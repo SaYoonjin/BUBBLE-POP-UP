@@ -49,9 +49,9 @@ public final class GameDayTestFixtures {
     public static final Integer PREVIOUS_STOCK = 30;
     public static final Integer DAILY_ORDER_QUANTITY = 100;
     public static final Integer DAILY_ORDER_COST = 200_000;
-    public static final Integer INITIAL_BALANCE = 9_400_000;
+    public static final Integer INITIAL_BALANCE = 4_990_000;
     public static final Integer INITIAL_STOCK = 130;
-    public static final BigDecimal CAPTURE_RATE = new BigDecimal("0.10");
+    public static final BigDecimal CAPTURE_RATE = new BigDecimal("0.50");
     public static final LocalDateTime DAY4_STARTED_AT = LocalDateTime.of(2026, 3, 17, 10, 0, 0);
 
     private GameDayTestFixtures() {
@@ -257,10 +257,10 @@ public final class GameDayTestFixtures {
                         "0.00",
                         "1.05",
                         0,
-                        EventStartTime.IMMEDIATE,
+                        EventStartTime.NEXT_DAY,
                         EventEndTime.SEASON_END
                 ),
-                CURRENT_DAY,
+                CURRENT_DAY - 1,
                 0,
                 null,
                 null,
