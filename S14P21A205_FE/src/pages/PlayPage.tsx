@@ -646,6 +646,8 @@ function PlayPageSession({
   const prevGuestsRef = useRef<number | null>(null);
   const prevStockRef = useRef<number | null>(null);
   const prevBalanceRef = useRef<number | null>(null);
+  // Unity arrival 시 고객별 재고/잔액 변동 큐
+  const arrivalQueueRef = useRef<Array<{ stockDelta: number; balanceDelta: number }>>([]);
 
   const clearScheduledVisitorTimers = () => {
     for (const timerId of scheduledVisitorTimersRef.current) {
@@ -802,36 +804,64 @@ function PlayPageSession({
     }
 
     setGuests((prev) => prev + 1);
+
+    // 큐에서 고객별 재고/잔액 변동량 적용
+    const change = arrivalQueueRef.current.shift();
+    if (change) {
+      if (change.stockDelta !== 0) {
+        setStock((prev) => prev + change.stockDelta);
+        setStockDelta(change.stockDelta);
+      }
+      if (change.balanceDelta !== 0) {
+        setBalance((prev) => prev + change.balanceDelta);
+        setBalanceDelta(change.balanceDelta);
+      }
+    }
   };
 
   const applyGameState = (state: GameStateResponse) => {
     const hasCustomerPlan =
       Array.isArray(state.customerPlanByHour) && state.customerPlanByHour.length > 0;
-    // 이전 값이 있으면 delta 계산
+
     if (prevGuestsRef.current !== null) {
       const gd = state.customerCount - prevGuestsRef.current;
-      const sd = state.inventory.totalStock - prevStockRef.current!;
-      const bd = state.cash - prevBalanceRef.current!;
-      if (gd !== 0) setGuestsDelta(gd);
-      if (sd !== 0) setStockDelta(sd);
-      if (bd !== 0) setBalanceDelta(bd);
-      if (!hasCustomerPlan && gd > 0) {
-        const popupStoreIndex = resolvePopupStoreIndex(currentLocationIdRef.current);
 
-        if (popupStoreIndex !== null) {
-          spawnPopupVisitorsImmediately(popupStoreIndex, gd);
+      // 이전 큐 잔여분 소진
+      arrivalQueueRef.current = [];
+
+      // 새 손님이 있으면: 재고/잔액은 이전 값 유지, 큐로 점진 반영
+      if (gd > 0) {
+        const { soldUnits, unitPrice } = state.customerTick;
+        for (const units of soldUnits) {
+          arrivalQueueRef.current.push({
+            stockDelta: -units,
+            balanceDelta: units * unitPrice,
+          });
         }
+
+        if (!hasCustomerPlan) {
+          const popupStoreIndex = resolvePopupStoreIndex(currentLocationIdRef.current);
+
+          if (popupStoreIndex !== null) {
+            spawnPopupVisitorsImmediately(popupStoreIndex, gd);
+          }
+        }
+      } else {
+        // 새 손님 없으면 백엔드 값으로 직접 동기화
+        setStock(state.inventory.totalStock);
+        setBalance(state.cash);
       }
+    } else {
+      // 최초 폴링: 백엔드 값으로 초기화
+      setGuests(state.customerCount);
+      setStock(state.inventory.totalStock);
+      setBalance(state.cash);
     }
 
     // 현재 값을 ref에 저장 (다음 비교용)
     prevGuestsRef.current = state.customerCount;
     prevStockRef.current = state.inventory.totalStock;
     prevBalanceRef.current = state.cash;
-
-    setBalance(state.cash);
-    setStock(state.inventory.totalStock);
-    setGuests(state.customerCount);
     setTrafficStatus(state.traffic?.status ?? null);
     setDeliveryTrafficLabel(getTrafficStatusLabel(state.traffic?.status));
     syncUnityCongestionLevel(state.traffic?.status);
