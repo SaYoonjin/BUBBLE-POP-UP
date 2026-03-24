@@ -121,6 +121,50 @@ public class GameDayStartService {
         return upsertCurrentDayState(store, now, seasonTimePoint, true);
     }
 
+    @Transactional
+    public Optional<GameDayLiveState> restoreDayState(Store store, int day, LocalDateTime requestedAt) {
+        if (store == null || requestedAt == null || day < 1 || store.getSeason() == null) {
+            return Optional.empty();
+        }
+
+        Integer totalDays = store.getSeason().getTotalDays();
+        if (totalDays != null && day > totalDays) {
+            return Optional.empty();
+        }
+        if (!isPlayableDay(store, day)) {
+            return Optional.empty();
+        }
+
+        GameDayLiveState existingState = gameDayStoreStateRedisRepository.find(store.getId(), day).orElse(null);
+        if (existingState != null
+                && existingState.startedAt() != null
+                && existingState.startResponse() != null) {
+            return Optional.of(existingState);
+        }
+
+        ensurePurchaseQueueInitialized(store);
+        DayWindow currentTimeline = seasonTimelineService.day(store.getSeason(), day);
+        DayStartBuild build = buildDayStartResponse(store, day, requestedAt, currentTimeline.businessStart());
+        writeInitialState(
+                store,
+                day,
+                build.openingState(),
+                build.response(),
+                currentTimeline.dayStart(),
+                currentTimeline.businessStart(),
+                build.openingSalePrice(),
+                build.openingStock()
+        );
+        log.info(
+                "start-day-restored storeId={} seasonId={} day={} requestedAt={}",
+                store.getId(),
+                store.getSeason().getId(),
+                day,
+                requestedAt
+        );
+        return gameDayStoreStateRedisRepository.find(store.getId(), day);
+    }
+
     private Optional<GameDayLiveState> upsertCurrentDayState(
             Store store,
             LocalDateTime now,

@@ -13,6 +13,7 @@ import ItemSelector from "../components/common/ItemSelector";
 import Modal from "../components/common/Modal";
 import SeasonCTA from "../components/common/SeasonCTA";
 import { useGameStore } from "../stores/useGameStore";
+import type { WaitingRouteState } from "../types/waiting";
 import {
   getDiscountLabel,
   getStoredSelectedDashboardItemIds,
@@ -217,6 +218,17 @@ function resolveSeasonCardData(
   }
 
   if (waitingStatus.status === "WAITING") {
+    if ((waitingStatus.phaseRemainingSeconds ?? 0) <= 0) {
+      return {
+        title: `${waitingStatus.nextSeasonNumber ?? 1}번째 시즌`,
+        badgeText: "STARTING",
+        timerLabel: "시즌 시작 준비 중",
+        ctaLabel: "잠시만 기다려주세요",
+        tone: "waiting" as const,
+        disabled: true,
+      };
+    }
+
     return {
       title: `${waitingStatus.nextSeasonNumber ?? 1}번째 시즌`,
       badgeText: "WAITING",
@@ -264,6 +276,16 @@ function resolveSeasonCardData(
     ctaLabel: "시즌 대기 중",
     tone: "waiting" as const,
     disabled: true,
+  };
+}
+
+function buildSeasonStartingState(
+  waitingStatus: GameWaitingResponse | null,
+): WaitingRouteState {
+  return {
+    mode: "season_starting",
+    seasonNumber: waitingStatus?.nextSeasonNumber ?? null,
+    nextPath: "/game/setup/location",
   };
 }
 
@@ -546,6 +568,41 @@ export default function DashboardPage() {
     };
   }, [waitingStatus]);
 
+  useEffect(() => {
+    if (
+      waitingStatus?.status !== "WAITING" ||
+      (waitingStatus.phaseRemainingSeconds ?? 0) > 0
+    ) {
+      return;
+    }
+
+    navigate("/game/waiting", {
+      replace: true,
+      state: buildSeasonStartingState(waitingStatus),
+    });
+  }, [navigate, waitingStatus]);
+
+  const handleSeasonCountdownComplete = async () => {
+    try {
+      const latestStatus = await getGameWaitingStatus();
+
+      if (latestStatus.status === "IN_PROGRESS") {
+        navigate("/game/setup/location", { replace: true });
+        return;
+      }
+
+      navigate("/game/waiting", {
+        replace: true,
+        state: buildSeasonStartingState(latestStatus),
+      });
+    } catch {
+      navigate("/game/waiting", {
+        replace: true,
+        state: buildSeasonStartingState(waitingStatus),
+      });
+    }
+  };
+
   const handleToggle = (id: number) => {
     const item = shopItems.find((entry) => entry.id === id);
 
@@ -599,7 +656,14 @@ export default function DashboardPage() {
           </div>
 
           <div className="flex flex-col gap-6">
-            <SeasonCTA {...seasonCard} />
+            <SeasonCTA
+              {...seasonCard}
+              onCountdownComplete={
+                waitingStatus?.status === "WAITING"
+                  ? handleSeasonCountdownComplete
+                  : undefined
+              }
+            />
 
             {gameReturnPath && (
               <button

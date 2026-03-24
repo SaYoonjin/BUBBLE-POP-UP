@@ -121,17 +121,32 @@ public class SeasonLifecycleService {
             return;
         }
 
-        // Keep develop's pre-start preparation flow for scheduled seasons.
+        logScheduledSeasonState(
+                now,
+                scheduledSeason,
+                "SEASON_WAITING_TO_START",
+                scheduledSeason.getStartTime().isAfter(now) ? "BEFORE_START" : "START_TRIGGER_PENDING",
+                scheduledSeason.getStartTime().isAfter(now) ? null : 0L
+        );
+    }
+
+    public synchronized SeasonStartResult startScheduledSeason(Long seasonId) {
+        if (seasonId == null) {
+            return SeasonStartResult.SKIPPED;
+        }
+
+        LocalDateTime now = LocalDateTime.now(clock);
+        Season inProgressSeason = seasonRepository.findFirstByStatusOrderByIdDesc(SeasonStatus.IN_PROGRESS).orElse(null);
+        if (inProgressSeason != null) {
+            return SeasonStartResult.SKIPPED;
+        }
+
+        Season scheduledSeason = seasonRepository.findByIdAndStatus(seasonId, SeasonStatus.SCHEDULED).orElse(null);
+        if (scheduledSeason == null || scheduledSeason.getStartTime() == null) {
+            return SeasonStartResult.SKIPPED;
+        }
         if (scheduledSeason.getStartTime().isAfter(now)) {
-            logScheduledSeasonState(
-                    now,
-                    scheduledSeason,
-                    "SEASON_WAITING_TO_START",
-                    "BEFORE_START",
-                    null
-            );
-            // 준비(ETL+뉴스)는 prepareScheduledSeasonIfNeeded()에서 트랜잭션 밖으로 처리
-            return;
+            return SeasonStartResult.SKIPPED;
         }
 
         List<Location> locations = requireLocations();
@@ -144,7 +159,7 @@ public class SeasonLifecycleService {
                     "WAITING_SOURCE_BATCH",
                     0L
             );
-            return;
+            return SeasonStartResult.WAITING_SOURCE_BATCH;
         }
 
         prepareDailyEventsIfMissing(scheduledSeason, locations);
@@ -160,8 +175,8 @@ public class SeasonLifecycleService {
         scheduledSeason.updateEndTime(resolveSeasonEndAt(scheduledSeason));
 
         synchronizeInProgressSeason(scheduledSeason, now);
+        return SeasonStartResult.STARTED;
     }
-
     /**
      * Spark ETL + 뉴스 생성을 트랜잭션 밖에서 실행.
      * Spark TRUNCATE TABLE(DDL)이 REPEATABLE READ 스냅샷을 깨뜨리므로,
@@ -362,9 +377,17 @@ public class SeasonLifecycleService {
         if (targetTime == null) {
             return 0L;
         }
-        return Math.max(0L, Duration.between(now, targetTime).toSeconds());
-    }
+        Duration remaining = Duration.between(now, targetTime);
+        if (remaining.isNegative() || remaining.isZero()) {
+            return 0L;
+        }
 
+        long truncatedSeconds = remaining.toSeconds();
+        if (remaining.minusSeconds(truncatedSeconds).isZero()) {
+            return truncatedSeconds;
+        }
+        return truncatedSeconds + 1L;
+    }
     private String formatDay(Integer day) {
         return day == null ? "-" : "DAY " + day;
     }
@@ -1199,6 +1222,12 @@ public class SeasonLifecycleService {
                 : finishedSeason.getTotalDays();
         LocalDateTime nextSeasonEndAt = nextSeasonStartAt.plus(seasonTimelineService.seasonCycleDuration(totalDays));
         seasonRepository.save(Season.createScheduled(totalDays, nextSeasonStartAt, nextSeasonEndAt));
+    }
+
+    public enum SeasonStartResult {
+        STARTED,
+        WAITING_SOURCE_BATCH,
+        SKIPPED
     }
 
     private record WeightedEventSpec(
