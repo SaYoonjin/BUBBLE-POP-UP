@@ -190,6 +190,13 @@ export default function ReportPage() {
             </div>
           </div>
 
+          <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 text-slate-700">
+            <span className="material-symbols-outlined text-2xl text-slate-500">receipt_long</span>
+            <h3 className="text-base font-bold tracking-tight">
+              Day {report.day} 영업 마감 후 일일 임대료가 정산되었습니다
+            </h3>
+          </div>
+
           {report.consecutiveDeficitDays > 0 && (
             <div
               className={`flex items-center gap-3 rounded-xl p-4 ${

@@ -154,8 +154,8 @@ function isSeasonLongAlertEvent(eventName: string, newsTitle: string) {
 function shouldDisplayCarryOverAlert(appliedAt: string, eventName: string, newsTitle: string) {
   const elapsedSec = getElapsedAppliedEventSeconds(appliedAt);
 
-  if (elapsedSec !== null && elapsedSec < DAY_SECONDS) {
-    return true;
+  if (elapsedSec === null || elapsedSec < DAY_SECONDS) {
+    return false;
   }
 
   return isSeasonLongAlertEvent(eventName, newsTitle);
