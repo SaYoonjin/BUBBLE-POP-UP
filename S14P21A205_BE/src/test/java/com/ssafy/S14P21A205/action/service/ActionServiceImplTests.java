@@ -322,6 +322,28 @@ class ActionServiceImplTests {
     }
 
     @Test
+    void executeDonationAllowsQuantityAboveFiftyWhenCurrentStockIsEnough() {
+        Store store = store(15L, 1, 3L, 7L, 2, 7, 2_000, 4_000);
+        Action donationAction = action(ActionCategory.DONATION, 0);
+        GameDayLiveState state = state(500_000L, 120);
+
+        when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
+                .thenReturn(Optional.of(store));
+        when(gameDayStoreStateRedisRepository.getActions(15L, 2)).thenReturn(Map.of());
+        when(actionRepository.findByCategory(ActionCategory.DONATION)).thenReturn(List.of(donationAction));
+        when(gameDayStoreStateRedisRepository.find(15L, 2)).thenReturn(Optional.of(state));
+
+        DonationResponse response = actionService.executeDonation(1, new DonationRequest(80));
+
+        assertThat(response.quantity()).isEqualTo(80);
+        assertThat(response.captureRateBonus()).isEqualByComparingTo("0.10");
+        verify(gameDayStoreStateRedisRepository).updateField(15L, 2, "stock", "40");
+        verify(gameDayStoreStateRedisRepository).updateField(15L, 2, "capture_rate", "0.5500");
+        verify(gameDayStoreStateRedisRepository).markActionUsed(15L, 2, "donation");
+        verify(gameDayStoreStateRedisRepository).saveBalance(15L, 2, 500_000L);
+    }
+
+    @Test
     void executeEmergencyOrderAppliesIngredientDiscountTrendMultiplierAndCostMultiplierFromActiveEvent() {
         Store store = store(15L, 1, 3L, 7L, 2, 7, 2_000);
         com.ssafy.S14P21A205.shop.entity.Menu emergencyMenu = menu(8L, 3_000, "emergency-cookie");
@@ -527,6 +549,10 @@ class ActionServiceImplTests {
     }
 
     private GameDayLiveState state(long balance) {
+        return state(balance, 50);
+    }
+
+    private GameDayLiveState state(long balance, int stock) {
         return new GameDayLiveState(
                 LocalDateTime.of(2026, 3, 17, 10, 0),
                 List.of(1, 2, 3),
@@ -558,7 +584,7 @@ class ActionServiceImplTests {
                 0L,
                 0L,
                 balance,
-                50,
+                stock,
                 LocalDateTime.of(2026, 3, 17, 10, 0)
         );
     }

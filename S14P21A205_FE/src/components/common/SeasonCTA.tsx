@@ -12,6 +12,7 @@ interface SeasonCTAProps {
   endTimestampMs?: number;
   tone?: SeasonTone;
   disabled?: boolean;
+  onCountdownComplete?: () => void;
 }
 
 export default function SeasonCTA({
@@ -23,6 +24,7 @@ export default function SeasonCTA({
   endTimestampMs,
   tone = "active",
   disabled = false,
+  onCountdownComplete,
 }: SeasonCTAProps) {
   const isWaitingTone = tone === "waiting";
   const isButtonDisabled = disabled || !ctaTo;
@@ -59,6 +61,7 @@ export default function SeasonCTA({
               key={`season-${endTimestampMs}`}
               endTimestampMs={endTimestampMs}
               label={timerLabel}
+              onComplete={onCountdownComplete}
               variant="display"
               showIcon={false}
             />

@@ -43,6 +43,7 @@ import com.ssafy.S14P21A205.game.season.repository.DailyReportRepository;
 import com.ssafy.S14P21A205.game.season.repository.SeasonRankingRecordRepository;
 import com.ssafy.S14P21A205.game.season.repository.SeasonRankingRedisRepository;
 import com.ssafy.S14P21A205.game.season.repository.SeasonRepository;
+import com.ssafy.S14P21A205.game.season.scheduler.SeasonStartScheduler;
 import com.ssafy.S14P21A205.game.season.service.SeasonFinalRankingService;
 import com.ssafy.S14P21A205.game.season.service.SeasonJoinService;
 import com.ssafy.S14P21A205.game.season.service.SeasonLifecycleService;
@@ -168,6 +169,9 @@ class SecurityConfigTests {
 
     @MockitoBean
     private SeasonLifecycleService seasonLifecycleService;
+
+    @MockitoBean
+    private SeasonStartScheduler seasonStartScheduler;
 
     @MockitoBean
     private SeasonDayClosingScheduler seasonDayClosingScheduler;
