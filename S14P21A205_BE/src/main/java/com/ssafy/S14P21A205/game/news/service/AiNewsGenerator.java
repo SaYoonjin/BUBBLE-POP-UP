@@ -38,7 +38,7 @@ public class AiNewsGenerator {
             + "출력: {\"title\":\"제목\",\"content\":\"본문\"} JSON만. 다른 텍스트 금지. "
             + "제목은 핵심 정보를 담아 독자가 제목만 읽어도 기사 내용을 파악할 수 있게 써. "
             + "예: 지역명+현상, 메뉴명+변동, 매장명+성과 등 구체적 사실 포함. "
-            + "제목 15~25자. 본문 150~250자 이내로 짧게. "
+            + "제목 15~40자. 본문 150~250자 이내로 짧게. "
             + "순수 한국어만 사용(영어·한자·아랍어·외국어 절대 금지). "
             + "숫자 직접 쓰지 말고 간접 표현. 괄호·이모지·따옴표 금지. "
             + "마크다운 금지(**, *, #, ```, - 등 절대 쓰지 마). "
@@ -406,17 +406,7 @@ public class AiNewsGenerator {
             jsonStr = jsonStr.replaceAll("(?s)```json?\\s*", "").replaceAll("(?s)```", "").trim();
         }
 
-        // 키 누락 패턴 복원: {:"val1", :"val2"} → {"title":"val1","content":"val2"}
-        // 이중 따옴표 치환보다 먼저 실행해야 JSON 구조가 깨지지 않음
-        if (jsonStr.matches("(?s)\\{\\s*:.*")) {
-            jsonStr = jsonStr.replaceFirst("\\{\\s*:", "{\"title\":");
-            jsonStr = jsonStr.replaceFirst(",\\s*:", ",\"content\":");
-        }
-
-        // 이중 이스케이프 정리: "" → " (JSON 키/값 경계의 "" 은 제외)
-        jsonStr = jsonStr.replaceAll("(?<=[^:{,\\[])\"\"(?=[^:}\\],])", "\"");
-
-        // 중첩 브레이스 카운팅으로 첫 번째 완전한 JSON 객체 추출
+        // 1단계: 중첩 브레이스 카운팅으로 첫 번째 완전한 JSON 객체 추출
         int braceStart = jsonStr.indexOf('{');
         if (braceStart >= 0) {
             int depth = 0;
@@ -452,16 +442,28 @@ public class AiNewsGenerator {
             }
         }
 
+        // 2단계: 키 누락 패턴 복원 (추출된 JSON에 적용)
+        // {:"val1", :"val2"} → {"title":"val1","content":"val2"}
+        if (jsonStr.matches("(?s)\\{\\s*:.*")) {
+            jsonStr = jsonStr.replaceFirst("\\{\\s*:", "{\"title\":");
+            jsonStr = jsonStr.replaceFirst(",\\s*:", ",\"content\":");
+        }
+
+        // 3단계: 이중 따옴표 정리: "" → "
+        if (jsonStr.contains("\"\"")) {
+            jsonStr = jsonStr.replace("\"\"", "\"");
+        }
+
         // 1차 파싱
         NewsGenerationResult result = tryParseJson(jsonStr);
         if (result != null) return result;
 
         // 이스케이프 문자 정리 후 재시도
-        String cleaned = jsonStr.replace("\\n", " ").replace("\\\"", "\"");
+        String cleaned = jsonStr.replace("\\n", " ").replace("\\\"", "\"").replace("\\", "");
         result = tryParseJson(cleaned);
         if (result != null) return result;
 
-        // 정규식으로 title/content 추출 시도
+        // 정규식으로 title/content 추출 시도 (원본 텍스트 대상)
         result = tryRegexExtract(text);
         if (result != null) return result;
 
@@ -469,9 +471,12 @@ public class AiNewsGenerator {
         log.warn("JSON parse failed, splitting raw text (first 100 chars): {}",
                 text.length() > 100 ? text.substring(0, 100) + "..." : text);
         String plain = text.replaceAll("[\\r\\n]+", " ").trim();
+        // JSON 잔해 제거
+        plain = plain.replaceAll("\\{\\s*:?\\s*\"?", "").replaceAll("\"?\\s*}", "")
+                .replaceAll("\"\\s*,\\s*:?\\s*\"?", " ").trim();
         // 첫 마침표/느낌표/물음표 기준으로 제목·본문 분리
         int splitIdx = -1;
-        for (int i = 0; i < Math.min(plain.length(), 80); i++) {
+        for (int i = 0; i < Math.min(plain.length(), 120); i++) {
             char c = plain.charAt(i);
             if (c == '.' || c == '!' || c == '?' || c == '。') {
                 splitIdx = i;
@@ -483,16 +488,15 @@ public class AiNewsGenerator {
         if (splitIdx > 0 && splitIdx < plain.length() - 1) {
             title = plain.substring(0, splitIdx + 1).trim();
             content = plain.substring(splitIdx + 1).trim();
-        } else if (plain.length() > 25) {
-            title = plain.substring(0, 25).trim();
+        } else if (plain.length() > 40) {
+            title = plain.substring(0, 40).trim();
             content = plain;
         } else {
             title = plain;
             content = plain;
         }
-        // 제목이 25자 넘으면 자르기
-        if (title.length() > 25) {
-            title = title.substring(0, 25);
+        if (title.length() > 40) {
+            title = title.substring(0, 40);
         }
         return new NewsGenerationResult(sanitize(title), sanitize(content));
     }
@@ -503,9 +507,9 @@ public class AiNewsGenerator {
             if (node.has("title") && node.has("content")) {
                 String title = sanitize(node.get("title").asText().strip());
                 String content = sanitize(node.get("content").asText().strip());
-                // 제목 25자 제한
-                if (title.length() > 25) {
-                    title = title.substring(0, 25);
+                // 제목 40자 제한
+                if (title.length() > 40) {
+                    title = title.substring(0, 40);
                 }
                 // 본문이 너무 길면 마지막 완전한 문장에서 자르기
                 if (content.length() > 300) {

@@ -128,17 +128,25 @@ public class NewsDataSaver {
      * 다음 날 준비 화면에서 보이도록 day+1의 NewsReport에 저장.
      * 마지막 날이면 현재 day에 저장.
      */
+    /**
+     * @return true if at least one article was generated
+     */
     @Transactional
-    public void generateOpeningNews(Long seasonId, int day) {
+    public boolean generateOpeningNews(Long seasonId, int day) {
         int targetDay = resolveNextNewsDay(seasonId, day);
         NewsReport report = newsReportRepository.findBySeasonIdAndDay(seasonId, targetDay).orElse(null);
         if (report == null) {
-            return;
+            return false;
         }
 
+        long countBefore = newsArticleRepository.countByNewsReportId(report.getId());
         log.info("[NEWS] Starting opening news for season {} currentDay {} -> targetDay {}", seasonId, day, targetDay);
-        generateOpeningNewsInternal(report, seasonId, targetDay);
-        log.info("[NEWS] Completed opening news for season {} currentDay {} -> targetDay {}", seasonId, day, targetDay);
+        generateOpeningNewsInternal(report, seasonId, day);
+        long countAfter = newsArticleRepository.countByNewsReportId(report.getId());
+        boolean generated = countAfter > countBefore;
+        log.info("[NEWS] Completed opening news for season {} currentDay {} -> targetDay {} (generated={})",
+                seasonId, day, targetDay, generated);
+        return generated;
     }
 
     // ---- 영업 중 뉴스 (메뉴 입점수 + 지역 입점수) ----
@@ -165,12 +173,19 @@ public class NewsDataSaver {
         candidates.add(() -> generateCumulativeSalesNews(report, seasonId, day));
         candidates.add(() -> generateMigrationNews(report, seasonId, day));
 
+        long countBefore = newsArticleRepository.countByNewsReportId(report.getId());
         Collections.shuffle(candidates);
-        try {
-            candidates.get(0).run();
-        } catch (Exception e) {
-            log.error("Failed to generate closing news. seasonId={} day={}", seasonId, day, e);
+        for (Runnable candidate : candidates) {
+            try {
+                candidate.run();
+                if (newsArticleRepository.countByNewsReportId(report.getId()) > countBefore) {
+                    return;
+                }
+            } catch (Exception e) {
+                log.warn("Closing news candidate failed, trying next. seasonId={} day={}", seasonId, day, e);
+            }
         }
+        log.warn("All closing news candidates failed. seasonId={} day={}", seasonId, day);
     }
 
     private void generateMenuEntryNews(NewsReport report, Long seasonId, int day) {
@@ -190,7 +205,7 @@ public class NewsDataSaver {
 
         NewsGenerationResult result = aiNewsGenerator.generateMenuEntryNews(seasonId, day, ranking);
         NewsArticle article = NewsArticle.create(
-                report, day, NewsCategory.MENU_ENTRY, result.title(), result.content());
+                report, report.getDay(), NewsCategory.MENU_ENTRY, result.title(), result.content());
         newsArticleRepository.save(article);
         log.info("Generated menu entry news for season {} day {}", seasonId, day);
     }
@@ -212,7 +227,7 @@ public class NewsDataSaver {
 
         NewsGenerationResult result = aiNewsGenerator.generateAreaEntryNews(seasonId, day, ranking);
         NewsArticle article = NewsArticle.create(
-                report, day, NewsCategory.AREA_ENTRY, result.title(), result.content());
+                report, report.getDay(), NewsCategory.AREA_ENTRY, result.title(), result.content());
         newsArticleRepository.save(article);
         log.info("Generated area entry news for season {} day {}", seasonId, day);
     }
@@ -300,7 +315,7 @@ public class NewsDataSaver {
         NewsGenerationResult result = aiNewsGenerator.generateTopStoreNews(
                 seasonId, day, storeName, menuName, revenue, salesCount);
         NewsArticle article = NewsArticle.create(
-                report, day, NewsCategory.EXTRA, result.title(), result.content());
+                report, report.getDay(), NewsCategory.EXTRA, result.title(), result.content());
         newsArticleRepository.save(article);
         log.info("Generated top store news for season {} day {}", seasonId, day);
     }
@@ -344,7 +359,7 @@ public class NewsDataSaver {
                 ((Number) topMilestone.get("totalSales")).longValue(),
                 ((Number) topMilestone.get("milestone")).intValue());
         NewsArticle article = NewsArticle.create(
-                report, day, NewsCategory.EXTRA, result.title(), result.content());
+                report, report.getDay(), NewsCategory.EXTRA, result.title(), result.content());
         newsArticleRepository.save(article);
         log.info("Generated cumulative sales news for season {} day {}", seasonId, day);
     }
@@ -390,7 +405,7 @@ public class NewsDataSaver {
 
         NewsGenerationResult result = aiNewsGenerator.generateMigrationNews(seasonId, day, changes);
         NewsArticle article = NewsArticle.create(
-                report, day, NewsCategory.EXTRA, result.title(), result.content());
+                report, report.getDay(), NewsCategory.EXTRA, result.title(), result.content());
         newsArticleRepository.save(article);
         log.info("Generated migration news for season {} day {}", seasonId, day);
     }
@@ -420,7 +435,7 @@ public class NewsDataSaver {
         }
 
         log.info("[NEWS] Starting closing news from Redis for season {} day {} -> targetDay {}", seasonId, day, targetDay);
-        generateClosingNewsFromRedis(targetReport, seasonId, targetDay, stores);
+        generateClosingNewsFromRedis(targetReport, seasonId, day, stores);
         log.info("[NEWS] Completed closing news from Redis for season {} day {} -> targetDay {}", seasonId, day, targetDay);
     }
 
@@ -432,12 +447,19 @@ public class NewsDataSaver {
         candidates.add(() -> generateCumulativeSalesNewsFromRedis(report, seasonId, day, stores));
         candidates.add(() -> generateMigrationNewsFromStores(report, seasonId, day, stores));
 
+        long countBefore = newsArticleRepository.countByNewsReportId(report.getId());
         Collections.shuffle(candidates);
-        try {
-            candidates.get(0).run();
-        } catch (Exception e) {
-            log.error("Failed to generate closing news from Redis. seasonId={} day={}", seasonId, day, e);
+        for (Runnable candidate : candidates) {
+            try {
+                candidate.run();
+                if (newsArticleRepository.countByNewsReportId(report.getId()) > countBefore) {
+                    return;
+                }
+            } catch (Exception e) {
+                log.warn("Closing news candidate failed, trying next. seasonId={} day={}", seasonId, day, e);
+            }
         }
+        log.warn("All closing news candidates from Redis failed. seasonId={} day={}", seasonId, day);
     }
 
     private void generateTopStoreNewsFromRedis(NewsReport report, Long seasonId, int day, List<Store> stores) {
@@ -465,7 +487,7 @@ public class NewsDataSaver {
                 seasonId, day, topStore.getStoreName(), topStore.getMenu().getMenuName(),
                 (int) topSales, topPurchaseCount);
         newsArticleRepository.save(NewsArticle.create(
-                report, day, NewsCategory.EXTRA, result.title(), result.content()));
+                report, report.getDay(), NewsCategory.EXTRA, result.title(), result.content()));
         log.info("Generated top store news from Redis for season {} day {}", seasonId, day);
     }
 
@@ -507,7 +529,7 @@ public class NewsDataSaver {
                     NewsGenerationResult result = aiNewsGenerator.generateCumulativeSalesNews(
                             seasonId, day, entry.storeName(), entry.menuName(), entry.totalSales(), threshold);
                     newsArticleRepository.save(NewsArticle.create(
-                            report, day, NewsCategory.EXTRA, result.title(), result.content()));
+                            report, report.getDay(), NewsCategory.EXTRA, result.title(), result.content()));
                     log.info("Generated cumulative sales news from Redis for season {} day {}", seasonId, day);
                     return;
                 }
@@ -561,7 +583,7 @@ public class NewsDataSaver {
 
         NewsGenerationResult result = aiNewsGenerator.generateMigrationNews(seasonId, day, changes);
         newsArticleRepository.save(NewsArticle.create(
-                report, day, NewsCategory.EXTRA, result.title(), result.content()));
+                report, report.getDay(), NewsCategory.EXTRA, result.title(), result.content()));
         log.info("Generated migration news from stores for season {} day {}", seasonId, day);
     }
 
