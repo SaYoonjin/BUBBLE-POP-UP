@@ -97,26 +97,22 @@ public class RentPolicy {
         int disposalLoss = 0;
         int openingAgedStock = menuChanged ? 0 : carriedStock;
         int openingFreshStock = regularOrderQuantity;
-        int fixedCostTotal = Math.addExact(
-                Math.addExact(dailyRentApplied, interiorCost),
-                regularOrderCost
-        );
+        int fixedCostTotal = Math.addExact(interiorCost, regularOrderCost);
         int initialBalance = carriedBalance - fixedCostTotal;
 
         if (initialBalance < 0) {
             int maxAffordableOrderCount = Math.max(
                     0,
-                    (carriedBalance - dailyRentApplied - interiorCost) / Math.max(1, appliedUnitCost)
+                    (carriedBalance - interiorCost) / Math.max(1, appliedUnitCost)
             );
             throw new BaseException(
                     ErrorCode.INVALID_INPUT_VALUE,
-                    "Insufficient balance for today's fixed costs. "
-                            + "maxOrderCount=%d, existingOrderCount=%d, balanceBeforeOrder=%d, dailyRent=%d, interiorCost=%d, appliedUnitCost=%d"
+                    "Insufficient balance for today's opening costs. "
+                            + "maxOrderCount=%d, existingOrderCount=%d, balanceBeforeOrder=%d, interiorCost=%d, appliedUnitCost=%d"
                             .formatted(
                                     maxAffordableOrderCount,
                                     regularOrderQuantity,
                                     carriedBalance,
-                                    dailyRentApplied,
                                     interiorCost,
                                     appliedUnitCost
                             )
