@@ -8,7 +8,7 @@ import MenuSelector from "../components/game/MenuSelector";
 import PriceSlider from "../components/game/PriceSlider";
 import QuantityCounter from "../components/game/QuantityCounter";
 import CozyNewspaper from "../components/game/CozyNewspaper";
-import { postRegularOrder } from "../api/order";
+import { getCurrentOrder, postRegularOrder } from "../api/order";
 import { getGameWaitingStatus, type GameWaitingResponse } from "../api/game";
 import {
   getNewsRanking,
@@ -29,20 +29,21 @@ interface PrepMenu {
   name: string;
   costPrice: number;
   previousSalePrice: number;
+  hasPreviousPrice: boolean;
   ingredientDiscountMultiplier: number;
 }
 
 const fallbackMenus: PrepMenu[] = [
-  { id: 1, emoji: "🍞", name: "빵", costPrice: 1800, previousSalePrice: 3200, ingredientDiscountMultiplier: 1 },
-  { id: 2, emoji: "🍢", name: "마라꼬치", costPrice: 2200, previousSalePrice: 3900, ingredientDiscountMultiplier: 1 },
-  { id: 3, emoji: "🍬", name: "젤리", costPrice: 900, previousSalePrice: 1800, ingredientDiscountMultiplier: 1 },
-  { id: 4, emoji: "🍽️", name: "떡볶이", costPrice: 2500, previousSalePrice: 4300, ingredientDiscountMultiplier: 1 },
-  { id: 5, emoji: "🍔", name: "햄버거", costPrice: 3100, previousSalePrice: 5600, ingredientDiscountMultiplier: 1 },
-  { id: 6, emoji: "🍨", name: "아이스크림", costPrice: 1400, previousSalePrice: 2600, ingredientDiscountMultiplier: 1 },
-  { id: 7, emoji: "🍗", name: "닭강정", costPrice: 2800, previousSalePrice: 4900, ingredientDiscountMultiplier: 1 },
-  { id: 8, emoji: "🌮", name: "타코", costPrice: 2600, previousSalePrice: 4500, ingredientDiscountMultiplier: 1 },
-  { id: 9, emoji: "🌭", name: "핫도그", costPrice: 1700, previousSalePrice: 3000, ingredientDiscountMultiplier: 1 },
-  { id: 10, emoji: "🧋", name: "버블티", costPrice: 2300, previousSalePrice: 4100, ingredientDiscountMultiplier: 1 },
+  { id: 1, emoji: "🍞", name: "빵", costPrice: 1800, previousSalePrice: 3200, hasPreviousPrice: false, ingredientDiscountMultiplier: 1 },
+  { id: 2, emoji: "🍢", name: "마라꼬치", costPrice: 2200, previousSalePrice: 3900, hasPreviousPrice: false, ingredientDiscountMultiplier: 1 },
+  { id: 3, emoji: "🍬", name: "젤리", costPrice: 900, previousSalePrice: 1800, hasPreviousPrice: false, ingredientDiscountMultiplier: 1 },
+  { id: 4, emoji: "🍽️", name: "떡볶이", costPrice: 2500, previousSalePrice: 4300, hasPreviousPrice: false, ingredientDiscountMultiplier: 1 },
+  { id: 5, emoji: "🍔", name: "햄버거", costPrice: 3100, previousSalePrice: 5600, hasPreviousPrice: false, ingredientDiscountMultiplier: 1 },
+  { id: 6, emoji: "🍨", name: "아이스크림", costPrice: 1400, previousSalePrice: 2600, hasPreviousPrice: false, ingredientDiscountMultiplier: 1 },
+  { id: 7, emoji: "🍗", name: "닭강정", costPrice: 2800, previousSalePrice: 4900, hasPreviousPrice: false, ingredientDiscountMultiplier: 1 },
+  { id: 8, emoji: "🌮", name: "타코", costPrice: 2600, previousSalePrice: 4500, hasPreviousPrice: false, ingredientDiscountMultiplier: 1 },
+  { id: 9, emoji: "🌭", name: "핫도그", costPrice: 1700, previousSalePrice: 3000, hasPreviousPrice: false, ingredientDiscountMultiplier: 1 },
+  { id: 10, emoji: "🧋", name: "버블티", costPrice: 2300, previousSalePrice: 4100, hasPreviousPrice: false, ingredientDiscountMultiplier: 1 },
 ];
 
 const mockPopulationRanking = [
@@ -166,13 +167,11 @@ function getRecommendedPrice(costPrice: number) {
 function getSellingPriceDefault(
   costPrice: number,
   previousSalePrice: number,
-  day: number,
-  playableday: number | null,
+  hasPreviousPrice: boolean,
 ) {
-  if (playableday !== null && day > playableday) {
+  if (hasPreviousPrice && previousSalePrice > 0) {
     return previousSalePrice;
   }
-
   return getRecommendedPrice(costPrice);
 }
 
@@ -217,17 +216,26 @@ function resolveSelectedMenuId(
   );
 }
 
-function mapStoreMenusToPrepMenus(menus: StoreMenuResponse[]) {
+function mapStoreMenusToPrepMenus(
+  menus: StoreMenuResponse[],
+  previousSalePrice: number | null,
+  previousMenuId: number | null,
+) {
   return menus.map((menu) => {
     const fallbackMenu = fallbackMenus.find((entry) => entry.id === menu.menuId);
+    // 이전 판매가는 이전에 선택했던 메뉴에만 적용
+    const isPrevisousMenu = previousMenuId !== null && menu.menuId === previousMenuId;
+    const prevPrice = isPrevisousMenu && previousSalePrice != null
+      ? previousSalePrice
+      : null;
 
     return {
       id: menu.menuId,
       emoji: fallbackMenu?.emoji ?? "🍽️",
       name: menu.menuName,
       costPrice: menu.ingredientPrice,
-      previousSalePrice:
-        fallbackMenu?.previousSalePrice ?? getRecommendedPrice(menu.ingredientPrice),
+      previousSalePrice: prevPrice ?? getRecommendedPrice(menu.ingredientPrice),
+      hasPreviousPrice: prevPrice !== null,
       ingredientDiscountMultiplier: normalizeDiscountMultiplier(menu.discount),
     } satisfies PrepMenu;
   });
@@ -270,8 +278,7 @@ export default function PrepPage() {
   const defaultSellingPrice = getSellingPriceDefault(
     originalCostPrice,
     selectedMenuData.previousSalePrice,
-    day,
-    playableday,
+    selectedMenuData.hasPreviousPrice,
   );
   const [price, setPrice] = useState(defaultSellingPrice);
   const totalCost = originalCostPrice * quantity;
@@ -358,9 +365,10 @@ export default function PrepPage() {
 
     const loadPrepMenus = async () => {
       try {
-        const [menusResult, storeResult] = await Promise.allSettled([
+        const [menusResult, storeResult, orderResult] = await Promise.allSettled([
           getStoreMenus(),
           day >= 2 ? getStore() : Promise.resolve<StoreResponse | null>(null),
+          day >= 2 ? getCurrentOrder() : Promise.resolve(null),
         ]);
 
         if (!isActive) {
@@ -390,7 +398,12 @@ export default function PrepPage() {
           return;
         }
 
-        const nextMenus = mapStoreMenusToPrepMenus(fetchedMenus);
+        const prevOrder = orderResult.status === "fulfilled" ? orderResult.value : null;
+        const nextMenus = mapStoreMenusToPrepMenus(
+          fetchedMenus,
+          prevOrder?.sellingPrice ?? null,
+          prevOrder?.menuId ?? null,
+        );
         setMenus(nextMenus);
         setSelectedMenu((currentMenuId) =>
           resolveSelectedMenuId(nextMenus, currentMenuId, day, nextStoreMenuName),
@@ -736,7 +749,7 @@ export default function PrepPage() {
                       discountedCostPrice={discountedCostPrice}
                       hasItemDiscount={hasItemDiscount}
                       defaultPrice={defaultSellingPrice}
-                      defaultPriceLabel={playableday !== null && day > playableday ? "이전 판매가" : "권장가"}
+                      defaultPriceLabel={selectedMenuData.hasPreviousPrice ? "이전 판매가" : "권장가"}
                       onChange={setPrice}
                     />
                     <div className="flex flex-col gap-5">
