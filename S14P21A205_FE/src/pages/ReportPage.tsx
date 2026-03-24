@@ -101,7 +101,10 @@ export default function ReportPage() {
   const handleBankruptExit = () => {
     navigate("/", {
       replace: true,
-      state: { showBankruptWarning: true },
+      state: {
+        showBankruptWarning: true,
+        bankruptSeasonNumber: report?.seasonId,
+      },
     });
   };
 

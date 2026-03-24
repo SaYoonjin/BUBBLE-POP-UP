@@ -71,6 +71,7 @@ const SHOP_ITEM_UI_BY_ID: Partial<
 
 interface DashboardRouteState {
   showBankruptWarning?: boolean;
+  bankruptSeasonNumber?: number;
   showMidSeasonSetupExpiredModal?: boolean;
 }
 
@@ -198,6 +199,10 @@ function parseDashboardRouteState(value: unknown): DashboardRouteState {
 
   return {
     showBankruptWarning: Boolean(state.showBankruptWarning),
+    bankruptSeasonNumber:
+      typeof state.bankruptSeasonNumber === "number"
+        ? state.bankruptSeasonNumber
+        : undefined,
     showMidSeasonSetupExpiredModal: Boolean(state.showMidSeasonSetupExpiredModal),
   };
 }
@@ -278,15 +283,17 @@ export default function DashboardPage() {
   );
   const [waitingStatus, setWaitingStatus] = useState<GameWaitingResponse | null>(null);
   const [currentSeasonNumber, setCurrentSeasonNumber] = useState<number | null>(null);
+  const [isResolvingCurrentSeasonNumber, setIsResolvingCurrentSeasonNumber] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [gameReturnPath, setGameReturnPath] = useState<string | null>(null);
+  const [bankruptWarningSeasonNumber, setBankruptWarningSeasonNumber] = useState<number | null>(null);
+  const [isBankruptWarningVisible, setIsBankruptWarningVisible] = useState(false);
 
   const routeState = useMemo(
     () => parseDashboardRouteState(location.state),
     [location.state],
   );
-  const showBankruptWarning = Boolean(routeState.showBankruptWarning);
   const showMidSeasonSetupExpiredModal = Boolean(routeState.showMidSeasonSetupExpiredModal);
   const selectedItems = useMemo(
     () => hydrateSelectedDashboardItems(selectedItemIds, shopItems),
@@ -362,6 +369,30 @@ export default function DashboardPage() {
     waitingStatus?.status === "IN_PROGRESS" &&
       isJoinableDay(waitingStatus.currentDay ?? null),
   );
+
+  useEffect(() => {
+    if (!routeState.showBankruptWarning) {
+      return;
+    }
+
+    if (typeof routeState.bankruptSeasonNumber === "number") {
+      setBankruptWarningSeasonNumber(routeState.bankruptSeasonNumber);
+      setIsBankruptWarningVisible(true);
+    }
+
+    navigate(location.pathname, {
+      replace: true,
+      state: routeState.showMidSeasonSetupExpiredModal
+        ? { showMidSeasonSetupExpiredModal: true }
+        : null,
+    });
+  }, [
+    location.pathname,
+    navigate,
+    routeState.bankruptSeasonNumber,
+    routeState.showBankruptWarning,
+    routeState.showMidSeasonSetupExpiredModal,
+  ]);
 
   useEffect(() => {
     if (shopItems.length === 0) {
@@ -446,8 +477,12 @@ export default function DashboardPage() {
 
     async function loadCurrentSeasonNumber() {
       if (waitingStatus?.status !== "IN_PROGRESS") {
+        setCurrentSeasonNumber(null);
+        setIsResolvingCurrentSeasonNumber(false);
         return;
       }
+
+      setIsResolvingCurrentSeasonNumber(true);
 
       try {
         const topRankings = await getCurrentSeasonTopRankings();
@@ -456,7 +491,13 @@ export default function DashboardPage() {
           setCurrentSeasonNumber(topRankings.seasonId);
         }
       } catch {
-        // Keep the season card generic when the ranking cache is unavailable.
+        if (!isCancelled) {
+          setCurrentSeasonNumber(null);
+        }
+      } finally {
+        if (!isCancelled) {
+          setIsResolvingCurrentSeasonNumber(false);
+        }
       }
     }
 
@@ -466,6 +507,35 @@ export default function DashboardPage() {
       isCancelled = true;
     };
   }, [waitingStatus?.status]);
+
+  useEffect(() => {
+    if (bankruptWarningSeasonNumber === null) {
+      setIsBankruptWarningVisible(false);
+      return;
+    }
+
+    if (!waitingStatus) {
+      return;
+    }
+
+    if (waitingStatus.status === "WAITING") {
+      setIsBankruptWarningVisible(
+        waitingStatus.nextSeasonNumber === bankruptWarningSeasonNumber + 1,
+      );
+      return;
+    }
+
+    if (isResolvingCurrentSeasonNumber) {
+      return;
+    }
+
+    setIsBankruptWarningVisible(currentSeasonNumber === bankruptWarningSeasonNumber);
+  }, [
+    bankruptWarningSeasonNumber,
+    currentSeasonNumber,
+    isResolvingCurrentSeasonNumber,
+    waitingStatus,
+  ]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -570,7 +640,7 @@ export default function DashboardPage() {
               </div>
             )}
 
-            {showBankruptWarning && <BankruptWarning />}
+            {isBankruptWarningVisible && <BankruptWarning />}
           </div>
         </div>
       </main>
