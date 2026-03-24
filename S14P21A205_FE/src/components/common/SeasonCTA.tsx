@@ -13,6 +13,7 @@ interface SeasonCTAProps {
   tone?: SeasonTone;
   disabled?: boolean;
   onCountdownComplete?: () => void;
+  onCtaClick?: () => void;
 }
 
 export default function SeasonCTA({
@@ -25,6 +26,7 @@ export default function SeasonCTA({
   tone = "active",
   disabled = false,
   onCountdownComplete,
+  onCtaClick,
 }: SeasonCTAProps) {
   const isWaitingTone = tone === "waiting";
   const isButtonDisabled = disabled || !ctaTo;
@@ -77,6 +79,7 @@ export default function SeasonCTA({
         {!isButtonDisabled ? (
           <Link
             to={ctaTo}
+            onClick={onCtaClick}
             className={`group flex h-16 w-full items-center justify-center gap-2 rounded-2xl text-lg font-bold text-white shadow-md transition-all hover:-translate-y-0.5 hover:shadow-lg ${
               isWaitingTone
                 ? "bg-slate-600 hover:bg-slate-700"

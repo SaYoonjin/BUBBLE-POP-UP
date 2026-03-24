@@ -12,6 +12,7 @@ import { LOCATION_SELECTION_DEADLINE_STORAGE_KEY } from "../constants";
 import { clearStoredBrandName, setStoredBrandName } from "../hooks/useBrandName";
 import { useGameStore } from "../stores/useGameStore";
 import type { WaitingRouteState } from "../types/waiting";
+import { clearSeasonJoinIntent } from "../utils/seasonJoinIntent";
 import {
   applyDiscount,
   getSelectedDiscountMultiplier,
@@ -54,6 +55,8 @@ function clearLocationSelectionDeadline() {
   } catch {
     // Ignore storage access failures and continue navigation.
   }
+
+  clearSeasonJoinIntent();
 }
 
 function isLocationSelectionAvailable(waitingStatus: GameWaitingResponse) {
