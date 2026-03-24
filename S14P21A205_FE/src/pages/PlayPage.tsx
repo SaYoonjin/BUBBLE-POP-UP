@@ -648,6 +648,7 @@ function PlayPageSession({
   const prevBalanceRef = useRef<number | null>(null);
   // Unity arrival 시 고객별 재고/잔액 변동 큐
   const arrivalQueueRef = useRef<Array<{ stockDelta: number; balanceDelta: number }>>([]);
+  const arrivalDrainTimerRef = useRef<number | null>(null);
 
   const clearScheduledVisitorTimers = () => {
     for (const timerId of scheduledVisitorTimersRef.current) {
@@ -803,9 +804,14 @@ function PlayPageSession({
       return;
     }
 
+    applyOneArrival();
+  };
+
+  const applyOneArrival = () => {
+    if (arrivalQueueRef.current.length === 0) return;
+
     setGuests((prev) => prev + 1);
 
-    // 큐에서 고객별 재고/잔액 변동량 적용
     const change = arrivalQueueRef.current.shift();
     if (change) {
       if (change.stockDelta !== 0) {
@@ -819,6 +825,44 @@ function PlayPageSession({
     }
   };
 
+  /** 큐를 일정 간격으로 자동 소진하는 타이머 시작 (Unity 이벤트 fallback) */
+  const startDrainTimer = (count: number) => {
+    if (arrivalDrainTimerRef.current !== null) {
+      window.clearInterval(arrivalDrainTimerRef.current);
+    }
+    if (count <= 0) return;
+
+    // 폴링 간격(10초) 안에 균등 분배
+    const intervalMs = Math.max(200, Math.floor(8000 / count));
+    arrivalDrainTimerRef.current = window.setInterval(() => {
+      if (arrivalQueueRef.current.length === 0) {
+        if (arrivalDrainTimerRef.current !== null) {
+          window.clearInterval(arrivalDrainTimerRef.current);
+          arrivalDrainTimerRef.current = null;
+        }
+        return;
+      }
+      applyOneArrival();
+    }, intervalMs);
+  };
+
+  // Unity UNITY_POPUP_ARRIVAL 이벤트 수신 (오면 큐에서 즉시 소비)
+  useEffect(() => {
+    const handleUnityMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
+      if (event.data?.type !== "UNITY_POPUP_ARRIVAL") return;
+
+      const signalValue = Number(event.data.signalValue ?? 1);
+      console.log("[Unity] UNITY_POPUP_ARRIVAL received, signalValue:", signalValue, "queueSize:", arrivalQueueRef.current.length);
+      for (let i = 0; i < signalValue; i += 1) {
+        applyOneArrival();
+      }
+    };
+
+    window.addEventListener("message", handleUnityMessage);
+    return () => window.removeEventListener("message", handleUnityMessage);
+  }, []);
+
   const applyGameState = (state: GameStateResponse) => {
     const hasCustomerPlan =
       Array.isArray(state.customerPlanByHour) && state.customerPlanByHour.length > 0;
@@ -826,8 +870,12 @@ function PlayPageSession({
     if (prevGuestsRef.current !== null) {
       const gd = state.customerCount - prevGuestsRef.current;
 
-      // 이전 큐 잔여분 소진
+      // 이전 큐/타이머 클리어
       arrivalQueueRef.current = [];
+      if (arrivalDrainTimerRef.current !== null) {
+        window.clearInterval(arrivalDrainTimerRef.current);
+        arrivalDrainTimerRef.current = null;
+      }
 
       // 새 손님이 있으면: 재고/잔액은 이전 값 유지, 큐로 점진 반영
       if (gd > 0) {
@@ -838,6 +886,8 @@ function PlayPageSession({
             balanceDelta: units * unitPrice,
           });
         }
+        // 큐 자동 소진 타이머 시작 (Unity 이벤트가 안 오는 경우 fallback)
+        startDrainTimer(gd);
 
         if (!hasCustomerPlan) {
           const popupStoreIndex = resolvePopupStoreIndex(currentLocationIdRef.current);

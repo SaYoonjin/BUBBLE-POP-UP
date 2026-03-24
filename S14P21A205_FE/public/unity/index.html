@@ -151,6 +151,8 @@
             document.querySelector("#unity-progress-bar-full").style.width = 100 * progress + "%";
         }).then((unityInstance) => {
             unityInstanceRef = unityInstance;
+            document.querySelector("#unity-loading-bar").style.display = "none";
+            canvas.style.visibility = "hidden";
             window.unityApp.instance = unityInstance;
             window.unityApp.isReady = true;
             document.querySelector("#unity-fullscreen-button").onclick = () => {
@@ -164,6 +166,7 @@
                     handleUnityMessage(msg.method, msg.payload);
                 });
                 messageQueue = [];
+                // 카메라/매장 명령 반영 후 캔버스 표시
                 requestAnimationFrame(function () {
                     canvas.style.visibility = "visible";
                 });
@@ -172,7 +175,6 @@
                 parent.postMessage({ type: "unityReady" }, "*");
                 parent.postMessage({ type: "unity-ready" }, "*");
             }, 3000);
-            document.querySelector("#unity-loading-bar").style.display = "none";
         }).catch((message) => {
             alert(message);
         });
