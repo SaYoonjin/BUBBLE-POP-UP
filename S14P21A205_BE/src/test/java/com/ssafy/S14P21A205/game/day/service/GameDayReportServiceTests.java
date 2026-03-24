@@ -313,6 +313,44 @@ class GameDayReportServiceTests {
     }
 
     @Test
+    void getDayReportReturnsBankruptInProgressStoreReport() {
+        User user = user(1);
+        Store store = store(15L, 9L, 6, 7, "Current Location", "Current Menu", 300);
+        DailyReport daySix = dailyReport(
+                store,
+                6,
+                "Current Location",
+                "Current Menu",
+                2_000,
+                5_000,
+                -3_000,
+                12,
+                5,
+                3,
+                3,
+                true,
+                0,
+                new BigDecimal("0.08")
+        );
+
+        when(userService.getCurrentUser(any())).thenReturn(user);
+        when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
+                .thenReturn(Optional.empty());
+        when(storeRepository.findFirstIncludingBankruptByUserIdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
+                .thenReturn(Optional.of(store));
+        when(dailyReportRepository.findByStoreIdAndDay(15L, 6)).thenReturn(Optional.of(daySix));
+        when(dailyReportRepository.findByStore_IdOrderByDayAsc(15L)).thenReturn(List.of(daySix));
+        when(weatherLocationRepository.findByDayOrderByLocation_IdAsc(7)).thenReturn(List.of());
+
+        GameDayReportResponse response = gameDayReportService.getDayReport(mock(Authentication.class), 6);
+
+        assertThat(response.day()).isEqualTo(6);
+        assertThat(response.locationName()).isEqualTo("Current Location");
+        assertThat(response.menuName()).isEqualTo("Current Menu");
+        assertThat(response.consecutiveDeficitDays()).isEqualTo(3);
+    }
+
+    @Test
     void getDayReportThrowsWhenDayIsOutOfRange() {
         User user = user(1);
         Store store = store(15L, 9L, 2, 7, "Seongsu", "Cookie", 300);
@@ -334,6 +372,8 @@ class GameDayReportServiceTests {
         when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
                 .thenReturn(Optional.empty());
         when(storeRepository.findFirstByUser_IdAndSeason_StatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
+                .thenReturn(Optional.empty());
+        when(storeRepository.findFirstIncludingBankruptByUserIdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
                 .thenReturn(Optional.empty());
         when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.FINISHED))
                 .thenReturn(Optional.empty());
