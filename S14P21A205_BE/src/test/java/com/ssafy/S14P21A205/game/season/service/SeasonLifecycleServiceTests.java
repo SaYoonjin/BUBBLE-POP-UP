@@ -127,7 +127,7 @@ class SeasonLifecycleServiceTests {
     }
 
     @Test
-    void synchronizeStartsScheduledSeasonUsingFreshSourceBatch() {
+    void startScheduledSeasonStartsScheduledSeasonUsingFreshSourceBatch() {
         LocalDateTime seasonStartAt = LocalDateTime.of(2026, 3, 18, 10, 0, 0);
         LocalDateTime now = seasonStartAt.plusSeconds(1);
         Season scheduledSeason = Season.createScheduled(7, seasonStartAt, seasonStartAt.plusMinutes(30));
@@ -139,7 +139,7 @@ class SeasonLifecycleServiceTests {
         seasonLifecycleService = createService(Clock.fixed(now.atZone(ZoneId.of("Asia/Seoul")).toInstant(), ZoneId.of("Asia/Seoul")));
 
         when(seasonRepository.findFirstByStatusOrderByIdDesc(SeasonStatus.IN_PROGRESS)).thenReturn(Optional.empty());
-        when(seasonRepository.findFirstByStatusOrderByStartTimeAscIdAsc(SeasonStatus.SCHEDULED))
+        when(seasonRepository.findByIdAndStatus(11L, SeasonStatus.SCHEDULED))
                 .thenReturn(Optional.of(scheduledSeason));
         when(locationRepository.findAllByOrderByIdAsc()).thenReturn(List.of(location));
         when(menuRepository.findAllByOrderByIdAsc()).thenReturn(allMenus());
@@ -150,7 +150,8 @@ class SeasonLifecycleServiceTests {
         when(trafficRepository.findByLocationIdOrderByDateAsc(3L))
                 .thenReturn(traffics(location, batchKey, seasonStartAt.toLocalDate()));
 
-        seasonLifecycleService.synchronize();
+        assertThat(seasonLifecycleService.startScheduledSeason(11L))
+                .isEqualTo(SeasonLifecycleService.SeasonStartResult.STARTED);
 
         assertThat(scheduledSeason.getStatus()).isEqualTo(SeasonStatus.IN_PROGRESS);
         assertThat(scheduledSeason.getCurrentDay()).isEqualTo(1);
@@ -287,7 +288,7 @@ class SeasonLifecycleServiceTests {
     }
 
     @Test
-    void synchronizeSkipsDailyEventRebuildWhenAlreadyPrepared() {
+    void startScheduledSeasonSkipsDailyEventRebuildWhenAlreadyPrepared() {
         LocalDateTime seasonStartAt = LocalDateTime.of(2026, 3, 18, 10, 0, 0);
         LocalDateTime now = seasonStartAt.plusSeconds(1);
         Season scheduledSeason = Season.createScheduled(7, seasonStartAt, seasonStartAt.plusMinutes(30));
@@ -299,7 +300,7 @@ class SeasonLifecycleServiceTests {
         seasonLifecycleService = createService(Clock.fixed(now.atZone(ZoneId.of("Asia/Seoul")).toInstant(), ZoneId.of("Asia/Seoul")));
 
         when(seasonRepository.findFirstByStatusOrderByIdDesc(SeasonStatus.IN_PROGRESS)).thenReturn(Optional.empty());
-        when(seasonRepository.findFirstByStatusOrderByStartTimeAscIdAsc(SeasonStatus.SCHEDULED))
+        when(seasonRepository.findByIdAndStatus(51L, SeasonStatus.SCHEDULED))
                 .thenReturn(Optional.of(scheduledSeason));
         when(locationRepository.findAllByOrderByIdAsc()).thenReturn(List.of(location));
         when(weatherRepository.findAllByOrderByIdAsc()).thenReturn(allWeatherMasters());
@@ -309,11 +310,36 @@ class SeasonLifecycleServiceTests {
                 .thenReturn(traffics(location, batchKey, seasonStartAt.toLocalDate()));
         when(dailyEventRepository.existsBySeasonId(51L)).thenReturn(true);
 
-        seasonLifecycleService.synchronize();
+        assertThat(seasonLifecycleService.startScheduledSeason(51L))
+                .isEqualTo(SeasonLifecycleService.SeasonStartResult.STARTED);
 
         verify(dailyEventRepository, never()).deleteBySeasonId(anyLong());
         verify(dailyEventRepository, never()).saveAll(any());
         verify(menuRepository, never()).findAllByOrderByIdAsc();
+    }
+
+    @Test
+    void startScheduledSeasonReturnsWaitingWhenSourceBatchIsNotReady() {
+        LocalDateTime seasonStartAt = LocalDateTime.of(2026, 3, 18, 10, 0, 0);
+        LocalDateTime now = seasonStartAt.plusSeconds(1);
+        Season scheduledSeason = Season.createScheduled(7, seasonStartAt, seasonStartAt.plusMinutes(30));
+        ReflectionTestUtils.setField(scheduledSeason, "id", 61L);
+
+        Location location = location(3L);
+
+        seasonLifecycleService = createService(Clock.fixed(now.atZone(ZoneId.of("Asia/Seoul")).toInstant(), ZoneId.of("Asia/Seoul")));
+
+        when(seasonRepository.findFirstByStatusOrderByIdDesc(SeasonStatus.IN_PROGRESS)).thenReturn(Optional.empty());
+        when(seasonRepository.findByIdAndStatus(61L, SeasonStatus.SCHEDULED))
+                .thenReturn(Optional.of(scheduledSeason));
+        when(locationRepository.findAllByOrderByIdAsc()).thenReturn(List.of(location));
+        when(populationRepository.findByLocationIdOrderByDateAsc(3L)).thenReturn(List.of());
+        when(trafficRepository.findByLocationIdOrderByDateAsc(3L)).thenReturn(List.of());
+
+        assertThat(seasonLifecycleService.startScheduledSeason(61L))
+                .isEqualTo(SeasonLifecycleService.SeasonStartResult.WAITING_SOURCE_BATCH);
+        assertThat(scheduledSeason.getStatus()).isEqualTo(SeasonStatus.SCHEDULED);
+        verify(seasonDayClosingScheduler, never()).synchronize(scheduledSeason);
     }
 
     @Test
