@@ -770,11 +770,16 @@ function PlayPageSession({
     }
   };
 
-  const handleUnityReady = () => {
+  // storeRegionIndex가 확정되면 Unity ready 전에 미리 전송 → 큐에 쌓여서 ready 시 가장 먼저 실행
+  useEffect(() => {
     if (storeRegionIndex !== null) {
       spawnShopAtIndex(unityIframeRef, storeRegionIndex);
       setCameraRegion(unityIframeRef, storeRegionIndex);
     }
+  }, [storeRegionIndex]);
+
+  const handleUnityReady = () => {
+    // spawnShop + setCameraRegion은 이미 큐에 들어있으므로 여기서는 생략
     if (dayWeatherType !== null) {
       setWeather(unityIframeRef, dayWeatherType);
     }
