@@ -217,6 +217,68 @@ public class GameDayStateService {
         ));
     }
 
+    @Transactional
+    public Optional<GameDayLiveState> restoreClosedDayState(Store store, int day) {
+        if (store == null || day < 1 || store.getSeason() == null) {
+            return Optional.empty();
+        }
+
+        Integer totalDays = store.getSeason().getTotalDays();
+        if (totalDays != null && day > totalDays) {
+            return Optional.empty();
+        }
+
+        DayWindow currentTimeline = SEASON_TIMELINE_SERVICE.day(store.getSeason(), day);
+        LocalDateTime effectiveNow = currentTimeline.businessEnd();
+        STORE_LOCATION_TRANSITION_SUPPORT.applyPendingLocationIfDue(store, day);
+
+        GameDayLiveState rawState = gameDayStartService.restoreDayState(store, day, effectiveNow).orElse(null);
+        if (rawState == null || rawState.startResponse() == null) {
+            log.warn(
+                    "state-restore-skipped storeId={} seasonId={} day={} reason=missing_start_state",
+                    store.getId(),
+                    store.getSeason().getId(),
+                    day
+            );
+            return Optional.empty();
+        }
+
+        Order dailyStartOrder = orderRepository.findDailyStartOrder(store.getId(), day).orElse(null);
+        List<Order> emergencyOrders = orderRepository.findByStoreIdAndOrderTypeOrderByArrivedTimeAscIdAsc(
+                store.getId(),
+                OrderType.EMERGENCY
+        );
+        GameDayLiveState state = normalizeState(rawState, dailyStartOrder);
+        int tick = stockEngine.resolveCurrentTick(currentTimeline, effectiveNow);
+        long actionTotalCost = resolveActionTotalCost(store.getId(), day);
+        int regionStoreCount = resolveRegionStoreCount(store, state, effectiveNow);
+
+        CalculatedGameState calculatedState = calculateGameState(
+                store,
+                state,
+                currentTimeline,
+                tick,
+                actionTotalCost,
+                effectiveNow,
+                dailyStartOrder,
+                emergencyOrders,
+                day,
+                regionStoreCount
+        );
+
+        gameDayStoreStateRedisRepository.saveStateAndTickLog(store.getId(), day, calculatedState.liveState());
+        log.info(
+                "state-restored storeId={} seasonId={} day={} tick={} cash={} stock={}",
+                store.getId(),
+                store.getSeason().getId(),
+                day,
+                tick,
+                calculatedState.cash(),
+                calculatedState.totalStock()
+        );
+        return Optional.of(calculatedState.liveState());
+    }
+
     private Store getActiveStore(Integer userId) {
         return storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(userId, SeasonStatus.IN_PROGRESS)
                 .orElseThrow(() -> new BaseException(ErrorCode.RESOURCE_NOT_FOUND));

@@ -119,7 +119,7 @@ public class OrderServiceImpl implements OrderService {
         validateSellingPrice(sellingPrice, pricingPolicy);
         Integer totalCost = Math.multiplyExact(pricingPolicy.costPrice(), request.quantity());
 
-        validateAffordableOrder(store, regularOrderDay, totalCost, seasonStores);
+        validateAffordableOrder(store, regularOrderDay, totalCost);
 
         if (!Objects.equals(store.getPrice(), sellingPrice)) {
             store.changePrice(sellingPrice);
@@ -157,11 +157,6 @@ public class OrderServiceImpl implements OrderService {
 
     private BigDecimal getIngredientDiscountRate(Integer userId) {
         return itemUserRepository.findPurchasedDiscountRateByUserIdAndCategory(userId, ItemCategory.INGREDIENT)
-                .orElse(BigDecimal.ONE);
-    }
-
-    private BigDecimal getRentDiscountRate(Integer userId) {
-        return itemUserRepository.findPurchasedDiscountRateByUserIdAndCategory(userId, ItemCategory.RENT)
                 .orElse(BigDecimal.ONE);
     }
 
@@ -286,17 +281,10 @@ public class OrderServiceImpl implements OrderService {
         }
     }
 
-    private void validateAffordableOrder(Store store, int day, int totalCost, List<Store> seasonStores) {
+    private void validateAffordableOrder(Store store, int day, int totalCost) {
         int carriedBalance = resolveCarriedBalance(store, day);
-        int locationRank = resolveAreaEntryRank(store, day, seasonStores);
-        int dailyRentApplied = marketRankingPolicy.apply(
-                store.getLocation().getRent(),
-                marketRankingPolicy.resolveRentMultiplier(locationRank),
-                getRentDiscountRate(store.getUser().getId())
-        );
-
-        // Interior costs are already deducted from the live balance when they are incurred.
-        if (carriedBalance - dailyRentApplied < totalCost) {
+        // Daily rent is settled at closing, so regular orders only need to fit within carried cash.
+        if (carriedBalance < totalCost) {
             throw new BaseException(ErrorCode.ORDER_INSUFFICIENT_BALANCE);
         }
     }

@@ -133,10 +133,7 @@ class OrderServiceImplTests {
         when(storeRepository.findBySeason_IdOrderByIdAsc(9L)).thenReturn(List.of(store));
         when(itemUserRepository.findPurchasedDiscountRateByUserIdAndCategory(1, ItemCategory.INGREDIENT))
                 .thenReturn(Optional.of(BigDecimal.ONE));
-        when(itemUserRepository.findPurchasedDiscountRateByUserIdAndCategory(1, ItemCategory.RENT))
-                .thenReturn(Optional.of(BigDecimal.ONE));
         when(newsRankingResolver.resolveMenuEntryRank(9L, 1, menu)).thenReturn(null);
-        when(newsRankingResolver.resolveAreaEntryRank(9L, 1, store.getLocation())).thenReturn(null);
         when(eventEffectResolver.resolve(any(), any(Integer.class), any(), any(), any()))
                 .thenReturn(new EventEffectResolver.EventEffect(
                         0L,
@@ -205,10 +202,7 @@ class OrderServiceImplTests {
         when(storeRepository.findBySeason_IdOrderByIdAsc(9L)).thenReturn(List.of(store));
         when(itemUserRepository.findPurchasedDiscountRateByUserIdAndCategory(1, ItemCategory.INGREDIENT))
                 .thenReturn(Optional.of(BigDecimal.ONE));
-        when(itemUserRepository.findPurchasedDiscountRateByUserIdAndCategory(1, ItemCategory.RENT))
-                .thenReturn(Optional.of(BigDecimal.ONE));
         when(newsRankingResolver.resolveMenuEntryRank(9L, 1, menu)).thenReturn(null);
-        when(newsRankingResolver.resolveAreaEntryRank(9L, 1, store.getLocation())).thenReturn(null);
         when(eventEffectResolver.resolve(any(), any(Integer.class), any(), any(), any()))
                 .thenReturn(new EventEffectResolver.EventEffect(
                         0L,
@@ -228,6 +222,77 @@ class OrderServiceImplTests {
 
         assertThat(response.totalCost()).isEqualTo(157_500);
         assertThat(response.costPrice()).isEqualTo(3_150);
+    }
+
+    @Test
+    void createRegularOrderAllowsUsingAllCarriedCashBeforeClosingRentSettlement() {
+        Store store = store(15L, 1, 3L, 7L, 2_500, 4_000);
+        Menu menu = store.getMenu();
+        ReflectionTestUtils.setField(store.getSeason(), "currentDay", 3);
+        ReflectionTestUtils.setField(store.getSeason(), "startTime", LocalDateTime.of(2026, 3, 17, 9, 52, 0));
+
+        when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
+                .thenReturn(Optional.of(store));
+        when(orderRepository.findDailyStartOrder(15L, 3)).thenReturn(Optional.empty());
+        when(menuRepository.findById(7L)).thenReturn(Optional.of(menu));
+        when(storeRepository.findBySeason_IdOrderByIdAsc(9L)).thenReturn(List.of(store));
+        when(dailyReportRepository.findByStoreIdAndDay(15L, 2))
+                .thenReturn(Optional.of(previousDailyReport(store, 2, 150_000)));
+        when(itemUserRepository.findPurchasedDiscountRateByUserIdAndCategory(1, ItemCategory.INGREDIENT))
+                .thenReturn(Optional.of(BigDecimal.ONE));
+        when(newsRankingResolver.resolveMenuEntryRank(9L, 3, menu)).thenReturn(null);
+        when(eventEffectResolver.resolve(any(), any(Integer.class), any(), any(), any()))
+                .thenReturn(new EventEffectResolver.EventEffect(
+                        0L,
+                        0,
+                        BigDecimal.ONE,
+                        BigDecimal.ONE,
+                        Collections.emptyList(),
+                        Collections.emptyList()
+                ));
+        when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> {
+            Order saved = invocation.getArgument(0);
+            ReflectionTestUtils.setField(saved, "id", 301L);
+            return saved;
+        });
+
+        RegularOrderResponse response = orderService.createRegularOrder(1, new RegularOrderRequest(7, 50, 7_000));
+
+        assertThat(response.orderId()).isEqualTo(301L);
+        assertThat(response.totalCost()).isEqualTo(150_000);
+    }
+
+    @Test
+    void createRegularOrderThrowsWhenCarriedBalanceCannotCoverOrderCost() {
+        Store store = store(15L, 1, 3L, 7L, 2_500, 4_000);
+        Menu menu = store.getMenu();
+        ReflectionTestUtils.setField(store.getSeason(), "currentDay", 3);
+        ReflectionTestUtils.setField(store.getSeason(), "startTime", LocalDateTime.of(2026, 3, 17, 9, 52, 0));
+
+        when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
+                .thenReturn(Optional.of(store));
+        when(orderRepository.findDailyStartOrder(15L, 3)).thenReturn(Optional.empty());
+        when(menuRepository.findById(7L)).thenReturn(Optional.of(menu));
+        when(storeRepository.findBySeason_IdOrderByIdAsc(9L)).thenReturn(List.of(store));
+        when(dailyReportRepository.findByStoreIdAndDay(15L, 2))
+                .thenReturn(Optional.of(previousDailyReport(store, 2, 149_999)));
+        when(itemUserRepository.findPurchasedDiscountRateByUserIdAndCategory(1, ItemCategory.INGREDIENT))
+                .thenReturn(Optional.of(BigDecimal.ONE));
+        when(newsRankingResolver.resolveMenuEntryRank(9L, 3, menu)).thenReturn(null);
+        when(eventEffectResolver.resolve(any(), any(Integer.class), any(), any(), any()))
+                .thenReturn(new EventEffectResolver.EventEffect(
+                        0L,
+                        0,
+                        BigDecimal.ONE,
+                        BigDecimal.ONE,
+                        Collections.emptyList(),
+                        Collections.emptyList()
+                ));
+
+        assertThatThrownBy(() -> orderService.createRegularOrder(1, new RegularOrderRequest(7, 50, 7_000)))
+                .isInstanceOf(BaseException.class)
+                .satisfies(exception -> assertThat(((BaseException) exception).getErrorCode())
+                        .isEqualTo(ErrorCode.ORDER_INSUFFICIENT_BALANCE));
     }
 
     private Store store(Long storeId, Integer userId, Long locationId, Long menuId, int originPrice, int currentPrice) {
@@ -272,5 +337,24 @@ class OrderServiceImplTests {
         } catch (Exception e) {
             throw new IllegalStateException(e);
         }
+    }
+
+    private com.ssafy.S14P21A205.game.season.entity.DailyReport previousDailyReport(Store store, int day, int balance) {
+        return com.ssafy.S14P21A205.game.season.entity.DailyReport.create(
+                store,
+                day,
+                store.getLocation().getLocationName(),
+                store.getMenu().getMenuName(),
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                false,
+                balance,
+                BigDecimal.ZERO
+        );
     }
 }
