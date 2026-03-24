@@ -52,6 +52,13 @@
     window.NotifyPopupArrival = dispatchPopupArrival;
     window.SendPopupArrivalSignal = dispatchPopupArrival;
     window.unityApp.notifyPopupArrival = dispatchPopupArrival;
+    // NPCReactBridge.jslib 연결 (signalValue는 도착 신호이므로 popupStoreIndex는 null)
+    window.onNpcPopupArrival = function(signalValue) {
+        notifyParent("popup-arrival", { popupStoreIndex: null });
+    };
+    window.addEventListener("npc-popup-arrival", function(event) {
+        notifyParent("popup-arrival", { popupStoreIndex: null });
+    });
     // Shows a temporary message banner/ribbon for a few seconds, or
     // a permanent error message on top of the canvas if type=='error'.
     // If type=='warning', a yellow highlight color is used.
