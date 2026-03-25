@@ -103,6 +103,20 @@ public class GameDayReportService {
             log.debug("[DayReport] Already exists. storeId={} day={}", store.getId(), day);
             return;
         }
+        DailyReport latestReport = dailyReportRepository.findFirstByStore_IdOrderByDayDesc(store.getId())
+                .orElse(null);
+        if (latestReport != null
+                && latestReport.getDay() != null
+                && latestReport.getDay() < day
+                && Boolean.TRUE.equals(latestReport.getIsBankrupt())) {
+            log.info(
+                    "[DayReport] Skipped: store already bankrupt. storeId={} latestBankruptDay={} requestedDay={}",
+                    store.getId(),
+                    latestReport.getDay(),
+                    day
+            );
+            return;
+        }
 
         if (shouldRefreshCurrentDayState(day, seasonTimePoint)) {
             gameDayStateService.refreshGameState(store);

@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -108,6 +109,9 @@ class GameDayReportServiceTests {
                 .thenReturn(Optional.empty());
         org.mockito.Mockito.lenient()
                 .when(gameDayStoreStateRedisRepository.find(anyLong(), anyInt()))
+                .thenReturn(Optional.empty());
+        org.mockito.Mockito.lenient()
+                .when(dailyReportRepository.findFirstByStore_IdOrderByDayDesc(anyLong()))
                 .thenReturn(Optional.empty());
         org.mockito.Mockito.lenient()
                 .when(purchaseListGenerator.advanceCursor(any(), anyInt()))
@@ -282,6 +286,35 @@ class GameDayReportServiceTests {
         assertThat(saved.getNetProfit()).isEqualTo(3_400);
         assertThat(saved.getBalance()).isEqualTo(14_700);
         verify(gameDayStateService).restoreClosedDayState(store, 2);
+    }
+
+    @Test
+    void recordClosedDayReportSkipsWhenStoreWasAlreadyBankrupt() {
+        Store store = store(15L, 9L, 7, 7, "Current Location", "Current Menu", 300);
+        DailyReport bankruptReport = dailyReport(
+                store,
+                3,
+                "Current Location",
+                "Current Menu",
+                1_000,
+                5_000,
+                -4_000,
+                12,
+                5,
+                0,
+                3,
+                true,
+                0,
+                new BigDecimal("0.05")
+        );
+
+        when(dailyReportRepository.existsByStoreIdAndDay(15L, 7)).thenReturn(false);
+        when(dailyReportRepository.findFirstByStore_IdOrderByDayDesc(15L)).thenReturn(Optional.of(bankruptReport));
+
+        gameDayReportService.recordClosedDayReport(store, 7);
+
+        verify(dailyReportRepository, never()).save(any(DailyReport.class));
+        verify(gameDayStateService, never()).restoreClosedDayState(any(Store.class), anyInt());
     }
 
     @Test
