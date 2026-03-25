@@ -8,6 +8,9 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.ssafy.S14P21A205.action.repository.ActionLogRepository;
+import com.ssafy.S14P21A205.action.entity.Action;
+import com.ssafy.S14P21A205.action.entity.ActionCategory;
+import com.ssafy.S14P21A205.action.entity.ActionLog;
 import com.ssafy.S14P21A205.exception.BaseException;
 import com.ssafy.S14P21A205.exception.ErrorCode;
 import com.ssafy.S14P21A205.game.day.policy.CaptureRatePolicy;
@@ -449,7 +452,7 @@ class GameDayStateServiceTests {
     }
 
     @Test
-    void getGameStateUsesRedisActionStatusAndSeparatesEmergencyUsedFromPending() {
+    void getGameStateUsesActionLogsForActionStatusAndSeparatesEmergencyUsedFromPending() {
         gameDayStateService = createService(GameDayTestFixtures.fixedClockAt(LocalDateTime.of(2026, 3, 17, 10, 0, 55)));
 
         User user = GameDayTestFixtures.user(GameDayTestFixtures.USER_ID);
@@ -483,8 +486,6 @@ class GameDayStateServiceTests {
                 .thenReturn(List.of(store, dummyStore));
         when(gameDayStoreStateRedisRepository.find(GameDayTestFixtures.STORE_ID, GameDayTestFixtures.CURRENT_DAY))
                 .thenReturn(Optional.of(state));
-        when(gameDayStoreStateRedisRepository.getActions(GameDayTestFixtures.STORE_ID, GameDayTestFixtures.CURRENT_DAY))
-                .thenReturn(Map.of("discount", true, "promotion", true));
         when(orderRepository.findDailyStartOrder(GameDayTestFixtures.STORE_ID, GameDayTestFixtures.CURRENT_DAY))
                 .thenReturn(Optional.of(GameDayTestFixtures.dailyStartOrder(store)));
         when(orderRepository.findByStoreIdAndOrderTypeOrderByArrivedTimeAscIdAsc(
@@ -497,7 +498,10 @@ class GameDayStateServiceTests {
                 OrderType.EMERGENCY
         )).thenReturn(List.of(pendingEmergencyOrder));
         when(actionLogRepository.findByStore_IdAndGameDayAndIsUsedTrue(GameDayTestFixtures.STORE_ID, GameDayTestFixtures.CURRENT_DAY))
-                .thenReturn(List.of());
+                .thenReturn(List.of(
+                        actionLog(action(ActionCategory.DISCOUNT), store, GameDayTestFixtures.CURRENT_DAY),
+                        actionLog(action(ActionCategory.PROMOTION), store, GameDayTestFixtures.CURRENT_DAY)
+                ));
         when(dailyEventRepository.findBySeasonIdAndDayBetweenOrderByDayAscIdAsc(
                 GameDayTestFixtures.SEASON_ID,
                 1,
@@ -807,6 +811,19 @@ class GameDayStateServiceTests {
         ReflectionTestUtils.setField(menu, "menuName", menuName);
         ReflectionTestUtils.setField(menu, "originPrice", originPrice);
         return menu;
+    }
+
+    private Action action(ActionCategory category) {
+        Action action = instantiate(Action.class);
+        ReflectionTestUtils.setField(action, "id", 100L + category.ordinal());
+        ReflectionTestUtils.setField(action, "category", category);
+        ReflectionTestUtils.setField(action, "cost", 0);
+        ReflectionTestUtils.setField(action, "captureRate", BigDecimal.ZERO);
+        return action;
+    }
+
+    private ActionLog actionLog(Action action, Store store, int day) {
+        return new ActionLog(action, store, day, null);
     }
 
     private DailyEvent dailyEvent(
