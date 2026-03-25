@@ -300,7 +300,7 @@ export default function BgmController() {
           className={`relative w-[20rem] max-w-[calc(100vw-2rem)] overflow-hidden rounded-[30px] border shadow-premium ${
             isPlayRoute
               ? "border-slate-200 bg-white/90 shadow-[0_28px_80px_rgba(15,23,42,0.22)]"
-              : "border-white/70 bg-white/74 backdrop-blur-xl"
+              : "border-white/32 bg-white/18 shadow-[0_28px_80px_rgba(255,255,255,0.16),0_24px_56px_rgba(15,23,42,0.1)] backdrop-blur-[26px]"
           }`}
         >
           <div className="absolute inset-x-0 top-0 h-[3px] bg-gradient-to-r from-primary via-primary-dark to-accent-rose" />
@@ -308,7 +308,7 @@ export default function BgmController() {
             className={`pointer-events-none absolute inset-0 ${
               isPlayRoute
                 ? "bg-white/10"
-                : "bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.92),transparent_42%)] opacity-80"
+                : "bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.72),rgba(255,255,255,0.12)_38%,transparent_72%)] opacity-100"
             }`}
           />
 
@@ -408,10 +408,10 @@ export default function BgmController() {
                       isActive
                         ? isPlayRoute
                           ? "border-primary/35 bg-primary/18 shadow-soft"
-                          : "border-primary/35 bg-primary/12 shadow-soft"
+                          : "border-white/38 bg-white/18 shadow-[0_10px_24px_rgba(15,23,42,0.05)]"
                         : isPlayRoute
                           ? "border-slate-200 bg-white hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-soft"
-                          : "border-slate-200 bg-white/92 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-soft"
+                          : "border-white/22 bg-white/10 hover:-translate-y-0.5 hover:border-white/42 hover:bg-white/16 hover:shadow-[0_12px_28px_rgba(15,23,42,0.06)]"
                     }`}
                     aria-pressed={isActive}
                   >
