@@ -370,7 +370,7 @@ function getEventInfo(
   alertType: GameAlert["type"];
   title: string;
   description: string;
-  createdAt: number;
+  sortTimestamp: number;
   timeLabel?: string;
 } {
   const candidates = getAppliedEventCandidates(event);
@@ -405,7 +405,7 @@ function getEventInfo(
     alertType: isBadEvent(event) ? "bad_event" : "event",
     title,
     description,
-    createdAt: appliedAtMs !== null && appliedAtMs <= serverTimeMs ? appliedAtMs : Date.now(),
+    sortTimestamp: appliedAtMs ?? serverTimeMs,
     timeLabel: isScheduled ? "예정" : undefined,
   };
 }
@@ -604,6 +604,13 @@ const TRAFFIC_STATUS_TO_UNITY_LEVEL: Record<GameTrafficStatus, UnityCongestionLe
 
 const BUSINESS_HOUR_COUNT = BUSINESS_CLOSE_HOUR - BUSINESS_OPEN_HOUR;
 const BUSINESS_SECONDS_PER_HOUR = BUSINESS_SECONDS / BUSINESS_HOUR_COUNT;
+const EVENT_ALERT_SLOT_HOURS = [14, 18] as const;
+
+type EventAlertSlotHour = (typeof EVENT_ALERT_SLOT_HOURS)[number];
+
+interface QueuedEventAlert extends ReturnType<typeof getEventInfo> {
+  slotHour: EventAlertSlotHour;
+}
 
 function clampNumber(value: number, min: number, max: number) {
   return Math.max(min, Math.min(value, max));
@@ -623,6 +630,10 @@ function getBusinessHourWindowSeconds(gameHour: number) {
   const end = start + BUSINESS_SECONDS_PER_HOUR;
 
   return { start, end };
+}
+
+function getEventAlertSlotStartSeconds(slotHour: EventAlertSlotHour) {
+  return getBusinessHourWindowSeconds(slotHour)?.start ?? 0;
 }
 
 function getUnityCongestionLevel(status: GameTrafficStatus | null | undefined) {
@@ -689,6 +700,8 @@ function PlayPageSession({
   const locationIdByNameRef = useRef<ReadonlyMap<string, number>>(new Map());
   const locationNameByIdRef = useRef<ReadonlyMap<number, string>>(new Map());
   const seenAppliedEventKeysRef = useRef<Set<string>>(new Set());
+  const queuedEventAlertsRef = useRef<QueuedEventAlert[]>([]);
+  const assignedEventAlertCountRef = useRef(0);
   const scheduledVisitorTimersRef = useRef<number[]>([]);
   const dispatchedVisitorsByHourRef = useRef<Map<number, number>>(new Map());
   const latestCustomerPlanRef = useRef<CustomerPlanByHourItem[]>([]);
@@ -977,6 +990,51 @@ function PlayPageSession({
     return () => window.removeEventListener("message", handleUnityMessage);
   }, []);
 
+  const pushEventAlerts = (eventAlerts: ReturnType<typeof getEventInfo>[]) => {
+    if (eventAlerts.length === 0) {
+      return;
+    }
+
+    setAlerts((prev) => [
+      ...eventAlerts.map((eventInfo, index) => ({
+        id: Date.now() + index,
+        type: eventInfo.alertType,
+        title: eventInfo.title,
+        description: eventInfo.description,
+        createdAt: Date.now(),
+        timeLabel: eventInfo.timeLabel,
+      })),
+      ...prev,
+    ]);
+  };
+
+  const flushQueuedEventAlerts = () => {
+    if (queuedEventAlertsRef.current.length === 0) {
+      return;
+    }
+
+    const elapsedBusinessSeconds = getElapsedBusinessSeconds(remainingMillisecondsRef.current);
+    const dueAlerts: ReturnType<typeof getEventInfo>[] = [];
+    const remainingAlerts: QueuedEventAlert[] = [];
+
+    for (const queuedAlert of queuedEventAlertsRef.current) {
+      const slotStartSeconds = getEventAlertSlotStartSeconds(queuedAlert.slotHour);
+
+      if (elapsedBusinessSeconds >= slotStartSeconds) {
+        dueAlerts.push(queuedAlert);
+      } else {
+        remainingAlerts.push(queuedAlert);
+      }
+    }
+
+    if (dueAlerts.length === 0) {
+      return;
+    }
+
+    queuedEventAlertsRef.current = remainingAlerts;
+    pushEventAlerts(dueAlerts);
+  };
+
   const syncAppliedEventAlerts = (state: GameStateResponse) => {
     if (state.appliedEvents.length === 0) {
       return;
@@ -992,23 +1050,31 @@ function PlayPageSession({
         seenAppliedEventKeysRef.current.add(eventInfo.key);
         return true;
       })
-      .sort((left, right) => right.createdAt - left.createdAt);
+      .sort((left, right) => left.sortTimestamp - right.sortTimestamp);
 
     if (nextAlerts.length === 0) {
       return;
     }
 
-    setAlerts((prev) => [
-      ...nextAlerts.map((eventInfo, index) => ({
-        id: Date.now() + index,
-        type: eventInfo.alertType,
-        title: eventInfo.title,
-        description: eventInfo.description,
-        createdAt: eventInfo.createdAt,
-        timeLabel: eventInfo.timeLabel,
-      })),
-      ...prev,
-    ]);
+    const elapsedBusinessSeconds = getElapsedBusinessSeconds(remainingMillisecondsRef.current);
+    const immediateAlerts: ReturnType<typeof getEventInfo>[] = [];
+
+    for (const eventInfo of nextAlerts) {
+      const slotHour =
+        EVENT_ALERT_SLOT_HOURS[
+          assignedEventAlertCountRef.current % EVENT_ALERT_SLOT_HOURS.length
+        ];
+
+      assignedEventAlertCountRef.current += 1;
+
+      if (elapsedBusinessSeconds >= getEventAlertSlotStartSeconds(slotHour)) {
+        immediateAlerts.push(eventInfo);
+      } else {
+        queuedEventAlertsRef.current.push({ ...eventInfo, slotHour });
+      }
+    }
+
+    pushEventAlerts(immediateAlerts);
   };
 
   const applyGameState = (state: GameStateResponse) => {
@@ -1385,6 +1451,16 @@ function PlayPageSession({
     return () => {
       clearScheduledVisitorTimers();
     };
+  }, []);
+
+  useEffect(() => {
+    flushQueuedEventAlerts();
+
+    const timer = window.setInterval(() => {
+      flushQueuedEventAlerts();
+    }, 1_000);
+
+    return () => window.clearInterval(timer);
   }, []);
 
   /** 사용자가 직접 발주했을 때만 true → 도착 알림 활성화 */
