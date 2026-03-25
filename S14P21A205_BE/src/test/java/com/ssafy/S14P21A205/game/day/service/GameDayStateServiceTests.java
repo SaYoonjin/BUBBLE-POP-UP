@@ -21,6 +21,7 @@ import com.ssafy.S14P21A205.game.day.dto.GameDayStartResponse;
 import com.ssafy.S14P21A205.game.day.dto.GameStateResponse;
 import com.ssafy.S14P21A205.game.day.policy.PopulationPolicy;
 import com.ssafy.S14P21A205.game.day.resolver.EventEffectResolver;
+import com.ssafy.S14P21A205.game.day.resolver.EventScheduleResolver;
 import com.ssafy.S14P21A205.game.day.resolver.TrafficDelayResolver;
 import com.ssafy.S14P21A205.game.day.state.GameDayLiveState;
 import com.ssafy.S14P21A205.game.day.state.repository.GameDayStoreStateRedisRepository;
@@ -132,6 +133,7 @@ class GameDayStateServiceTests {
 
     private GameDayStateService createService(Clock clock) {
         EventEffectResolver eventEffectResolver = new EventEffectResolver(dailyEventRepository);
+        EventScheduleResolver eventScheduleResolver = new EventScheduleResolver(dailyEventRepository);
         StockEngine stockEngine = new StockEngine();
         PopulationPolicy populationPolicy = new PopulationPolicy(null, null);
         CustomerScorePolicy customerScorePolicy = new CustomerScorePolicy();
@@ -149,6 +151,7 @@ class GameDayStateServiceTests {
                 captureRatePolicy,
                 costPolicy,
                 trafficDelayResolver,
+                eventScheduleResolver,
                 gameDayStoreStateRedisRepository,
                 gameDayStartService,
                 clock
@@ -159,19 +162,11 @@ class GameDayStateServiceTests {
     void getGameStateCalculatesFromRedisState() {
         User user = user(1);
         Store store = store(user, 15L, 3L, 1L, 9L, 1, 7, 500);
-        GameDayStartResponse.EventSchedule todayEventSchedule = new GameDayStartResponse.EventSchedule(
-                "10:40",
-                "celebrity",
-                null,
-                "celebrity",
-                new BigDecimal("1.50"),
-                200
-        );
         DailyEvent dailyEvent = dailyEvent(
                 store.getSeason(),
                 1,
                 EventCategory.CELEBRITY_APPEARANCE,
-                "?곗삁???깆옣",
+                "?怨쀬굙???源놁삢",
                 "1.50",
                 200,
                 2,
@@ -186,7 +181,7 @@ class GameDayStateServiceTests {
                 store.getSeason(),
                 1,
                 EventCategory.TACO_PRICE_UP,
-                "?肄??먯옱猷?媛寃??곸듅",
+                "?????癒?삺??揶쎛野??怨몃뱟",
                 "2.00",
                 999,
                 7,
@@ -203,7 +198,7 @@ class GameDayStateServiceTests {
                 1_000,
                 10,
                 LocalDateTime.of(2026, 3, 9, 14, 30, 0),
-                List.of(todayEventSchedule)
+                List.of()
         );
 
         when(userService.getCurrentUser(any())).thenReturn(user);
@@ -227,10 +222,13 @@ class GameDayStateServiceTests {
         assertThat(response.inventory().totalStock()).isEqualTo(7);
         assertThat(response.population()).isEqualTo("\uB9E4\uC6B0 \uD63C\uC7A1");
         assertThat(response.traffic()).isEqualTo(new GameStateResponse.Traffic(TrafficStatus.NORMAL, 3, 12, 15));
-        assertThat(response.todayEventSchedule()).containsExactly(todayEventSchedule);
+        assertThat(response.todayEventSchedule()).hasSize(2);
+        assertThat(response.todayEventSchedule().get(0).scope()).isNull();
+        assertThat(response.todayEventSchedule().get(1).scope()).isNotNull();
+        assertThat(response.todayEventSchedule().get(1).scope().menu()).isEqualTo(99L);
         assertThat(response.appliedEvents()).hasSize(1);
         assertThat(response.appliedEvents().get(0).eventType()).isEqualTo("CELEBRITY_APPEARANCE");
-        assertThat(response.appliedEvents().get(0).eventName()).isEqualTo("?곗삁???깆옣");
+        assertThat(response.appliedEvents().get(0).eventName()).isEqualTo("?怨쀬굙???源놁삢");
 
         verify(trafficDelayResolver).resolve(
                 9L,
@@ -246,6 +244,53 @@ class GameDayStateServiceTests {
         assertThat(stateCaptor.getValue().purchaseCursor()).isEqualTo(6);
         assertThat(stateCaptor.getValue().cumulativeSales()).isEqualTo(2_500L);
         assertThat(stateCaptor.getValue().cumulativeTotalCost()).isEqualTo(300L);
+    }
+
+    @Test
+    void getGameStateShowsTodayEventScheduleByCreatedDayEvenForNextDayEvents() {
+        User user = user(1);
+        Store store = store(user, 15L, 3L, 1L, 9L, 1, 7, 500);
+        DailyEvent nextDayEvent = dailyEvent(
+                store.getSeason(),
+                1,
+                EventCategory.SUBSTITUTE_HOLIDAY,
+                "Substitute Holiday",
+                "1.10",
+                0,
+                0,
+                EventStartTime.NEXT_DAY,
+                EventEndTime.SAME_DAY,
+                80,
+                120,
+                null,
+                null
+        );
+        GameDayLiveState state = state(
+                500,
+                List.of(1, 0, 2, 1, 1, 0),
+                1_000,
+                10,
+                LocalDateTime.of(2026, 3, 9, 14, 30, 0),
+                List.of()
+        );
+
+        when(userService.getCurrentUser(any())).thenReturn(user);
+        when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
+                .thenReturn(Optional.of(store));
+        when(storeRepository.findBySeason_IdOrderByIdAsc(9L)).thenReturn(List.of(store));
+        when(gameDayStoreStateRedisRepository.find(15L, 1)).thenReturn(Optional.of(state));
+        when(orderRepository.findDailyStartOrder(15L, 1)).thenReturn(Optional.empty());
+        when(orderRepository.findByStoreIdAndOrderTypeOrderByArrivedTimeAscIdAsc(15L, OrderType.EMERGENCY))
+                .thenReturn(List.of());
+        when(actionLogRepository.findByStore_IdAndGameDayAndIsUsedTrue(15L, 1)).thenReturn(List.of());
+        when(dailyEventRepository.findBySeasonIdAndDayBetweenOrderByDayAscIdAsc(9L, 1, 1))
+                .thenReturn(List.of(nextDayEvent));
+
+        GameStateResponse response = gameDayStateService.getGameState(mock(Authentication.class));
+
+        assertThat(response.todayEventSchedule()).hasSize(1);
+        assertThat(response.todayEventSchedule().get(0).type()).isEqualTo("Substitute Holiday");
+        assertThat(response.appliedEvents()).isEmpty();
     }
 
     @Test

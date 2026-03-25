@@ -16,6 +16,7 @@ import com.ssafy.S14P21A205.game.day.policy.CostPolicy;
 import com.ssafy.S14P21A205.game.day.policy.CustomerScorePolicy;
 import com.ssafy.S14P21A205.game.day.policy.PopulationPolicy;
 import com.ssafy.S14P21A205.game.day.resolver.EventEffectResolver;
+import com.ssafy.S14P21A205.game.day.resolver.EventScheduleResolver;
 import com.ssafy.S14P21A205.game.day.resolver.TrafficDelayResolver;
 import com.ssafy.S14P21A205.game.day.state.GameDayLiveState;
 import com.ssafy.S14P21A205.game.day.state.repository.GameDayStoreStateRedisRepository;
@@ -69,6 +70,7 @@ public class GameDayStateService {
     private final CaptureRatePolicy captureRatePolicy;
     private final CostPolicy costPolicy;
     private final TrafficDelayResolver trafficDelayResolver;
+    private final EventScheduleResolver eventScheduleResolver;
     private final GameDayStoreStateRedisRepository gameDayStoreStateRedisRepository;
     private final GameDayStartService gameDayStartService;
     private final Clock clock;
@@ -219,7 +221,7 @@ public class GameDayStateService {
                         calculatedState.regionStoreCount(),
                         calculatedState.rValue()
                 ),
-                resolveTodayEventSchedule(state),
+                resolveTodayEventSchedule(store, day),
                 new GameStateResponse.Inventory(calculatedState.totalStock()),
                 new GameStateResponse.ActionStatus(
                         actionStatus.discountUsed(),
@@ -763,11 +765,11 @@ public class GameDayStateService {
         return value == null ? 0 : Math.max(0, value);
     }
 
-    private List<GameDayStartResponse.EventSchedule> resolveTodayEventSchedule(GameDayLiveState state) {
-        if (state == null || state.startResponse() == null || state.startResponse().eventSchedule() == null) {
+    private List<GameDayStartResponse.EventSchedule> resolveTodayEventSchedule(Store store, int day) {
+        if (store == null || store.getSeason() == null || store.getSeason().getId() == null || day < 1) {
             return List.of();
         }
-        return state.startResponse().eventSchedule();
+        return eventScheduleResolver.resolveAll(store.getSeason().getId(), day);
     }
 
     private long valueOf(Integer value) {
