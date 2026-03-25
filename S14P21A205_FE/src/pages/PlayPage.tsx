@@ -30,6 +30,7 @@ import {
   getGameDayState,
   getCurrentSeasonTopRankings,
   startGameDay,
+  type AppliedEvent,
   type CustomerPlanByHourItem,
   type GameStateResponse,
   type GameTrafficStatus,
@@ -48,7 +49,6 @@ import {
   BUSINESS_CLOSE_HOUR,
   BUSINESS_OPEN_HOUR,
   BUSINESS_SECONDS,
-  DAY_SECONDS,
   elapsedToGameTime,
 } from "../constants/gameTime";
 import { setWeather, startDay, spawnShopAtIndex, setCameraRegion } from "../utils/unity";
@@ -87,89 +87,199 @@ const MENU_EMOJI_BY_NAME: Record<string, string> = {
   버블티: "🧋",
 };
 
-interface EventScheduleItem {
-  time: string;
-  type: string;
-  scope: { region: number | null; menu: number | null } | null;
-  newsTitle: string;
-  populationMultiplier: number;
-  balanceChange: number;
-}
-
 interface EventTemplate {
   title: string;
   /** $LOC → 지역명, $MENU → 메뉴명 */
   description: string;
 }
 
-/** 영업 시작과 동시에 표시할 이벤트 */
-const IMMEDIATE_EVENT_NAMES = new Set([
-  "대체공휴일", "Substitute Holiday",
-  "축제", "Festival",
-]);
+type PriceDirection = "DOWN" | "UP";
 
-/** 일반 이벤트 고정 발생 게임 시간 (최대 2개) */
-const REGULAR_EVENT_TIMES = ["14:00", "18:00"] as const;
-
-const SEASON_LONG_ALERT_KEYWORDS = [
-  "원재료 가격",
-  "Price Down",
-  "Price Up",
-  "감염병",
-  "Infectious",
-  "지진",
-  "Earthquake",
-  "침수",
-  "Flood",
-  "태풍",
-  "Typhoon",
-  "화재",
-  "Fire",
-  "정책 변경",
-  "Policy Change",
-] as const;
-
-function getElapsedAppliedEventSeconds(appliedAt: string) {
-  const appliedMs = new Date(appliedAt).getTime();
-  if (Number.isNaN(appliedMs)) return null;
-  return Math.max(0, (Date.now() - appliedMs) / 1000);
+interface PriceEventMenuDefinition {
+  menuName: string;
+  matchers: string[];
 }
 
-function getDaysAgoLabel(appliedAt: string): string {
-  const elapsedSec = getElapsedAppliedEventSeconds(appliedAt);
-  if (elapsedSec === null) return "이전";
-  if (elapsedSec < DAY_SECONDS) return "오늘";
-  const daysAgo = Math.max(1, Math.floor(elapsedSec / DAY_SECONDS));
-  if (daysAgo === 1) return "어제";
-  return `${daysAgo}일 전`;
+const PRICE_EVENT_MENUS: PriceEventMenuDefinition[] = [
+  { menuName: "빵", matchers: ["빵", "BREAD"] },
+  { menuName: "마라꼬치", matchers: ["마라꼬치", "MALA_SKEWER"] },
+  { menuName: "젤리", matchers: ["젤리", "JELLY"] },
+  { menuName: "떡볶이", matchers: ["떡볶이", "TTEOKBOKKI"] },
+  { menuName: "햄버거", matchers: ["햄버거", "HAMBURGER"] },
+  { menuName: "아이스크림", matchers: ["아이스크림", "ICE_CREAM"] },
+  { menuName: "닭강정", matchers: ["닭강정", "DAKGANGJEONG"] },
+  { menuName: "타코", matchers: ["타코", "TACO"] },
+  { menuName: "핫도그", matchers: ["핫도그", "HOTDOG", "HOT_DOG"] },
+  { menuName: "버블티", matchers: ["버블티", "BUBBLE_TEA"] },
+];
+
+function normalizeEventToken(value: string) {
+  return value.trim().toUpperCase().replace(/[\s-]+/g, "_");
 }
 
-function isSeasonLongAlertEvent(eventName: string, newsTitle: string) {
-  const candidates = [eventName, newsTitle].filter(Boolean);
-  return candidates.some((candidate) =>
-    SEASON_LONG_ALERT_KEYWORDS.some((keyword) => candidate.includes(keyword)),
-  );
-}
+function resolvePriceDirection(value: string): PriceDirection | null {
+  const normalized = normalizeEventToken(value);
 
-function shouldDisplayCarryOverAlert(appliedAt: string, eventName: string, newsTitle: string) {
-  const elapsedSec = getElapsedAppliedEventSeconds(appliedAt);
-
-  if (elapsedSec === null || elapsedSec < DAY_SECONDS) {
-    return false;
+  if (
+    normalized.includes("PRICE_DOWN")
+    || value.includes("가격 하락")
+    || value.includes("원가 하락")
+  ) {
+    return "DOWN";
   }
 
-  return isSeasonLongAlertEvent(eventName, newsTitle);
+  if (
+    normalized.includes("PRICE_UP")
+    || value.includes("가격 상승")
+    || value.includes("원가 상승")
+  ) {
+    return "UP";
+  }
+
+  return null;
 }
 
-/** 악재 이벤트 (populationMultiplier < 1, 재난, 원가 상승 등) */
-function isBadEvent(event: EventScheduleItem): boolean {
-  if (event.populationMultiplier < 1) return true;
-  if (event.balanceChange < 0) return true;
-  const name = event.type || event.newsTitle;
-  if (name.includes("상승") || name.includes("UP")) return true;
-  const badKeywords = ["감염병", "지진", "침수", "태풍", "화재", "정책", "정부 방침",
-    "Infectious", "Earthquake", "Flood", "Typhoon", "Fire", "Policy"];
-  return badKeywords.some((kw) => name.includes(kw));
+function resolvePriceEventDescriptor(candidates: string[]) {
+  for (const candidate of candidates) {
+    const direction = resolvePriceDirection(candidate);
+
+    if (!direction) {
+      continue;
+    }
+
+    const normalized = normalizeEventToken(candidate);
+    const matchedMenu = PRICE_EVENT_MENUS.find((menu) =>
+      menu.matchers.some((matcher) => normalized.includes(normalizeEventToken(matcher))),
+    );
+
+    if (matchedMenu) {
+      return { menuName: matchedMenu.menuName, direction };
+    }
+  }
+
+  return null;
+}
+
+function isNonEmptyText(value: string | null | undefined): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function getAppliedEventCandidates(event: AppliedEvent) {
+  return [
+    event.eventCategory,
+    event.eventType,
+    event.eventName,
+    event.newsTitle,
+  ].filter(isNonEmptyText);
+}
+
+function getAppliedEventTimestampMs(value: string | null | undefined) {
+  if (!isNonEmptyText(value)) {
+    return null;
+  }
+
+  const timestamp = new Date(value).getTime();
+  return Number.isNaN(timestamp) ? null : timestamp;
+}
+
+function resolveEventTemplate(candidates: string[]) {
+  for (const candidate of candidates) {
+    const directMatch = EVENT_INFO[candidate];
+
+    if (directMatch) {
+      return directMatch;
+    }
+
+    const normalizedMatch = EVENT_INFO[normalizeEventToken(candidate)];
+
+    if (normalizedMatch) {
+      return normalizedMatch;
+    }
+  }
+
+  return null;
+}
+
+function resolveEventRegionName(
+  event: AppliedEvent,
+  locationNameById: ReadonlyMap<number, string>,
+) {
+  const explicitRegionName = [
+    event.targetRegionName,
+    event.regionName,
+    event.locationName,
+  ].find(isNonEmptyText);
+
+  if (explicitRegionName) {
+    return explicitRegionName;
+  }
+
+  const scopedRegionId = event.targetRegionId ?? event.scope?.region ?? null;
+
+  if (typeof scopedRegionId === "number") {
+    return locationNameById.get(scopedRegionId) ?? null;
+  }
+
+  return null;
+}
+
+function replaceLocationPlaceholder(template: string, regionName: string | null) {
+  return template.replaceAll("$LOC", regionName ?? "해당 지역");
+}
+
+function resolveAppliedEventKey(event: AppliedEvent) {
+  if (typeof event.eventId === "number") {
+    return `event:${event.eventId}`;
+  }
+
+  return [
+    event.eventCategory,
+    event.eventType,
+    event.eventName,
+    event.newsTitle,
+    event.targetRegionId,
+    event.targetRegionName,
+    event.regionName,
+    event.locationName,
+    event.scope?.region,
+    event.scope?.menu,
+    event.appliedAt,
+  ]
+    .map((value) => String(value ?? ""))
+    .join("|");
+}
+
+/** 악재 이벤트 (재난, 원가 상승, 정책 변경 등) */
+function isBadEvent(event: AppliedEvent): boolean {
+  const candidates = getAppliedEventCandidates(event);
+  const priceEvent = resolvePriceEventDescriptor(candidates);
+
+  if (priceEvent?.direction === "UP") {
+    return true;
+  }
+
+  const badKeywords = [
+    "감염병",
+    "지진",
+    "침수",
+    "태풍",
+    "화재",
+    "정책",
+    "정부 방침",
+    "INFECTIOUS",
+    "EARTHQUAKE",
+    "FLOOD",
+    "TYPHOON",
+    "FIRE",
+    "POLICY",
+  ];
+
+  return candidates.some((candidate) => {
+    const normalized = normalizeEventToken(candidate);
+    return badKeywords.some(
+      (keyword) => candidate.includes(keyword) || normalized.includes(keyword),
+    );
+  });
 }
 
 /** eventName(type/newsTitle)→{title, description} 매핑 (DB 한국어 + 영어 fallback) */
@@ -238,33 +348,66 @@ const EVENT_INFO: Record<string, EventTemplate> = {
   "Bubble Tea Price Up": { title: "버블티 원가 상승", description: "버블티 원재료 시세가 상승했습니다." },
 };
 
+Object.assign(EVENT_INFO, {
+  CELEBRITY_APPEARANCE: EVENT_INFO["Celebrity Appearance"],
+  POLICY_CHANGE: EVENT_INFO["Policy Change"],
+  SUBSTITUTE_HOLIDAY: EVENT_INFO["Substitute Holiday"],
+  GOVERNMENT_SUBSIDY: EVENT_INFO["Government Subsidy"],
+  INFECTIOUS_DISEASE: EVENT_INFO["Infectious Disease"],
+  FESTIVAL: EVENT_INFO["Festival"],
+  EARTHQUAKE: EVENT_INFO["Earthquake"],
+  FLOOD: EVENT_INFO["Flood"],
+  TYPHOON: EVENT_INFO["Typhoon"],
+  FIRE: EVENT_INFO["Fire"],
+});
+
 function getEventInfo(
-  event: EventScheduleItem,
-  locationName: string,
-  _menuName: string,
-): { title: string; description: string } {
-  const template = EVENT_INFO[event.type] ?? EVENT_INFO[event.newsTitle];
-  if (!template) {
-    const fallbackSource = [event.type, event.newsTitle].find(Boolean) ?? "";
+  event: AppliedEvent,
+  serverTime: string,
+  locationNameById: ReadonlyMap<number, string>,
+): {
+  key: string;
+  alertType: GameAlert["type"];
+  title: string;
+  description: string;
+  createdAt: number;
+  timeLabel?: string;
+} {
+  const candidates = getAppliedEventCandidates(event);
+  const priceEvent = resolvePriceEventDescriptor(candidates);
+  const template = resolveEventTemplate(candidates);
+  const regionName = resolveEventRegionName(event, locationNameById);
+  const serverTimeMs = getAppliedEventTimestampMs(serverTime) ?? Date.now();
+  const appliedAtMs = getAppliedEventTimestampMs(event.appliedAt);
+  const isScheduled = appliedAtMs !== null && appliedAtMs > serverTimeMs;
+  const fallbackTitle = candidates[0] ?? "이벤트";
+  let title = template?.title ?? fallbackTitle;
+  let description: string;
 
-    if (/price down|가격 하락/i.test(fallbackSource)) {
-      return { title: "원가 하락", description: "원재료 시세가 하락했습니다." };
-    }
-
-    if (/price up|가격 상승/i.test(fallbackSource)) {
-      return { title: "원가 상승", description: "원재료 시세가 상승했습니다." };
-    }
-
-    return { title: event.newsTitle, description: "새로운 이벤트가 발생했습니다." };
+  if (priceEvent) {
+    const directionLabel = priceEvent.direction === "DOWN" ? "하락" : "상승";
+    title = `${priceEvent.menuName} 원가 ${directionLabel}`;
+    description = isScheduled
+      ? `내일부터 ${priceEvent.menuName} 원재료값 ${directionLabel}이 적용될 예정입니다.`
+      : `${priceEvent.menuName} 원재료값이 ${directionLabel}되었습니다.`;
+  } else if (template) {
+    description = isScheduled
+      ? `내일부터 ${title} 이벤트가 적용될 예정입니다.`
+      : replaceLocationPlaceholder(template.description, regionName);
+  } else {
+    description = isScheduled
+      ? `내일부터 ${fallbackTitle} 이벤트가 적용될 예정입니다.`
+      : `${fallbackTitle} 이벤트가 적용되었습니다.`;
   }
-  let description = template.description.replace("$LOC", locationName);
 
-  // 지원금 이벤트의 경우 금액 표시
-  if (event.balanceChange > 0) {
-    description += ` (${event.balanceChange.toLocaleString()}원)`;
-  }
-
-  return { title: template.title, description };
+  return {
+    key: resolveAppliedEventKey(event),
+    alertType: isBadEvent(event) ? "bad_event" : "event",
+    title,
+    description,
+    createdAt: appliedAtMs !== null && appliedAtMs <= serverTimeMs ? appliedAtMs : Date.now(),
+    timeLabel: isScheduled ? "예정" : undefined,
+  };
 }
 
 const RANKING_POLL_INTERVAL_MS = 10_000;
@@ -534,18 +677,18 @@ function PlayPageSession({
   const [usedActions, setUsedActions] = useState<Set<ActionType>>(new Set());
   const [activeEffects, setActiveEffects] = useState<Set<ActionType>>(new Set());
   const [alerts, setAlerts] = useState<GameAlert[]>([]);
-  const [eventSchedule, setEventSchedule] = useState<EventScheduleItem[]>([]);
   const unityIframeRef = useRef<HTMLIFrameElement>(null);
   const [, setUnityReady] = useState(false);
   const [dayWeatherType, setDayWeatherType] = useState<string | null>(null);
   const [storeRegionIndex, setStoreRegionIndex] = useState<number | null>(null);
-  const hasLoadedCarryOverRef = useRef(false);
   const [balance, setBalance] = useState(0);
   const [stock, setStock] = useState(0);
   const [guests, setGuests] = useState(0);
   const [currentLocationName, setCurrentLocationName] = useState("");
   const currentLocationIdRef = useRef<number | null>(null);
   const locationIdByNameRef = useRef<ReadonlyMap<string, number>>(new Map());
+  const locationNameByIdRef = useRef<ReadonlyMap<number, string>>(new Map());
+  const seenAppliedEventKeysRef = useRef<Set<string>>(new Set());
   const scheduledVisitorTimersRef = useRef<number[]>([]);
   const dispatchedVisitorsByHourRef = useRef<Map<number, number>>(new Map());
   const latestCustomerPlanRef = useRef<CustomerPlanByHourItem[]>([]);
@@ -634,9 +777,6 @@ function PlayPageSession({
     syncActionUsageState("emergency", emergencyUsed);
   };
 
-  const [guestsDelta, setGuestsDelta] = useState<number | null>(null);
-  const [stockDelta, setStockDelta] = useState<number | null>(null);
-  const [balanceDelta, setBalanceDelta] = useState<number | null>(null);
   const unityBridgeRef = useRef<UnityBridgeHandle | null>(null);
   const latestTrafficStatusRef = useRef<GameTrafficStatus | null>(null);
   const lastUnityCongestionLevelRef = useRef<UnityCongestionLevel | null>(null);
@@ -837,6 +977,40 @@ function PlayPageSession({
     return () => window.removeEventListener("message", handleUnityMessage);
   }, []);
 
+  const syncAppliedEventAlerts = (state: GameStateResponse) => {
+    if (state.appliedEvents.length === 0) {
+      return;
+    }
+
+    const nextAlerts = state.appliedEvents
+      .map((event) => getEventInfo(event, state.serverTime, locationNameByIdRef.current))
+      .filter((eventInfo) => {
+        if (seenAppliedEventKeysRef.current.has(eventInfo.key)) {
+          return false;
+        }
+
+        seenAppliedEventKeysRef.current.add(eventInfo.key);
+        return true;
+      })
+      .sort((left, right) => right.createdAt - left.createdAt);
+
+    if (nextAlerts.length === 0) {
+      return;
+    }
+
+    setAlerts((prev) => [
+      ...nextAlerts.map((eventInfo, index) => ({
+        id: Date.now() + index,
+        type: eventInfo.alertType,
+        title: eventInfo.title,
+        description: eventInfo.description,
+        createdAt: eventInfo.createdAt,
+        timeLabel: eventInfo.timeLabel,
+      })),
+      ...prev,
+    ]);
+  };
+
   const applyGameState = (state: GameStateResponse) => {
     const hasCustomerPlan =
       Array.isArray(state.customerPlanByHour) && state.customerPlanByHour.length > 0;
@@ -906,35 +1080,7 @@ function PlayPageSession({
     syncPromotionActionState(state.actionStatus.promotionUsed);
     syncShareActionState(state.actionStatus.donationUsed);
     syncEmergencyActionState(state.actionStatus.emergencyUsed);
-
-    // 이전 일차에서 이어지는 이벤트를 carry-over 알림으로 표시 (최초 1회)
-    if (!hasLoadedCarryOverRef.current && state.appliedEvents.length > 0) {
-      hasLoadedCarryOverRef.current = true;
-      const carryOverAlerts: GameAlert[] = state.appliedEvents
-        .filter((ae) => shouldDisplayCarryOverAlert(ae.appliedAt, ae.eventName, ae.newsTitle))
-        .map((ae) => {
-          const fakeSchedule: EventScheduleItem = {
-            time: "10:00",
-            type: ae.eventName,
-            scope: null,
-            newsTitle: ae.newsTitle,
-            populationMultiplier: 1,
-            balanceChange: 0,
-          };
-          const info = getEventInfo(fakeSchedule, currentLocationName, currentMenuName);
-          return {
-            id: Date.now() + Math.floor(Math.random() * 10000),
-            type: isBadEvent(fakeSchedule) ? "bad_event" as const : "event" as const,
-            title: info.title,
-            description: info.description,
-            createdAt: Date.now(),
-            timeLabel: getDaysAgoLabel(ae.appliedAt),
-          };
-        });
-      if (carryOverAlerts.length > 0) {
-        setAlerts((prev) => [...prev, ...carryOverAlerts]);
-      }
-    }
+    syncAppliedEventAlerts(state);
   };
 
   const [rankings, setRankings] = useState<RankEntry[]>([]);
@@ -996,9 +1142,6 @@ function PlayPageSession({
 
       try {
         const dayStartRes = await startGameDay();
-        if (isActive && dayStartRes.eventSchedule) {
-          setEventSchedule(dayStartRes.eventSchedule);
-        }
         if (isActive) {
           setDayWeatherType(dayStartRes.weatherType ?? null);
           // fallback용으로만 저장 (getGameDayState 실패 시 사용)
@@ -1033,32 +1176,6 @@ function PlayPageSession({
 
       if (!isActive) {
         return;
-      }
-
-      if (stateResult.status === "fulfilled") {
-        applyGameState(stateResult.value);
-      } else {
-        // getGameDayState 실패 시 startGameDay의 initialBalance/Stock을 fallback으로 사용
-        if (dayStartFallbackBalance !== null) {
-          setBalance(dayStartFallbackBalance);
-          prevBalanceRef.current = dayStartFallbackBalance;
-        }
-        if (dayStartFallbackStock !== null) {
-          setStock(dayStartFallbackStock);
-          prevStockRef.current = dayStartFallbackStock;
-        }
-        setTrafficStatus(null);
-        setDeliveryTrafficLabel(null);
-        setEmergencyArriveAt(null);
-        setEstimatedEmergencyDelaySeconds(null);
-        latestCustomerPlanRef.current = [];
-        latestBackendCustomerCountRef.current = 0;
-        dispatchedVisitorsByHourRef.current.clear();
-        clearScheduledVisitorTimers();
-        syncDiscountActionState(false);
-        syncPromotionActionState(false);
-        syncShareActionState(false);
-        syncEmergencyActionState(false);
       }
 
       if (orderResult.status === "fulfilled") {
@@ -1114,8 +1231,15 @@ function PlayPageSession({
             location.locationId,
           ] as const),
         );
+        const nextLocationNameById = new Map(
+          locationResult.value.locations.map((location) => [
+            location.locationId,
+            location.locationName,
+          ] as const),
+        );
 
         locationIdByNameRef.current = nextLocationIdByName;
+        locationNameByIdRef.current = nextLocationNameById;
         currentLocationIdRef.current =
           nextLocationIdByName.get(normalizeAreaName(nextCurrentLocationName)) ?? currentLocationIdRef.current;
         if (stateResult.status === "fulfilled") {
@@ -1132,7 +1256,34 @@ function PlayPageSession({
         );
       } else {
         locationIdByNameRef.current = new Map();
+        locationNameByIdRef.current = new Map();
         setMoveRegions([]);
+      }
+
+      if (stateResult.status === "fulfilled") {
+        applyGameState(stateResult.value);
+      } else {
+        // getGameDayState 실패 시 startGameDay의 initialBalance/Stock을 fallback으로 사용
+        if (dayStartFallbackBalance !== null) {
+          setBalance(dayStartFallbackBalance);
+          prevBalanceRef.current = dayStartFallbackBalance;
+        }
+        if (dayStartFallbackStock !== null) {
+          setStock(dayStartFallbackStock);
+          prevStockRef.current = dayStartFallbackStock;
+        }
+        setTrafficStatus(null);
+        setDeliveryTrafficLabel(null);
+        setEmergencyArriveAt(null);
+        setEstimatedEmergencyDelaySeconds(null);
+        latestCustomerPlanRef.current = [];
+        latestBackendCustomerCountRef.current = 0;
+        dispatchedVisitorsByHourRef.current.clear();
+        clearScheduledVisitorTimers();
+        syncDiscountActionState(false);
+        syncPromotionActionState(false);
+        syncShareActionState(false);
+        syncEmergencyActionState(false);
       }
 
       const nextError =
@@ -1235,92 +1386,6 @@ function PlayPageSession({
       clearScheduledVisitorTimers();
     };
   }, []);
-
-  const triggeredEventsRef = useRef<Set<string>>(new Set());
-  const pendingEventTimersRef = useRef<number[]>([]);
-
-  useEffect(() => {
-    if (eventSchedule.length === 0) return;
-
-    const totalBusinessMs = BUSINESS_SECONDS * 1000;
-    const businessStartMs = playEndTimestampMs - totalBusinessMs;
-
-    /** 같은 시간 이벤트를 시차(3초)를 두고 push */
-    const scheduleAlert = (event: EventScheduleItem, delayMs: number) => {
-      const timerId = window.setTimeout(() => {
-        const info = getEventInfo(event, currentLocationName, currentMenuName);
-        setAlerts((prev) => [
-          {
-            id: Date.now() + Math.floor(Math.random() * 1000),
-            type: isBadEvent(event) ? "bad_event" : "event",
-            title: info.title,
-            description: info.description,
-            createdAt: Date.now(),
-          },
-          ...prev,
-        ]);
-      }, delayMs);
-      pendingEventTimersRef.current.push(timerId);
-    };
-
-    // 즉시 이벤트와 일반(14:00/18:00) 이벤트 분리
-    const immediateEvents: EventScheduleItem[] = [];
-    const regularEvents: EventScheduleItem[] = [];
-
-    for (const event of eventSchedule) {
-      const isImmediate = IMMEDIATE_EVENT_NAMES.has(event.type) || IMMEDIATE_EVENT_NAMES.has(event.newsTitle);
-      if (isImmediate) {
-        immediateEvents.push(event);
-      } else {
-        regularEvents.push(event);
-      }
-    }
-
-    // 오늘 새 이벤트 최대 2개, 14:00 / 18:00 고정
-    const todayRegulars = regularEvents.slice(-2).map((event, i) => ({
-      ...event,
-      time: REGULAR_EVENT_TIMES[i] ?? REGULAR_EVENT_TIMES[REGULAR_EVENT_TIMES.length - 1],
-    }));
-
-    const check = () => {
-      const elapsedMs = Date.now() - businessStartMs;
-      const elapsedSec = Math.max(0, Math.min(elapsedMs / 1000, BUSINESS_SECONDS));
-      const currentGameTime = elapsedToGameTime(elapsedSec);
-
-      let sameTimeCount = 0;
-
-      // 즉시 이벤트: 영업 시작 시 바로
-      for (const event of immediateEvents) {
-        const key = `immediate-${event.newsTitle}`;
-        if (triggeredEventsRef.current.has(key)) continue;
-        if (elapsedSec >= 0) {
-          triggeredEventsRef.current.add(key);
-          scheduleAlert(event, sameTimeCount * 3000);
-          sameTimeCount++;
-        }
-      }
-
-      // 일반 이벤트: 14:00 / 18:00 고정
-      for (const event of todayRegulars) {
-        const key = `regular-${event.time}-${event.newsTitle}`;
-        if (triggeredEventsRef.current.has(key)) continue;
-        if (currentGameTime >= event.time) {
-          triggeredEventsRef.current.add(key);
-          scheduleAlert(event, 0);
-        }
-      }
-    };
-
-    check();
-    const timer = window.setInterval(check, 1000);
-    return () => {
-      window.clearInterval(timer);
-      for (const id of pendingEventTimersRef.current) {
-        window.clearTimeout(id);
-      }
-      pendingEventTimersRef.current = [];
-    };
-  }, [eventSchedule, playEndTimestampMs, currentLocationName, currentMenuName]);
 
   /** 사용자가 직접 발주했을 때만 true → 도착 알림 활성화 */
   const didOrderEmergencyRef = useRef(false);
