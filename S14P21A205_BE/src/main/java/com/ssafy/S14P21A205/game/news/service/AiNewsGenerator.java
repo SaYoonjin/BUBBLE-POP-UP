@@ -442,17 +442,25 @@ public class AiNewsGenerator {
             }
         }
 
-        // 2단계: 키 누락 패턴 복원 (추출된 JSON에 적용)
+        // 2단계: 키 누락/빈 키 패턴 복원 (추출된 JSON에 적용)
+        // {"":"val1", "":"val2"} → {"title":"val1","content":"val2"}
+        if (jsonStr.matches("(?s)\\{\\s*\"\"\\s*:.*")) {
+            jsonStr = jsonStr.replaceFirst("\\{\\s*\"\"\\s*:", "{\"title\":");
+            jsonStr = jsonStr.replaceFirst(",\\s*\"\"\\s*:", ",\"content\":");
+        }
         // {:"val1", :"val2"} → {"title":"val1","content":"val2"}
-        if (jsonStr.matches("(?s)\\{\\s*:.*")) {
+        else if (jsonStr.matches("(?s)\\{\\s*:.*")) {
             jsonStr = jsonStr.replaceFirst("\\{\\s*:", "{\"title\":");
             jsonStr = jsonStr.replaceFirst(",\\s*:", ",\"content\":");
         }
 
-        // 3단계: 이중 따옴표 정리: "" → "
-        if (jsonStr.contains("\"\"")) {
-            jsonStr = jsonStr.replace("\"\"", "\"");
-        }
+        // 3단계: 이중 따옴표 키 정리: ""title"" → "title", ""content"" → "content"
+        jsonStr = jsonStr.replace("\"\"title\"\"", "\"title\"");
+        jsonStr = jsonStr.replace("\"\"content\"\"", "\"content\"");
+        // 값 부분의 이중 따옴표: , ""val → , "val / : ""val → : "val
+        jsonStr = jsonStr.replaceAll(":\\s*\"\"", ":\"");
+        jsonStr = jsonStr.replaceAll("\"\"\\s*}", "\"}");
+        jsonStr = jsonStr.replaceAll("\"\"\\s*,", "\",");
 
         // 1차 파싱
         NewsGenerationResult result = tryParseJson(jsonStr);
