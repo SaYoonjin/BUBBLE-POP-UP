@@ -765,6 +765,7 @@ function PlayPageSession({
   const latestCustomerPlanRef = useRef<CustomerPlanByHourItem[]>([]);
   const latestBackendCustomerCountRef = useRef(0);
   const [currentOrder, setCurrentOrder] = useState<CurrentOrderResponse | null>(null);
+  const [liveSellingPrice, setLiveSellingPrice] = useState<number | null>(null);
   const [menuItems, setMenuItems] = useState<EmergencyMenuItem[]>([]);
   const [moveRegions, setMoveRegions] = useState<MoveRegion[]>([]);
   const [promotionOptions, setPromotionOptions] = useState<PromotionOption[]>(() =>
@@ -785,21 +786,21 @@ function PlayPageSession({
   const remainingMilliseconds = Math.max(0, playEndTimestampMs - nowMs);
   const remainingSeconds = Math.max(0, Math.ceil(remainingMilliseconds / 1000));
   const remainingMillisecondsRef = useRef(remainingMilliseconds);
-  remainingMillisecondsRef.current = remainingMilliseconds;
   const playStoreName = brandName || "";
   const currentMenuName = currentOrder?.menuName ?? "";
   const emergencyArrivalGameTime = emergencyArriveAt
     ? formatEmergencyArrivalGameTime(emergencyArriveAt, playEndTimestampMs) || null
     : getEstimatedEmergencyArrivalGameTime(remainingMilliseconds, estimatedEmergencyDelaySeconds);
+  const currentLiveSellingPrice = liveSellingPrice ?? currentOrder?.sellingPrice ?? 0;
   const currentMenuPricing: CurrentMenuPricing | null = currentOrder
     ? {
         costPrice: currentOrder.costPrice,
         recommendedPrice: currentOrder.recommendedPrice,
         maxSellingPrice: currentOrder.maxSellingPrice,
-        sellingPrice: currentOrder.sellingPrice,
+        sellingPrice: currentLiveSellingPrice,
       }
     : null;
-  const discountCurrentPrice = currentOrder?.sellingPrice ?? 0;
+  const discountCurrentPrice = currentLiveSellingPrice;
   const discountMinimumPrice = currentOrder?.costPrice ?? discountCurrentPrice;
   const debugPhaseLabel = getPlayDebugPhaseLabel(phase);
 
@@ -863,9 +864,15 @@ function PlayPageSession({
   // Unity arrival 시 고객별 재고/잔액 변동 큐
   const arrivalQueueRef = useRef<Array<{ stockDelta: number; balanceDelta: number }>>([]);
 
-  displayedGuestsRef.current = guests;
-  displayedStockRef.current = stock;
-  displayedBalanceRef.current = balance;
+  useEffect(() => {
+    remainingMillisecondsRef.current = remainingMilliseconds;
+  }, [remainingMilliseconds]);
+
+  useEffect(() => {
+    displayedGuestsRef.current = guests;
+    displayedStockRef.current = stock;
+    displayedBalanceRef.current = balance;
+  }, [balance, guests, stock]);
 
   const getCurrentDebugGameTime = () =>
     elapsedToGameTime(getElapsedBusinessSeconds(remainingMillisecondsRef.current));
@@ -1348,6 +1355,7 @@ function PlayPageSession({
     state: GameStateResponse,
     source: "initial" | "poll" | "action_sync" | "emergency_refresh" = "poll",
   ) => {
+    setLiveSellingPrice(state.customerTick.unitPrice);
     const previousDisplayedGuests = displayedGuestsRef.current;
     const previousDisplayedStock = displayedStockRef.current;
     const previousDisplayedBalance = displayedBalanceRef.current;
@@ -1590,12 +1598,19 @@ function PlayPageSession({
         syncShareActionState(false);
         syncEmergencyActionState(false);
         setOptimisticUsedActions(new Set());
+        setLiveSellingPrice(null);
       }
 
       if (orderResult.status === "fulfilled") {
         setCurrentOrder(orderResult.value);
+        if (stateResult.status !== "fulfilled") {
+          setLiveSellingPrice(orderResult.value.sellingPrice);
+        }
       } else {
         setCurrentOrder(null);
+        if (stateResult.status !== "fulfilled") {
+          setLiveSellingPrice(null);
+        }
       }
 
       if (menuResult.status === "fulfilled") {
@@ -1854,6 +1869,27 @@ function PlayPageSession({
   const didOrderEmergencyRef = useRef(false);
   const hasEmergencyArrivalAlertRef = useRef(false);
 
+  function pushAlert(
+    type: GameAlert["type"],
+    title: string,
+    description: string,
+  ) {
+    setAlerts((prev) => [
+      {
+        id: Date.now() + Math.floor(Math.random() * 1000),
+        type,
+        title,
+        description,
+        createdAt: Date.now(),
+      },
+      ...prev,
+    ]);
+  }
+
+  const pushActionAlert = (title: string, description: string) => {
+    pushAlert("action", title, description);
+  };
+
   useEffect(() => {
     if (!emergencyArriveAt || !didOrderEmergencyRef.current) {
       return;
@@ -1890,27 +1926,6 @@ function PlayPageSession({
   };
 
   const closeModal = () => setActiveModal(null);
-
-  const pushAlert = (
-    type: GameAlert["type"],
-    title: string,
-    description: string,
-  ) => {
-    setAlerts((prev) => [
-      {
-        id: Date.now() + Math.floor(Math.random() * 1000),
-        type,
-        title,
-        description,
-        createdAt: Date.now(),
-      },
-      ...prev,
-    ]);
-  };
-
-  const pushActionAlert = (title: string, description: string) => {
-    pushAlert("action", title, description);
-  };
 
   const completeAction = (
     action: ActionType,
@@ -2011,27 +2026,13 @@ function PlayPageSession({
 
             const response = await postDiscount(discountValue);
 
-            setCurrentOrder((prev) =>
-              prev
-                ? {
-                    ...prev,
-                    sellingPrice: response.newPrice,
-                  }
-                : prev,
-            );
+            setLiveSellingPrice(response.newPrice);
             syncDiscountActionState(true);
 
-            const [stateResult, orderResult] = await Promise.allSettled([
-              getGameDayState(),
-              getCurrentOrder(),
-            ]);
+            const [stateResult] = await Promise.allSettled([getGameDayState()]);
 
             if (stateResult.status === "fulfilled") {
               applyGameState(stateResult.value, "action_sync");
-            }
-
-            if (orderResult.status === "fulfilled") {
-              setCurrentOrder(orderResult.value);
             }
 
             if (stateResult.status === "fulfilled") {
@@ -2085,7 +2086,6 @@ function PlayPageSession({
             const isNewMenuOrder = menuId !== currentOrder?.menuId;
             const arrivalLabel = formatEmergencyArrivalGameTime(response.arrivedTime, playEndTimestampMs);
             const arrivalText = arrivalLabel ? ` ${arrivalLabel} 도착 예정입니다.` : "";
-
             setEmergencyArriveAt(response.arrivedTime);
 
             queueActionDebugLog({
