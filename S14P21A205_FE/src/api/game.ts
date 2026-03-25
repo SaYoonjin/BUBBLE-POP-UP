@@ -187,6 +187,15 @@ export interface AppliedEvent {
   appliedAt: string;
 }
 
+export interface TodayEventScheduleItem {
+  time: string;
+  type: string;
+  scope: { region: number | null; menu: number | null } | null;
+  newsTitle: string;
+  populationMultiplier: number;
+  balanceChange: number | null;
+}
+
 export interface GameStateResponse {
   serverTime: string;
   seasonId: number;
@@ -198,6 +207,7 @@ export interface GameStateResponse {
   customerCount: number;
   customerTick: CustomerTick;
   customerPlanByHour?: CustomerPlanByHourItem[] | null;
+  todayEventSchedule: TodayEventScheduleItem[];
   inventory: { totalStock: number };
   actionStatus: GameActionStatus;
   appliedEvents: AppliedEvent[];
