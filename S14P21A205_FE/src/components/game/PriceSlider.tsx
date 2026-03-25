@@ -19,7 +19,7 @@ export default function PriceSlider({
   price,
   min,
   max,
-  step,
+  step: _step,
   originalCostPrice,
   discountedCostPrice,
   hasItemDiscount,
