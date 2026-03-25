@@ -13,7 +13,7 @@ import ItemSelector from "../components/common/ItemSelector";
 import Modal from "../components/common/Modal";
 import SeasonCTA from "../components/common/SeasonCTA";
 import { useGameStore } from "../stores/useGameStore";
-import type { WaitingRouteState } from "../types/waiting";
+import { setSeasonJoinIntent } from "../utils/seasonJoinIntent";
 import {
   getDiscountLabel,
   getStoredSelectedDashboardItemIds,
@@ -276,16 +276,6 @@ function resolveSeasonCardData(
     ctaLabel: "시즌 대기 중",
     tone: "waiting" as const,
     disabled: true,
-  };
-}
-
-function buildSeasonStartingState(
-  waitingStatus: GameWaitingResponse | null,
-): WaitingRouteState {
-  return {
-    mode: "season_starting",
-    seasonNumber: waitingStatus?.nextSeasonNumber ?? null,
-    nextPath: "/game/setup/location",
   };
 }
 
@@ -568,38 +558,18 @@ export default function DashboardPage() {
     };
   }, [waitingStatus]);
 
-  useEffect(() => {
-    if (
-      waitingStatus?.status !== "WAITING" ||
-      (waitingStatus.phaseRemainingSeconds ?? 0) > 0
-    ) {
-      return;
-    }
-
-    navigate("/game/waiting", {
-      replace: true,
-      state: buildSeasonStartingState(waitingStatus),
-    });
-  }, [navigate, waitingStatus]);
-
   const handleSeasonCountdownComplete = async () => {
     try {
       const latestStatus = await getGameWaitingStatus();
-
-      if (latestStatus.status === "IN_PROGRESS") {
-        navigate("/game/setup/location", { replace: true });
-        return;
-      }
-
-      navigate("/game/waiting", {
-        replace: true,
-        state: buildSeasonStartingState(latestStatus),
-      });
+      setWaitingStatus(latestStatus);
     } catch {
-      navigate("/game/waiting", {
-        replace: true,
-        state: buildSeasonStartingState(waitingStatus),
-      });
+      // Keep the last known season state when refresh fails.
+    }
+  };
+
+  const handleSeasonCtaClick = () => {
+    if (seasonCard.ctaTo === "/game/setup/location") {
+      setSeasonJoinIntent();
     }
   };
 
@@ -658,6 +628,7 @@ export default function DashboardPage() {
           <div className="flex flex-col gap-6">
             <SeasonCTA
               {...seasonCard}
+              onCtaClick={handleSeasonCtaClick}
               onCountdownComplete={
                 waitingStatus?.status === "WAITING"
                   ? handleSeasonCountdownComplete
