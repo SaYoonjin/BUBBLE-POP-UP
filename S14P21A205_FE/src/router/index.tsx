@@ -1,6 +1,7 @@
-import { createBrowserRouter, Outlet } from "react-router-dom";
+import { createBrowserRouter } from "react-router-dom";
 import PrivateRoute from "./PrivateRoute";
 import GameGuard from "./GameGuard";
+import AppShell from "./AppShell";
 import HomePage from "../pages/HomePage";
 import LoginPage from "../pages/LoginPage";
 import MyPage from "../pages/MyPage";
@@ -16,16 +17,6 @@ import WaitingPage from "../pages/WaitingPage";
 import AuthCallbackPage from "../pages/AuthCallbackPage";
 import ForbiddenPage from "../pages/ForbiddenPage";
 import NotFoundPage from "../pages/NotFoundPage";
-import BgmController from "../components/common/BgmController";
-
-function AppShell() {
-  return (
-    <>
-      <Outlet />
-      <BgmController />
-    </>
-  );
-}
 
 const router = createBrowserRouter([
   {
@@ -40,10 +31,7 @@ const router = createBrowserRouter([
       {
         element: <PrivateRoute />,
         children: [
-          // åª›Â€???ë…¿ë’— ?ì„ì” ï§žÂ€ (?ëª„ì £???ë¬Žë  åª›Â€??
           { path: "/mypage", element: <MyPage /> },
-
-          // å¯ƒëš¯ì—« ?ì„ì” ï§?åª›Â€???ê³¸ìŠœ
           {
             element: <GameGuard />,
             children: [

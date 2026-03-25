@@ -148,7 +148,6 @@ export default function BgmController() {
 
     if (!isPlaying) {
       audio.pause();
-      setRequiresInteraction(false);
       return;
     }
 
@@ -222,10 +221,19 @@ export default function BgmController() {
   const handleTrackSelect = (trackId: TrackId) => {
     setSelectedTrackId(trackId);
     setIsPlaying(true);
+    setRequiresInteraction(false);
   };
 
   const handlePlaybackToggle = () => {
-    setIsPlaying((prev) => !prev);
+    setIsPlaying((prev) => {
+      const nextValue = !prev;
+
+      if (!nextValue) {
+        setRequiresInteraction(false);
+      }
+
+      return nextValue;
+    });
   };
 
   const handleVolumeChange = (event: ChangeEvent<HTMLInputElement>) => {
