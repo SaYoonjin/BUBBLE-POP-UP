@@ -53,6 +53,9 @@ import {
   type SeasonPhase,
 } from "../constants/gameTime";
 import { sendToUnity, setWeather, startDay, spawnShopAtIndex, setCameraRegion } from "../utils/unity";
+import { classifyEventEffect } from "../components/play/effects/effects";
+import { useEventEffectStore } from "../components/play/effects/useEventEffect";
+import EventEffect3DOverlay from "../components/play/effects/EventEffect3DOverlay";
 import useBrandName from "../hooks/useBrandName";
 import useStatQueue from "../hooks/useStatQueue";
 import { useUserStore } from "../stores/useUserStore";
@@ -732,6 +735,7 @@ function PlayPageSession({
 }) {
   const nickname = useUserStore((s) => s.nickname) ?? "버블티";
   const { brandName } = useBrandName();
+  const triggerEffect = useEventEffectStore((s) => s.triggerEffect);
   const [activeModal, setActiveModal] = useState<ActionType | null>(null);
   const [serverUsedActions, setServerUsedActions] = useState<Set<ActionType>>(new Set());
   const [optimisticUsedActions, setOptimisticUsedActions] = useState<Set<ActionType>>(new Set());
@@ -1807,6 +1811,20 @@ function PlayPageSession({
           },
           ...prev,
         ]);
+        // 3D 이벤트 이펙트 트리거 (Unity + 프론트엔드 동시)
+        const effectType = classifyEventEffect(event);
+        if (effectType) {
+          const regionIdx = storeRegionIndex ?? 0;
+          if (effectType === "TYPHOON") {
+            sendToUnity(unityIframeRef, "SetWeather", `Wind,${regionIdx}`);
+          } else if (effectType === "EARTHQUAKE") {
+            sendToUnity(unityIframeRef, "SetWeather", `Earthquake,${regionIdx}`);
+          } else if (effectType === "FIRE") {
+            sendToUnity(unityIframeRef, "SetWeather", `Fire,${regionIdx}`);
+          }
+          triggerEffect(effectType);
+        }
+
         queueDebugLog(
           buildPassiveDebugLog({
             dedupeKey: `event:${dayNumber}:${getCurrentDebugGameTime()}:${info.title}`,
@@ -1980,6 +1998,8 @@ function PlayPageSession({
           onReady={handleUnityReady}
           onPopupArrival={handlePopupArrival}
         />
+
+        <EventEffect3DOverlay />
 
         <RankingSidebar rankings={rankings} />
         <EventSidebar alerts={alerts} />
