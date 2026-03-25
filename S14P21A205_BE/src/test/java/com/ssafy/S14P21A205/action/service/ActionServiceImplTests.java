@@ -156,7 +156,7 @@ class ActionServiceImplTests {
     @Test
     void executePromotionBlocksWhenPromotionActionLogAlreadyExists() {
         Store store = store(15L, 1, 3L, 7L, 2, 7, 2_000);
-        Action usedPromotionAction = promotionAction(PromotionType.LEAFLET, 500, new BigDecimal("0.10"));
+        Action usedPromotionAction = promotionAction(PromotionType.LEAFLET, 500, new BigDecimal("1.10"));
 
         when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
                 .thenReturn(Optional.of(store));
@@ -175,7 +175,7 @@ class ActionServiceImplTests {
     @Test
     void executePromotionMarksSharedPromotionFlagAndLegacyTypeFlag() {
         Store store = store(15L, 1, 3L, 7L, 2, 7, 2_000);
-        Action promotionAction = promotionAction(PromotionType.SNS, 500, new BigDecimal("0.10"));
+        Action promotionAction = promotionAction(PromotionType.SNS, 500, new BigDecimal("1.15"));
         GameDayLiveState state = state(500_000L);
 
         when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
@@ -190,7 +190,7 @@ class ActionServiceImplTests {
                 new com.ssafy.S14P21A205.action.dto.PromotionRequest(PromotionType.SNS)
         );
 
-        verify(gameDayStoreStateRedisRepository).updateField(15L, 2, "capture_rate", "0.5500");
+        verify(gameDayStoreStateRedisRepository).updateField(15L, 2, "capture_rate", "0.5750");
         verify(gameDayStoreStateRedisRepository).markActionUsed(15L, 2, "promotion");
         verify(gameDayStoreStateRedisRepository).markActionUsed(15L, 2, "sns");
         verify(gameDayStoreStateRedisRepository).saveBalance(15L, 2, 499_500L);
@@ -199,7 +199,7 @@ class ActionServiceImplTests {
     @Test
     void executePromotionReturnsSuccessWhenRedisSyncFailsAfterActionLogSave() {
         Store store = store(15L, 1, 3L, 7L, 2, 7, 2_000);
-        Action promotionAction = promotionAction(PromotionType.SNS, 500, new BigDecimal("0.10"));
+        Action promotionAction = promotionAction(PromotionType.SNS, 500, new BigDecimal("1.15"));
         GameDayLiveState state = state(500_000L);
 
         when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
@@ -209,7 +209,7 @@ class ActionServiceImplTests {
         when(gameDayStoreStateRedisRepository.find(15L, 2)).thenReturn(Optional.of(state));
         doThrow(new RuntimeException("redis down"))
                 .when(gameDayStoreStateRedisRepository)
-                .updateField(15L, 2, "capture_rate", "0.5500");
+                .updateField(15L, 2, "capture_rate", "0.5750");
 
         ActionResponse response = actionService.executePromotion(
                 1,

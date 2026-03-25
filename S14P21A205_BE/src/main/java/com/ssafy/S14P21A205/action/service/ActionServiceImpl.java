@@ -141,7 +141,7 @@ public class ActionServiceImpl implements ActionService {
         GameDayLiveState state = resolveCurrentLiveState(store, context);
         long updatedBalance = resolveUpdatedBalance("PROMOTION", userId, store, day, valueOf(action.getCost()), state);
 
-        BigDecimal multiplier = BigDecimal.ONE.add(action.getCaptureRate());
+        BigDecimal multiplier = action.getCaptureRate();
         BigDecimal newCaptureRate = resolveAppliedCaptureRate(state, multiplier);
 
         actionLogRepository.save(new ActionLog(action, store, day, null));
