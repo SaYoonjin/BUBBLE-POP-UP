@@ -636,6 +636,16 @@ function getEventAlertSlotStartSeconds(slotHour: EventAlertSlotHour) {
   return getBusinessHourWindowSeconds(slotHour)?.start ?? 0;
 }
 
+function resolveRegularEventAlertSlotHour(regularEventIndex: number): EventAlertSlotHour {
+  return regularEventIndex <= 0 ? 14 : 18;
+}
+
+function isFestivalAppliedEvent(event: AppliedEvent) {
+  return getAppliedEventCandidates(event).some((candidate) =>
+    normalizeEventToken(candidate).includes("FESTIVAL"),
+  );
+}
+
 function getUnityCongestionLevel(status: GameTrafficStatus | null | undefined) {
   if (!status) {
     return null;
@@ -1040,29 +1050,36 @@ function PlayPageSession({
       return;
     }
 
-    const nextAlerts = state.appliedEvents
-      .map((event) => getEventInfo(event, state.serverTime, locationNameByIdRef.current))
-      .filter((eventInfo) => {
-        if (seenAppliedEventKeysRef.current.has(eventInfo.key)) {
-          return false;
-        }
+    const nextFestivalAlerts: ReturnType<typeof getEventInfo>[] = [];
+    const nextRegularAlerts: ReturnType<typeof getEventInfo>[] = [];
 
-        seenAppliedEventKeysRef.current.add(eventInfo.key);
-        return true;
-      });
+    for (const event of state.appliedEvents) {
+      const eventInfo = getEventInfo(event, state.serverTime, locationNameByIdRef.current);
 
-    if (nextAlerts.length === 0) {
+      if (seenAppliedEventKeysRef.current.has(eventInfo.key)) {
+        continue;
+      }
+
+      seenAppliedEventKeysRef.current.add(eventInfo.key);
+
+      if (isFestivalAppliedEvent(event)) {
+        nextFestivalAlerts.push(eventInfo);
+      } else {
+        nextRegularAlerts.push(eventInfo);
+      }
+    }
+
+    if (nextFestivalAlerts.length === 0 && nextRegularAlerts.length === 0) {
       return;
     }
 
     const elapsedBusinessSeconds = getElapsedBusinessSeconds(remainingMillisecondsRef.current);
     const immediateAlerts: ReturnType<typeof getEventInfo>[] = [];
 
-    for (const eventInfo of nextAlerts) {
-      const slotHour =
-        EVENT_ALERT_SLOT_HOURS[
-          assignedEventAlertCountRef.current % EVENT_ALERT_SLOT_HOURS.length
-        ];
+    immediateAlerts.push(...nextFestivalAlerts);
+
+    for (const eventInfo of nextRegularAlerts) {
+      const slotHour = resolveRegularEventAlertSlotHour(assignedEventAlertCountRef.current);
 
       assignedEventAlertCountRef.current += 1;
 
