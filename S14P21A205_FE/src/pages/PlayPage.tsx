@@ -166,8 +166,34 @@ function isNonEmptyText(value: string | null | undefined): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
 
+const FALLBACK_LOCATION_NAME_BY_ID = new Map<number, string>([
+  [1, "잠실"],
+  [2, "신도림"],
+  [3, "여의도"],
+  [4, "이태원"],
+  [5, "서울숲/성수"],
+  [6, "강남"],
+  [7, "명동"],
+  [8, "홍대"],
+]);
+
+const FALLBACK_LOCATION_ID_BY_NAME = new Map<string, number>(
+  [...FALLBACK_LOCATION_NAME_BY_ID.entries()].map(([locationId, locationName]) => [
+    normalizeAreaName(locationName),
+    locationId,
+  ]),
+);
+
 function getTodayEventCandidates(event: TodayEventScheduleItem) {
   return [event.type, event.newsTitle].filter(isNonEmptyText);
+}
+
+function hasTodayEventCandidate(event: TodayEventScheduleItem, token: string) {
+  const normalizedToken = normalizeEventToken(token);
+
+  return getTodayEventCandidates(event).some((candidate) =>
+    normalizeEventToken(candidate).includes(normalizedToken),
+  );
 }
 
 function parseTodayEventScheduleSeconds(value: string | null | undefined) {
@@ -222,14 +248,37 @@ function resolveEventRegionName(
   event: TodayEventScheduleItem,
   locationNameById: ReadonlyMap<number, string>,
 ) {
+  const explicitRegionName =
+    event.targetRegionName
+    ?? event.regionName
+    ?? event.locationName
+    ?? null;
+
+  if (isNonEmptyText(explicitRegionName)) {
+    return explicitRegionName.trim();
+  }
+
+  const targetRegionId = event.targetRegionId ?? event.scope?.region ?? null;
+
+  if (typeof targetRegionId === "number") {
+    return locationNameById.get(targetRegionId) ?? FALLBACK_LOCATION_NAME_BY_ID.get(targetRegionId) ?? null;
+  }
+
   const scopedRegionId = event.scope?.region ?? null;
 
   if (typeof scopedRegionId === "number") {
-    return locationNameById.get(scopedRegionId) ?? null;
+    return locationNameById.get(scopedRegionId) ?? FALLBACK_LOCATION_NAME_BY_ID.get(scopedRegionId) ?? null;
   }
 
+  const searchableLocationNames = [
+    ...new Set([
+      ...locationNameById.values(),
+      ...FALLBACK_LOCATION_NAME_BY_ID.values(),
+    ]),
+  ];
+
   for (const candidate of getTodayEventCandidates(event)) {
-    const inferredRegionName = [...locationNameById.values()].find((locationName) =>
+    const inferredRegionName = searchableLocationNames.find((locationName) =>
       candidate.includes(locationName),
     );
 
@@ -239,6 +288,14 @@ function resolveEventRegionName(
   }
 
   return null;
+}
+
+function isNextDayAnnouncementEvent(event: TodayEventScheduleItem) {
+  return (
+    resolvePriceEventDescriptor(getTodayEventCandidates(event)) !== null
+    || hasTodayEventCandidate(event, "SUBSTITUTE_HOLIDAY")
+    || hasTodayEventCandidate(event, "POLICY_CHANGE")
+  );
 }
 
 function replaceLocationPlaceholder(template: string, regionName: string | null) {
@@ -271,10 +328,102 @@ function inferFestivalRegionName(festivalName: string | null, fallbackRegionName
   return leadingToken || null;
 }
 
+function replaceLocationPlaceholderSafe(template: string, regionName: string | null) {
+  return template.replaceAll("$LOC", regionName ?? "해당 지역");
+}
+
+function buildTodayEventInfo(
+  event: TodayEventScheduleItem,
+  locationNameById: ReadonlyMap<number, string>,
+): {
+  key: string;
+  alertType: GameAlert["type"];
+  title: string;
+  description: string;
+  sortTimestamp: number;
+  timeLabel?: string;
+} {
+  const candidates = getTodayEventCandidates(event);
+  const priceEvent = resolvePriceEventDescriptor(candidates) as {
+    menuName: string;
+    direction: PriceDirection;
+  };
+  const template = resolveEventTemplate(candidates) as EventTemplate;
+  const regionName = resolveEventRegionName(event, locationNameById);
+  const scheduledAtSeconds = parseTodayEventScheduleSeconds(event.time);
+  const fallbackTitle = candidates[0] ?? "이벤트 발생";
+  const festivalName = (isFestivalEvent(event) ? resolveFestivalDisplayName(event) : null) as string;
+  const festivalRegionName = inferFestivalRegionName(festivalName, regionName);
+  const displayRegionName = regionName ?? festivalRegionName ?? "해당 지역";
+  const isNextDayAnnouncement = isNextDayAnnouncementEvent(event);
+  let title = template?.title ?? fallbackTitle;
+  let description: string;
+
+  if (priceEvent) {
+    const directionLabel = priceEvent.direction === "DOWN" ? "하락" : "상승";
+    title = `${priceEvent.menuName} 원가 ${directionLabel}`;
+    description = isNextDayAnnouncement
+      ? `내일부터 ${priceEvent.menuName} 원재료값이 ${directionLabel}할 예정입니다.`
+      : `${priceEvent.menuName} 원재료값이 ${directionLabel}되었습니다.`;
+  } else if (festivalName) {
+    title = festivalName;
+
+    const containsRegionName = !!festivalRegionName && festivalName.includes(festivalRegionName as string);
+
+    description = containsRegionName
+      ? `${festivalName}가 열리고 있습니다.`
+      : `${displayRegionName}에서 ${festivalName}가 열리고 있습니다.`;
+  } else if (hasTodayEventCandidate(event, "SUBSTITUTE_HOLIDAY")) {
+    title = template?.title ?? "대체 공휴일";
+    description = "정부가 내일을 대체 공휴일로 지정했습니다.";
+  } else if (hasTodayEventCandidate(event, "POLICY_CHANGE")) {
+    title = template?.title ?? "정책 변경";
+    description = "내일부터 일회용품 사용 규제 등 정부 방침이 변경될 예정입니다.";
+  } else if (hasTodayEventCandidate(event, "EARTHQUAKE")) {
+    title = template?.title ?? "지진 발생";
+    description = `${displayRegionName} 인근에서 지진이 발생했습니다.`;
+  } else if (hasTodayEventCandidate(event, "FIRE")) {
+    title = template?.title ?? "화재 발생";
+    description = `${displayRegionName} 인근에서 화재가 발생했습니다.`;
+  } else if (hasTodayEventCandidate(event, "FLOOD")) {
+    title = template?.title ?? "홍수 발생";
+    description = `${displayRegionName} 일대가 침수되었습니다.`;
+  } else if (hasTodayEventCandidate(event, "TYPHOON")) {
+    title = template?.title ?? "태풍 접근";
+    description = `${displayRegionName} 지역에 태풍이 접근하고 있습니다.`;
+  } else if (hasTodayEventCandidate(event, "INFECTIOUS_DISEASE")) {
+    title = template?.title ?? "감염병 발생";
+    description = `${displayRegionName} 일대에 감염병이 확산되고 있습니다.`;
+  } else if (template) {
+    description = isNextDayAnnouncement
+      ? `내일부터 ${title} 이벤트가 적용될 예정입니다.`
+      : replaceLocationPlaceholderSafe(template.description, regionName);
+  } else {
+    description = isNextDayAnnouncement
+      ? `내일부터 ${fallbackTitle} 이벤트가 적용될 예정입니다.`
+      : `${fallbackTitle} 이벤트가 발생했습니다.`;
+  }
+
+  return {
+    key: resolveTodayEventKey(event),
+    alertType: isBadEvent(event) ? "bad_event" : "event",
+    title,
+    description,
+    sortTimestamp: scheduledAtSeconds ?? 0,
+  };
+}
+
 function resolveTodayEventKey(event: TodayEventScheduleItem) {
   return [
+    event.eventId,
+    event.eventName,
+    event.eventCategory,
     event.type,
     event.newsTitle,
+    event.targetRegionId,
+    event.targetRegionName,
+    event.regionName,
+    event.locationName,
     event.scope?.region,
     event.scope?.menu,
     event.time,
@@ -406,9 +555,14 @@ function getEventInfo(
   sortTimestamp: number;
   timeLabel?: string;
 } {
+  return buildTodayEventInfo(event, locationNameById);
+
   const candidates = getTodayEventCandidates(event);
-  const priceEvent = resolvePriceEventDescriptor(candidates);
-  const template = resolveEventTemplate(candidates);
+  const priceEvent = resolvePriceEventDescriptor(candidates) as {
+    menuName: string;
+    direction: PriceDirection;
+  };
+  const template = resolveEventTemplate(candidates) as EventTemplate;
   const regionName = resolveEventRegionName(event, locationNameById);
   const scheduledAtSeconds = parseTodayEventScheduleSeconds(event.time);
   const isScheduled = false;
@@ -417,7 +571,7 @@ function getEventInfo(
   const fallbackTitle = candidates[0] ?? "이벤트";
   let title = template?.title ?? fallbackTitle;
   let description: string;
-  const festivalName = isFestivalEvent(event) ? resolveFestivalDisplayName(event) : null;
+  const festivalName = (isFestivalEvent(event) ? resolveFestivalDisplayName(event) : null) as string;
   const festivalRegionName = inferFestivalRegionName(festivalName, regionName);
 
   if (priceEvent) {
@@ -429,7 +583,7 @@ function getEventInfo(
   } else if (festivalName) {
     title = festivalName;
 
-    const containsRegionName = festivalRegionName ? festivalName.includes(festivalRegionName) : false;
+    const containsRegionName = !!festivalRegionName && festivalName.includes(festivalRegionName as string);
 
     description = isScheduled
       ? containsRegionName
@@ -745,8 +899,8 @@ function PlayPageSession({
   const statQueue = useStatQueue(setStock, setBalance);
   const [currentLocationName, setCurrentLocationName] = useState("");
   const currentLocationIdRef = useRef<number | null>(null);
-  const locationIdByNameRef = useRef<ReadonlyMap<string, number>>(new Map());
-  const locationNameByIdRef = useRef<ReadonlyMap<number, string>>(new Map());
+  const locationIdByNameRef = useRef<ReadonlyMap<string, number>>(new Map(FALLBACK_LOCATION_ID_BY_NAME));
+  const locationNameByIdRef = useRef<ReadonlyMap<number, string>>(new Map(FALLBACK_LOCATION_NAME_BY_ID));
   const seenAppliedEventKeysRef = useRef<Set<string>>(new Set());
   const queuedEventAlertsRef = useRef<QueuedEventAlert[]>([]);
   const scheduledVisitorTimersRef = useRef<number[]>([]);
@@ -1392,8 +1546,8 @@ function PlayPageSession({
           ),
         );
       } else {
-        locationIdByNameRef.current = new Map();
-        locationNameByIdRef.current = new Map();
+        locationIdByNameRef.current = new Map(FALLBACK_LOCATION_ID_BY_NAME);
+        locationNameByIdRef.current = new Map(FALLBACK_LOCATION_NAME_BY_ID);
         setMoveRegions([]);
       }
 

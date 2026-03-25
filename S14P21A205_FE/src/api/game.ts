@@ -201,6 +201,13 @@ export interface TodayEventScheduleItem {
   newsTitle: string;
   populationMultiplier: number;
   balanceChange: number | null;
+  eventId?: number | null;
+  eventName?: string | null;
+  eventCategory?: string | null;
+  targetRegionId?: number | null;
+  targetRegionName?: string | null;
+  regionName?: string | null;
+  locationName?: string | null;
 }
 
 export interface GameStateResponse {
