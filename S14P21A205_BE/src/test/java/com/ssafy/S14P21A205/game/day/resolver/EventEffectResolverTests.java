@@ -220,6 +220,43 @@ class EventEffectResolverTests {
                 .containsExactly("SUBSTITUTE_HOLIDAY");
     }
 
+    @Test
+    void resolveInfectiousDiseaseLowersPopulationWithoutChangingStock() {
+        EventEffectResolver resolver = new EventEffectResolver(dailyEventRepository);
+        Season season = season();
+        DailyEvent infectiousDisease = dailyEvent(
+                season,
+                1,
+                EventCategory.INFECTIOUS_DISEASE,
+                "Infectious Disease",
+                "0.70",
+                "0.00",
+                "1.00",
+                0,
+                EventStartTime.IMMEDIATE,
+                EventEndTime.SAME_DAY,
+                null,
+                null
+        );
+        when(dailyEventRepository.findBySeasonIdAndDayBetweenOrderByDayAscIdAsc(1L, 1, 1))
+                .thenReturn(List.of(infectiousDisease));
+
+        EventEffectResolver.EventEffect effect = resolver.resolve(
+                season,
+                1,
+                LocalDateTime.of(2026, 3, 17, 9, 1, 30),
+                3L,
+                7L
+        );
+
+        assertThat(effect.populationEventMultiplier()).isEqualByComparingTo("0.70");
+        assertThat(effect.stockChange()).isZero();
+        assertThat(effect.ingredientCostMultiplier()).isEqualByComparingTo("1.00");
+        assertThat(effect.capitalChange()).isZero();
+        assertThat(effect.appliedEvents()).extracting(GameStateResponse.AppliedEvent::eventType)
+                .containsExactly("INFECTIOUS_DISEASE");
+    }
+
     private Season season() {
         Season season = instantiate(Season.class);
         ReflectionTestUtils.setField(season, "id", 1L);
