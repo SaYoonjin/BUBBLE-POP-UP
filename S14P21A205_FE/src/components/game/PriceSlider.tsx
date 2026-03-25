@@ -57,8 +57,8 @@ export default function PriceSlider({
         </div>
       </div>
 
-      <div className="flex grow flex-col justify-center gap-6">
-        <div className="py-1 text-center">
+      <div className="flex grow flex-col">
+        <div className="flex grow flex-col items-center justify-center py-1 text-center">
           <p className="mb-2 text-[13px] font-medium text-slate-400">판매 가격</p>
           <div className="flex items-center justify-center gap-1">
             <span className="text-[2.5rem] font-black tracking-tight text-slate-900 md:text-[2.875rem]">₩</span>
@@ -98,7 +98,7 @@ export default function PriceSlider({
           </p>
         </div>
 
-        <div className="mt-auto grid grid-cols-2 gap-3 pt-3">
+        <div className="grid grid-cols-2 gap-3 pt-3">
           <div className="rounded-2xl bg-slate-50 p-3 text-center">
             <p className="mb-1 text-xs font-medium text-slate-400">원가</p>
             {hasItemDiscount ? (
