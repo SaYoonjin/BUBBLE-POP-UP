@@ -3,6 +3,7 @@ package com.ssafy.S14P21A205.game.day.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -135,6 +136,9 @@ class GameDayStartServiceTests {
         org.mockito.Mockito.lenient()
                 .when(orderRepository.findByStoreIdAndOrderTypeOrderByArrivedTimeAscIdAsc(any(), eq(OrderType.EMERGENCY)))
                 .thenReturn(List.of());
+        org.mockito.Mockito.lenient()
+                .when(dailyReportRepository.findFirstByStore_IdAndDayLessThanOrderByDayDesc(any(), any()))
+                .thenReturn(Optional.empty());
     }
 
     private GameDayStartService createService(Clock clock) {
@@ -311,7 +315,6 @@ class GameDayStartServiceTests {
                 traffic(store.getLocation(), LocalDateTime.of(2026, 3, 9, 10, 0), TrafficStatus.NORMAL),
                 traffic(store.getLocation(), LocalDateTime.of(2026, 3, 10, 10, 0), TrafficStatus.NORMAL)
         ));
-        when(dailyReportRepository.findByStoreIdAndDay(15L, 1)).thenReturn(Optional.empty());
         when(dailyEventRepository.findBySeasonIdAndDayBetweenOrderByDayAscIdAsc(9L, 1, 2)).thenReturn(List.of());
         GameDayStartResponse response = gameDayStartService.startDay(mock(Authentication.class));
 
@@ -320,6 +323,46 @@ class GameDayStartServiceTests {
         assertThat(response.openingSummary().previousClosingBalance()).isEqualTo(9_700_000);
         assertThat(response.openingSummary().previousClosingStock()).isEqualTo(15);
         assertThat(response.openingSummary().interiorCost()).isZero();
+    }
+
+    @Test
+    void startDayUsesLatestEarlierReportWhenPreviousDayReportIsMissing() {
+        User user = user(1);
+        Store store = store(user, 15L, 3L, 1L, 9L, 3, 7, 5_000, 100_000, 2_000);
+
+        when(userService.getCurrentUser(any())).thenReturn(user);
+        when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
+                .thenReturn(Optional.of(store));
+        when(storeRepository.findBySeason_IdOrderByIdAsc(9L)).thenReturn(List.of(store));
+        when(gameDayStoreStateRedisRepository.find(15L, 3)).thenReturn(Optional.empty());
+        when(orderRepository.findDailyStartOrders(15L, 3)).thenReturn(List.of());
+        when(valueOperations.get("season:9:weather:day:3")).thenReturn(
+                """
+                [
+                  {"locationId":3,"day":3,"weatherType":"SUNNY","populationMultiplier":1.00}
+                ]
+                """
+        );
+        when(populationRepository.findByLocationIdOrderByDateAsc(3L)).thenReturn(List.of(
+                population(store.getLocation(), LocalDateTime.of(2026, 3, 9, 10, 0), 500),
+                population(store.getLocation(), LocalDateTime.of(2026, 3, 10, 10, 0), 500),
+                population(store.getLocation(), LocalDateTime.of(2026, 3, 11, 10, 0), 500)
+        ));
+        when(trafficRepository.findByLocationIdOrderByDateAsc(3L)).thenReturn(List.of(
+                traffic(store.getLocation(), LocalDateTime.of(2026, 3, 9, 10, 0), TrafficStatus.NORMAL),
+                traffic(store.getLocation(), LocalDateTime.of(2026, 3, 10, 10, 0), TrafficStatus.NORMAL),
+                traffic(store.getLocation(), LocalDateTime.of(2026, 3, 11, 10, 0), TrafficStatus.NORMAL)
+        ));
+        when(dailyReportRepository.findFirstByStore_IdAndDayLessThanOrderByDayDesc(eq(15L), anyInt()))
+                .thenReturn(Optional.of(previousDailyReport(store, 9_000_000, 10)));
+        when(dailyEventRepository.findBySeasonIdAndDayBetweenOrderByDayAscIdAsc(9L, 2, 3)).thenReturn(List.of());
+
+        GameDayStartResponse response = gameDayStartService.startDay(mock(Authentication.class));
+
+        assertThat(response.initialBalance()).isEqualTo(9_000_000);
+        assertThat(response.initialStock()).isEqualTo(10);
+        assertThat(response.openingSummary().previousClosingBalance()).isEqualTo(9_000_000);
+        assertThat(response.openingSummary().previousClosingStock()).isEqualTo(10);
     }
 
     @Test
@@ -359,7 +402,8 @@ class GameDayStartServiceTests {
                 traffic(store.getLocation(), LocalDateTime.of(2026, 3, 9, 10, 0), TrafficStatus.NORMAL),
                 traffic(store.getLocation(), LocalDateTime.of(2026, 3, 10, 10, 0), TrafficStatus.NORMAL)
         ));
-        when(dailyReportRepository.findByStoreIdAndDay(15L, 1)).thenReturn(Optional.of(previousDailyReport(store, 9_000_000, 10)));
+        when(dailyReportRepository.findFirstByStore_IdAndDayLessThanOrderByDayDesc(15L, 2))
+                .thenReturn(Optional.of(previousDailyReport(store, 9_000_000, 10)));
         when(dailyEventRepository.findBySeasonIdAndDayBetweenOrderByDayAscIdAsc(9L, 1, 2)).thenReturn(List.of());
 
         GameDayStartResponse response = gameDayStartService.startDay(mock(Authentication.class));
@@ -408,7 +452,7 @@ class GameDayStartServiceTests {
                 traffic(store.getLocation(), LocalDateTime.of(2026, 3, 9, 10, 0), TrafficStatus.NORMAL),
                 traffic(store.getLocation(), LocalDateTime.of(2026, 3, 10, 10, 0), TrafficStatus.NORMAL)
         ));
-        when(dailyReportRepository.findByStoreIdAndDay(15L, 1))
+        when(dailyReportRepository.findFirstByStore_IdAndDayLessThanOrderByDayDesc(15L, 2))
                 .thenReturn(Optional.of(previousDailyReport(store, 9_000_000, 10)));
         when(dailyEventRepository.findBySeasonIdAndDayBetweenOrderByDayAscIdAsc(9L, 1, 2)).thenReturn(List.of());
         GameDayStartResponse response = gameDayStartService.startDay(mock(Authentication.class));
@@ -482,7 +526,8 @@ class GameDayStartServiceTests {
                 traffic(store.getLocation(), LocalDateTime.of(2026, 3, 9, 10, 0), TrafficStatus.NORMAL),
                 traffic(store.getLocation(), LocalDateTime.of(2026, 3, 10, 10, 0), TrafficStatus.NORMAL)
         ));
-        when(dailyReportRepository.findByStoreIdAndDay(15L, 1)).thenReturn(Optional.of(previousDailyReport(store, 9_000_000, 10)));
+        when(dailyReportRepository.findFirstByStore_IdAndDayLessThanOrderByDayDesc(15L, 2))
+                .thenReturn(Optional.of(previousDailyReport(store, 9_000_000, 10)));
         when(newsReportRepository.findFirstBySeason_IdAndDay(9L, 1)).thenReturn(Optional.of(newsReport(
                 store.getSeason(),
                 1,
@@ -543,7 +588,8 @@ class GameDayStartServiceTests {
                 traffic(store.getLocation(), LocalDateTime.of(2026, 3, 9, 10, 0), TrafficStatus.NORMAL),
                 traffic(store.getLocation(), LocalDateTime.of(2026, 3, 10, 10, 0), TrafficStatus.NORMAL)
         ));
-        when(dailyReportRepository.findByStoreIdAndDay(15L, 1)).thenReturn(Optional.of(previousReport));
+        when(dailyReportRepository.findFirstByStore_IdAndDayLessThanOrderByDayDesc(15L, 2))
+                .thenReturn(Optional.of(previousReport));
         when(dailyEventRepository.findBySeasonIdAndDayBetweenOrderByDayAscIdAsc(9L, 1, 2)).thenReturn(List.of());
 
         GameDayStartResponse response = gameDayStartService.startDay(mock(Authentication.class));
@@ -584,7 +630,8 @@ class GameDayStartServiceTests {
                 traffic(store.getLocation(), LocalDateTime.of(2026, 3, 9, 10, 0), TrafficStatus.NORMAL),
                 traffic(store.getLocation(), LocalDateTime.of(2026, 3, 10, 10, 0), TrafficStatus.NORMAL)
         ));
-        when(dailyReportRepository.findByStoreIdAndDay(15L, 1)).thenReturn(Optional.of(previousReport));
+        when(dailyReportRepository.findFirstByStore_IdAndDayLessThanOrderByDayDesc(15L, 2))
+                .thenReturn(Optional.of(previousReport));
         when(dailyEventRepository.findBySeasonIdAndDayBetweenOrderByDayAscIdAsc(9L, 1, 2)).thenReturn(List.of());
 
         GameDayStartResponse response = gameDayStartService.startDay(mock(Authentication.class));

@@ -9,6 +9,7 @@ import com.ssafy.S14P21A205.game.day.state.GameDayLiveState;
 import com.ssafy.S14P21A205.game.day.resolver.NewsRankingResolver;
 import com.ssafy.S14P21A205.game.day.state.repository.GameDayStoreStateRedisRepository;
 import com.ssafy.S14P21A205.game.support.StoreStateCarryOverSupport;
+import com.ssafy.S14P21A205.game.season.entity.DailyReport;
 import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
 import com.ssafy.S14P21A205.game.season.repository.DailyReportRepository;
 import com.ssafy.S14P21A205.game.time.model.SeasonPhase;
@@ -31,6 +32,7 @@ import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -318,7 +320,7 @@ public class OrderServiceImpl implements OrderService {
             return StoreStateCarryOverSupport.resolveInitialBalance(store);
         }
 
-        Integer reportedBalance = dailyReportRepository.findByStoreIdAndDay(store.getId(), day - 1)
+        Integer reportedBalance = findLatestReportBefore(store.getId(), day)
                 .map(report -> report.getBalance() == null ? 0 : report.getBalance())
                 .orElse(null);
         if (reportedBalance != null) {
@@ -345,7 +347,7 @@ public class OrderServiceImpl implements OrderService {
         if (day <= 1) {
             carriedStock = StoreStateCarryOverSupport.resolveInitialStock();
         } else {
-            Integer reportedStock = dailyReportRepository.findByStoreIdAndDay(storeId, day - 1)
+            Integer reportedStock = findLatestReportBefore(storeId, day)
                     .map(report -> report.getStockRemaining() == null ? 0 : report.getStockRemaining())
                     .orElse(null);
             if (reportedStock != null) {
@@ -363,6 +365,14 @@ public class OrderServiceImpl implements OrderService {
 
         return Math.addExact(carriedStock, orderedStock);
     }
+
+    private Optional<DailyReport> findLatestReportBefore(Long storeId, int day) {
+        if (storeId == null || day <= 1) {
+            return Optional.empty();
+        }
+        return dailyReportRepository.findFirstByStore_IdAndDayLessThanOrderByDayDesc(storeId, day);
+    }
+
     private record PricingPolicy(
             int costPrice,
             int minimumSellingPrice,
