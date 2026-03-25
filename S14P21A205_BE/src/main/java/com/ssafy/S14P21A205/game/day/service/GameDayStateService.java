@@ -38,6 +38,7 @@ import java.util.ArrayList;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.List;
@@ -796,7 +797,10 @@ public class GameDayStateService {
             List<Order> emergencyOrders,
             CalculatedGameState calculatedState
     ) {
-        if (store == null || previousState == null || calculatedState == null) {
+        if (store == null
+                || previousState == null
+                || calculatedState == null
+                || !shouldLogTickDebug(previousState, currentTimeline, tick)) {
             return;
         }
 
@@ -897,7 +901,7 @@ public class GameDayStateService {
                 day,
                 seasonTimePoint == null || seasonTimePoint.phase() == null ? "-" : seasonTimePoint.phase().name(),
                 tick,
-                seasonTimePoint == null || seasonTimePoint.gameTime() == null ? "-" : seasonTimePoint.gameTime(),
+                resolveTickDebugGameTime(currentTimeline, tick),
                 eventSummary,
                 actionSummary,
                 calculatedState.tickCustomerCount(),
@@ -907,6 +911,34 @@ public class GameDayStateService {
                 calculatedState.cash(),
                 cashFactors
         );
+    }
+
+    private boolean shouldLogTickDebug(GameDayLiveState previousState, DayWindow currentTimeline, int tick) {
+        if (previousState == null || currentTimeline == null) {
+            return false;
+        }
+
+        int previousTick = previousState.tick() == null ? 0 : previousState.tick();
+        if (tick > previousTick) {
+            return true;
+        }
+
+        if (tick != 0) {
+            return false;
+        }
+
+        LocalDateTime previousCalculatedAt = previousState.lastCalculatedAt();
+        return previousCalculatedAt == null || !previousCalculatedAt.isAfter(currentTimeline.businessStart());
+    }
+
+    private String resolveTickDebugGameTime(DayWindow currentTimeline, int tick) {
+        if (currentTimeline == null || tick < 0) {
+            return "-";
+        }
+
+        LocalDateTime tickBoundary = stockEngine.resolveTickBoundary(currentTimeline, tick);
+        int offsetSeconds = Math.max(0, (int) Duration.between(currentTimeline.businessStart(), tickBoundary).toSeconds());
+        return SEASON_TIMELINE_SERVICE.formatGameTime(offsetSeconds);
     }
 
     private String resolveCurrentTickEventSummary(

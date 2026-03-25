@@ -20,6 +20,7 @@ import com.ssafy.S14P21A205.order.dto.CurrentOrderResponse;
 import com.ssafy.S14P21A205.order.dto.RegularOrderRequest;
 import com.ssafy.S14P21A205.order.dto.RegularOrderResponse;
 import com.ssafy.S14P21A205.order.entity.Order;
+import com.ssafy.S14P21A205.order.entity.OrderType;
 import com.ssafy.S14P21A205.order.repository.OrderRepository;
 import com.ssafy.S14P21A205.shop.entity.ItemCategory;
 import com.ssafy.S14P21A205.shop.entity.Menu;
@@ -79,6 +80,7 @@ public class OrderServiceImpl implements OrderService {
                 menuTrendRank
         );
         Integer stock = resolveStock(store, currentDay);
+        Integer baseSellingPrice = resolveBaseSellingPrice(store, currentDay);
 
         return CurrentOrderResponse.builder()
                 .menuId(Math.toIntExact(menu.getId()))
@@ -86,7 +88,7 @@ public class OrderServiceImpl implements OrderService {
                 .costPrice(pricingPolicy.costPrice())
                 .recommendedPrice(pricingPolicy.recommendedPrice())
                 .maxSellingPrice(pricingPolicy.maxSellingPrice())
-                .sellingPrice(store.getPrice())
+                .sellingPrice(baseSellingPrice)
                 .stock(stock)
                 .build();
     }
@@ -118,7 +120,8 @@ public class OrderServiceImpl implements OrderService {
                 ingredientCostMultiplier,
                 menuTrendRank
         );
-        Integer sellingPrice = resolveSellingPrice(request.price(), sameMenu, store.getPrice(), pricingPolicy);
+        Integer baseSellingPrice = resolveBaseSellingPrice(store, regularOrderDay);
+        Integer sellingPrice = resolveSellingPrice(request.price(), sameMenu, baseSellingPrice, pricingPolicy);
         validateSellingPrice(sellingPrice, pricingPolicy);
         Integer totalCost = Math.multiplyExact(pricingPolicy.costPrice(), request.quantity());
 
@@ -227,6 +230,17 @@ public class OrderServiceImpl implements OrderService {
             return currentStorePrice;
         }
         return pricingPolicy.recommendedPrice();
+    }
+
+    private Integer resolveBaseSellingPrice(Store store, int day) {
+        return orderRepository
+                .findFirstByStore_IdAndOrderedDayLessThanEqualAndOrderTypeAndSalePriceIsNotNullOrderByOrderedDayDescIdDesc(
+                        store.getId(),
+                        day,
+                        OrderType.NORMAL
+                )
+                .map(Order::getSalePrice)
+                .orElseGet(() -> store.getPrice() != null ? store.getPrice() : store.getMenu().getOriginPrice());
     }
 
     private BigDecimal resolveRegularOrderIngredientCostMultiplier(Store store, int day, Menu menu) {
