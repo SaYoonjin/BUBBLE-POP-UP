@@ -1,4 +1,4 @@
-import axios, { type AxiosError } from "axios";
+﻿import axios, { type AxiosError } from "axios";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useOutletContext, useParams } from "react-router-dom";
 import { GAME_EXIT_CODES } from "../api/client";
@@ -1391,13 +1391,15 @@ function PlayPageSession({
     if (!hasLoadedCarryOverRef.current && state.appliedEvents.length > 0) {
       hasLoadedCarryOverRef.current = true;
       const carryOverAlerts: GameAlert[] = state.appliedEvents
-        .filter((ae) => shouldDisplayCarryOverAlert(ae.appliedAt, ae.eventName, ae.newsTitle))
+        .filter((ae) =>
+          shouldDisplayCarryOverAlert(ae.appliedAt, ae.eventName ?? "", ae.newsTitle ?? ""),
+        )
         .map((ae) => {
           const fakeSchedule: EventScheduleItem = {
             time: "10:00",
-            type: ae.eventName,
+            type: ae.eventName ?? "",
             scope: null,
-            newsTitle: ae.newsTitle,
+            newsTitle: ae.newsTitle ?? "",
             populationMultiplier: 1,
             balanceChange: 0,
           };
