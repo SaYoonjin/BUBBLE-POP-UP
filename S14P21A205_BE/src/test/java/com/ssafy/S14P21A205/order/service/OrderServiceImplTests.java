@@ -367,6 +367,36 @@ class OrderServiceImplTests {
         assertThat(orderService.getCurrentOrder(1).stock()).isEqualTo(50);
     }
 
+    @Test
+    void getCurrentOrderDisposesCarryOverStockOnRegularOrderDay() {
+        Store store = store(15L, 1, 3L, 7L, 2_500, 4_000);
+        Menu menu = store.getMenu();
+        ReflectionTestUtils.setField(store.getSeason(), "currentDay", 3);
+        ReflectionTestUtils.setField(store.getSeason(), "startTime", LocalDateTime.of(2026, 3, 17, 9, 52, 0));
+
+        when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
+                .thenReturn(Optional.of(store));
+        when(storeRepository.findBySeason_IdOrderByIdAsc(9L)).thenReturn(List.of(store));
+        when(itemUserRepository.findPurchasedDiscountRateByUserIdAndCategory(1, ItemCategory.INGREDIENT))
+                .thenReturn(Optional.of(BigDecimal.ONE));
+        when(newsRankingResolver.resolveMenuEntryRank(9L, 3, menu)).thenReturn(null);
+        when(eventEffectResolver.resolve(any(), any(Integer.class), any(), any(), any()))
+                .thenReturn(new EventEffectResolver.EventEffect(
+                        0L,
+                        0,
+                        BigDecimal.ONE,
+                        BigDecimal.ONE,
+                        Collections.emptyList(),
+                        Collections.emptyList()
+                ));
+        when(gameDayStoreStateRedisRepository.find(15L, 3)).thenReturn(Optional.empty());
+        when(dailyReportRepository.findFirstByStore_IdAndDayLessThanOrderByDayDesc(15L, 3))
+                .thenReturn(Optional.of(previousDailyReport(store, 2, 150_000, 15)));
+        when(orderRepository.findDailyStartOrder(15L, 3)).thenReturn(Optional.empty());
+
+        assertThat(orderService.getCurrentOrder(1).stock()).isZero();
+    }
+
     private Store store(Long storeId, Integer userId, Long locationId, Long menuId, int originPrice, int currentPrice) {
         User user = new User("order@test.com", "tester");
         ReflectionTestUtils.setField(user, "id", userId);

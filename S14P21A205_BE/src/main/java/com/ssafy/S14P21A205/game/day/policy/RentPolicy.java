@@ -22,6 +22,7 @@ import com.ssafy.S14P21A205.store.entity.Store;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -30,6 +31,7 @@ import org.springframework.stereotype.Component;
 public class RentPolicy {
 
     private static final BigDecimal DECIMAL_ONE = new BigDecimal("1.00");
+    private static final Set<Integer> REGULAR_ORDER_DAYS = Set.of(1, 3, 5, 7);
     private final DailyReportRepository dailyReportRepository;
     private final DailyEventRepository dailyEventRepository;
     private final GameDayStoreStateRedisRepository gameDayStoreStateRedisRepository;
@@ -92,10 +94,11 @@ public class RentPolicy {
                 && store.getMenu() != null
                 && store.getMenu().getMenuName() != null
                 && !previousMenuName.equals(store.getMenu().getMenuName());
-        // Menu changes discard carried stock, but disposal no longer reduces cash.
-        int disposalQuantity = menuChanged ? carriedStock : 0;
+        boolean discardCarryOverStock = menuChanged || REGULAR_ORDER_DAYS.contains(day);
+        // Disposed stock is removed from opening inventory, but no longer reduces cash.
+        int disposalQuantity = discardCarryOverStock ? carriedStock : 0;
         int disposalLoss = 0;
-        int openingAgedStock = menuChanged ? 0 : carriedStock;
+        int openingAgedStock = discardCarryOverStock ? 0 : carriedStock;
         int openingFreshStock = regularOrderQuantity;
         int fixedCostTotal = Math.addExact(interiorCost, regularOrderCost);
         int initialBalance = carriedBalance - fixedCostTotal;
