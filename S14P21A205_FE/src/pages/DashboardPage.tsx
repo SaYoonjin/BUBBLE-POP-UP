@@ -4,7 +4,16 @@ import { getCurrentSeasonTopRankings, getGameWaitingStatus, getSeasonTime, type 
 import { getShopItems, type ShopItemResponse } from "../api/shop";
 import { getStore } from "../api/store";
 import { getUserPoints } from "../api/user";
-import { phaseToRoute, type SeasonPhase } from "../constants/gameTime";
+import {
+  BUSINESS_SECONDS,
+  DAY_SECONDS,
+  NEXT_SEASON_WAIT_SECONDS,
+  REPORT_SECONDS,
+  SEASON_SUMMARY_SECONDS,
+  TOTAL_DAYS,
+  phaseToRoute,
+  type SeasonPhase,
+} from "../constants/gameTime";
 import AnimatedNumber from "../components/common/AnimatedNumber";
 import AppHeader from "../components/common/AppHeader";
 import BankruptWarning from "../components/common/BankruptWarning";
@@ -47,13 +56,7 @@ const dashBubbles = [
   },
 ];
 
-const TOTAL_DAYS = 7;
-const PREP_SECONDS = 50;
-const BUSINESS_SECONDS = 120;
-const REPORT_SECONDS = 10;
-const DAY_SECONDS = PREP_SECONDS + BUSINESS_SECONDS + REPORT_SECONDS;
-const SUMMARY_SECONDS = 120;
-const NEXT_SEASON_WAIT_SECONDS = 300;
+const SUMMARY_SECONDS = SEASON_SUMMARY_SECONDS;
 const SEASON_POLLING_INTERVAL_MS = 1000;
 
 const SHOP_ITEM_UI_BY_ID: Partial<
