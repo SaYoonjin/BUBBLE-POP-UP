@@ -6,6 +6,8 @@ import com.ssafy.S14P21A205.action.repository.ActionLogRepository;
 import com.ssafy.S14P21A205.game.day.dto.GameDayStartResponse;
 import com.ssafy.S14P21A205.exception.BaseException;
 import com.ssafy.S14P21A205.exception.ErrorCode;
+import com.ssafy.S14P21A205.game.day.debug.TickDebugActionNote;
+import com.ssafy.S14P21A205.game.day.dto.GameDayStartResponse;
 import com.ssafy.S14P21A205.game.day.dto.GameStateResponse;
 import com.ssafy.S14P21A205.game.day.engine.EmergencyOrderEngine;
 import com.ssafy.S14P21A205.game.day.engine.StockEngine;
@@ -168,6 +170,18 @@ public class GameDayStateService {
                 calculatedState.liveState().cumulativeCustomerCount(),
                 calculatedState.cash(),
                 calculatedState.totalStock()
+        );
+        logTickDebug(
+                store,
+                state,
+                seasonTimePoint,
+                day,
+                currentTimeline,
+                effectiveNow,
+                tick,
+                regionStoreCount,
+                emergencyOrders,
+                calculatedState
         );
         TrafficDelayResolver.ResolvedTraffic resolvedTraffic = trafficDelayResolver.resolve(
                 store.getSeason().getId(),
@@ -371,7 +385,7 @@ public class GameDayStateService {
                 state.cumulativeTotalCost() == null ? 0L : state.cumulativeTotalCost(),
                 state.locationChangeCost() == null ? 0L : state.locationChangeCost(),
                 state.balance() == null ? 0L : state.balance(),
-                state.stock() == null ? initialStockOf(state) : state.stock(),
+                normalizeStock(state.stock() == null ? initialStockOf(state) : state.stock()),
                 lastCalculatedAt
         );
     }
@@ -454,6 +468,7 @@ public class GameDayStateService {
                 progressionState.currentCustomerScore().rValue(),
                 emergencyOrderState,
                 eventEffect.appliedEvents(),
+                eventEffect,
                 progressionState.currentMenu(),
                 new GameDayLiveState(
                         state.startedAt(),
@@ -501,7 +516,7 @@ public class GameDayStateService {
         int cumulativeCustomerCount = state.cumulativeCustomerCount() == null ? 0 : state.cumulativeCustomerCount();
         int cumulativePurchaseCount = state.cumulativePurchaseCount() == null ? 0 : state.cumulativePurchaseCount();
         long cumulativeSales = state.cumulativeSales() == null ? 0L : state.cumulativeSales();
-        int stock = state.stock() == null ? initialStockOf(state) : state.stock();
+        int stock = normalizeStock(state.stock() == null ? initialStockOf(state) : state.stock());
         PopulationPolicy.PopulationSnapshot currentPopulationSnapshot = PopulationPolicy.PopulationSnapshot.empty();
         CustomerScorePolicy.CustomerScoreResult currentCustomerScore = CustomerScorePolicy.CustomerScoreResult.empty();
         int salePrice = state.salePrice() == null ? 0 : state.salePrice();
@@ -737,9 +752,15 @@ public class GameDayStateService {
     }
 
     private int initialStockOf(GameDayLiveState state) {
-        return state.startResponse() == null || state.startResponse().initialStock() == null
-                ? 0
-                : state.startResponse().initialStock();
+        return normalizeStock(
+                state.startResponse() == null || state.startResponse().initialStock() == null
+                        ? 0
+                        : state.startResponse().initialStock()
+        );
+    }
+
+    private int normalizeStock(Integer value) {
+        return value == null ? 0 : Math.max(0, value);
     }
 
     private List<GameDayStartResponse.EventSchedule> resolveTodayEventSchedule(GameDayLiveState state) {
@@ -761,6 +782,282 @@ public class GameDayStateService {
         return left.isBefore(right) ? left : right;
     }
 
+    private void logTickDebug(
+            Store store,
+            GameDayLiveState previousState,
+            SeasonTimePoint seasonTimePoint,
+            int day,
+            DayWindow currentTimeline,
+            LocalDateTime effectiveNow,
+            int tick,
+            int regionStoreCount,
+            List<Order> emergencyOrders,
+            CalculatedGameState calculatedState
+    ) {
+        if (store == null || previousState == null || calculatedState == null) {
+            return;
+        }
+
+        List<TickDebugActionNote> actionNotes = Optional.ofNullable(
+                        gameDayStoreStateRedisRepository.findTickDebugActionNotes(store.getId(), day, tick)
+                )
+                .orElse(List.of());
+        String eventSummary = resolveCurrentTickEventSummary(previousState.lastCalculatedAt(), effectiveNow, calculatedState.appliedEvents());
+        String actionSummary = resolveCurrentTickActionSummary(actionNotes);
+
+        GameDayStartResponse.HourlySchedule currentSchedule = resolveCurrentHourlySchedule(
+                previousState.startResponse(),
+                currentTimeline,
+                effectiveNow
+        );
+
+        long previousCash = previousState.balance() != null
+                ? previousState.balance()
+                : previousState.startResponse() == null || previousState.startResponse().initialBalance() == null
+                ? 0L
+                : previousState.startResponse().initialBalance().longValue();
+        int previousStock = normalizeStock(
+                previousState.stock() != null
+                        ? previousState.stock()
+                        : initialStockOf(previousState)
+        );
+
+        int emergencyArrivedQuantity = resolveEmergencyArrivedQuantity(previousState.lastCalculatedAt(), effectiveNow, emergencyOrders);
+        int regularOrderQuantity = tick == 0 && previousState.startResponse() != null && previousState.startResponse().openingSummary() != null
+                && previousState.startResponse().openingSummary().regularOrderQuantity() != null
+                ? previousState.startResponse().openingSummary().regularOrderQuantity()
+                : 0;
+        int disposalQuantity = tick == 0 && previousState.startResponse() != null && previousState.startResponse().openingSummary() != null
+                && previousState.startResponse().openingSummary().disposalQuantity() != null
+                ? previousState.startResponse().openingSummary().disposalQuantity()
+                : 0;
+
+        long promotionCost = sumPromotionCost(actionNotes);
+        long discountCost = sumDiscountCost(actionNotes);
+        long emergencyOrderCost = sumEmergencyOrderCost(actionNotes);
+        long donationCost = sumDonationCost(actionNotes);
+        long moveCost = sumMoveCost(actionNotes);
+        int donationStockDelta = sumDonationStockDelta(actionNotes);
+
+        String customerFactors = joinFactors(
+                "기본 유동인구=%d".formatted(calculatedState.baseFloatingPopulation()),
+                "날씨 배수=%s".formatted(normalizeScale(previousState.startResponse() == null
+                        ? BigDecimal.ONE
+                        : previousState.startResponse().weatherMultiplier())),
+                "교통 배수=%s".formatted(normalizeScale(currentSchedule == null ? BigDecimal.ONE : currentSchedule.trafficMultiplier())),
+                "이벤트 배수=%s".formatted(normalizeScale(resolveEventMultiplier(currentSchedule, calculatedState.currentEventEffect()))),
+                "지역 점포 나눗값=%d".formatted(Math.max(1, Math.min(regionStoreCount, 5))),
+                "캡처율=%s".formatted(normalizeScale(resolveLiveCaptureRate(previousState))),
+                "최종 반올림 결과=%d".formatted(calculatedState.tickCustomerCount())
+        );
+        String stockFactors = joinFactors(
+                "직전 재고=%d".formatted(previousStock),
+                "이번 틱 판매량=%d".formatted(-Math.max(0, calculatedState.liveState().tickPurchaseCount() == null
+                        ? 0
+                        : calculatedState.liveState().tickPurchaseCount())),
+                "긴급발주 도착=%d".formatted(emergencyArrivedQuantity),
+                "정규발주 반영=%d".formatted(regularOrderQuantity),
+                "나눔 차감=%d".formatted(-Math.max(0, donationStockDelta)),
+                "폐기 차감=%d".formatted(-Math.max(0, disposalQuantity))
+        );
+        String cashFactors = joinFactors(
+                "직전 잔액=%d".formatted(previousCash),
+                "이번 틱 판매금액=%+d".formatted(calculatedState.liveState().tickSales() == null ? 0L : calculatedState.liveState().tickSales()),
+                "홍보 비용=%d".formatted(-promotionCost),
+                "할인 비용=%d".formatted(-discountCost),
+                "긴급발주 비용=%d".formatted(-emergencyOrderCost),
+                "나눔 비용=%d".formatted(-donationCost),
+                "이동 비용=%d".formatted(-moveCost)
+        );
+
+        log.info(
+                "\n================ 틱 디버그 ================\n"
+                        + "현재 day     : {}\n"
+                        + "현재 phase   : {}\n"
+                        + "현재 tick    : {}\n"
+                        + "게임 시간    : {}\n"
+                        + "\n"
+                        + "이번 틱 이벤트 : {}\n"
+                        + "이번 틱 액션   : {}\n"
+                        + "\n"
+                        + "손님\n"
+                        + "- 최종값      : {}명\n"
+                        + "- 영향요소    : {}\n"
+                        + "\n"
+                        + "재고\n"
+                        + "- 최종값      : {}개\n"
+                        + "- 영향요소    : {}\n"
+                        + "\n"
+                        + "잔액\n"
+                        + "- 최종값      : {}원\n"
+                        + "- 영향요소    : {}\n"
+                        + "==========================================",
+                day,
+                seasonTimePoint == null || seasonTimePoint.phase() == null ? "-" : seasonTimePoint.phase().name(),
+                tick,
+                seasonTimePoint == null || seasonTimePoint.gameTime() == null ? "-" : seasonTimePoint.gameTime(),
+                eventSummary,
+                actionSummary,
+                calculatedState.tickCustomerCount(),
+                customerFactors,
+                calculatedState.totalStock(),
+                stockFactors,
+                calculatedState.cash(),
+                cashFactors
+        );
+    }
+
+    private String resolveCurrentTickEventSummary(
+            LocalDateTime previousCalculatedAt,
+            LocalDateTime effectiveNow,
+            List<GameStateResponse.AppliedEvent> appliedEvents
+    ) {
+        if (appliedEvents == null || appliedEvents.isEmpty()) {
+            return "없음";
+        }
+        List<String> currentTickEvents = appliedEvents.stream()
+                .filter(event -> event != null && event.appliedAt() != null)
+                .filter(event -> isWithinRange(previousCalculatedAt, effectiveNow, event.appliedAt()))
+                .map(event -> event.eventName() == null || event.eventName().isBlank() ? event.eventType() : event.eventName())
+                .distinct()
+                .toList();
+        return currentTickEvents.isEmpty() ? "없음" : String.join(", ", currentTickEvents);
+    }
+
+    private String resolveCurrentTickActionSummary(List<TickDebugActionNote> actionNotes) {
+        if (actionNotes == null || actionNotes.isEmpty()) {
+            return "없음";
+        }
+        List<String> labels = actionNotes.stream()
+                .filter(note -> note != null && note.actionLabel() != null && !note.actionLabel().isBlank())
+                .map(TickDebugActionNote::actionLabel)
+                .distinct()
+                .toList();
+        return labels.isEmpty() ? "없음" : String.join(", ", labels);
+    }
+
+    private GameDayStartResponse.HourlySchedule resolveCurrentHourlySchedule(
+            GameDayStartResponse startResponse,
+            DayWindow currentTimeline,
+            LocalDateTime effectiveNow
+    ) {
+        if (startResponse == null || startResponse.hourlySchedule() == null || startResponse.hourlySchedule().isEmpty()) {
+            return null;
+        }
+
+        if (!effectiveNow.isAfter(currentTimeline.businessStart()) || !effectiveNow.isBefore(currentTimeline.businessEnd())) {
+            return startResponse.hourlySchedule().values().stream().findFirst().orElse(null);
+        }
+
+        List<GameDayStartResponse.HourlySchedule> schedules = new ArrayList<>(startResponse.hourlySchedule().values());
+        long totalMillis = SEASON_TIMELINE_SERVICE.businessDuration().toMillis();
+        long elapsedMillis = java.time.Duration.between(currentTimeline.businessStart(), effectiveNow).toMillis();
+        long boundedElapsedMillis = Math.max(0L, Math.min(elapsedMillis, totalMillis));
+        int scheduleIndex = (int) Math.min(
+                schedules.size() - 1L,
+                (boundedElapsedMillis * schedules.size()) / totalMillis
+        );
+        return schedules.get(scheduleIndex);
+    }
+
+    private BigDecimal resolveEventMultiplier(
+            GameDayStartResponse.HourlySchedule currentSchedule,
+            EventEffectResolver.EventEffect currentEventEffect
+    ) {
+        BigDecimal scheduleMultiplier = currentSchedule == null || currentSchedule.eventMultiplier() == null
+                ? BigDecimal.ONE
+                : currentSchedule.eventMultiplier();
+        BigDecimal eventMultiplier = currentEventEffect == null || currentEventEffect.populationEventMultiplier() == null
+                ? BigDecimal.ONE
+                : currentEventEffect.populationEventMultiplier();
+        return normalizeScale(scheduleMultiplier.multiply(eventMultiplier));
+    }
+
+    private int resolveEmergencyArrivedQuantity(
+            LocalDateTime previousCalculatedAt,
+            LocalDateTime effectiveNow,
+            List<Order> emergencyOrders
+    ) {
+        if (emergencyOrders == null || emergencyOrders.isEmpty()) {
+            return 0;
+        }
+        return emergencyOrders.stream()
+                .filter(order -> order != null && order.getArrivedTime() != null)
+                .filter(order -> isWithinRange(previousCalculatedAt, effectiveNow, order.getArrivedTime()))
+                .mapToInt(order -> order.getQuantity() == null ? 0 : order.getQuantity())
+                .sum();
+    }
+
+    private boolean isWithinRange(LocalDateTime previousCalculatedAt, LocalDateTime effectiveNow, LocalDateTime targetTime) {
+        if (targetTime == null || effectiveNow == null) {
+            return false;
+        }
+        if (previousCalculatedAt == null) {
+            return !targetTime.isAfter(effectiveNow);
+        }
+        return targetTime.isAfter(previousCalculatedAt) && !targetTime.isAfter(effectiveNow);
+    }
+
+    private long sumPromotionCost(List<TickDebugActionNote> actionNotes) {
+        return sumLong(actionNotes, TickDebugActionNote::promotionCost);
+    }
+
+    private long sumDiscountCost(List<TickDebugActionNote> actionNotes) {
+        return sumLong(actionNotes, TickDebugActionNote::discountCost);
+    }
+
+    private long sumEmergencyOrderCost(List<TickDebugActionNote> actionNotes) {
+        return sumLong(actionNotes, TickDebugActionNote::emergencyOrderCost);
+    }
+
+    private long sumDonationCost(List<TickDebugActionNote> actionNotes) {
+        return sumLong(actionNotes, TickDebugActionNote::donationCost);
+    }
+
+    private long sumMoveCost(List<TickDebugActionNote> actionNotes) {
+        return sumLong(actionNotes, TickDebugActionNote::moveCost);
+    }
+
+    private int sumDonationStockDelta(List<TickDebugActionNote> actionNotes) {
+        if (actionNotes == null || actionNotes.isEmpty()) {
+            return 0;
+        }
+        return actionNotes.stream()
+                .filter(note -> note != null && note.donationStockDelta() != null)
+                .mapToInt(TickDebugActionNote::donationStockDelta)
+                .sum();
+    }
+
+    private long sumLong(List<TickDebugActionNote> actionNotes, java.util.function.Function<TickDebugActionNote, Long> extractor) {
+        if (actionNotes == null || actionNotes.isEmpty()) {
+            return 0L;
+        }
+        return actionNotes.stream()
+                .filter(note -> note != null)
+                .map(extractor)
+                .filter(value -> value != null)
+                .mapToLong(Long::longValue)
+                .sum();
+    }
+
+    private String joinFactors(String... factors) {
+        List<String> values = new ArrayList<>();
+        for (String factor : factors) {
+            if (factor == null || factor.isBlank()) {
+                continue;
+            }
+            values.add(factor);
+        }
+        return values.isEmpty() ? "-" : String.join(" / ", values);
+    }
+
+    private BigDecimal normalizeScale(BigDecimal value) {
+        if (value == null) {
+            return BigDecimal.ONE.setScale(2, RoundingMode.HALF_UP);
+        }
+        return value.setScale(2, RoundingMode.HALF_UP);
+    }
+
     private record EmergencyOrderState(
             boolean pending,
             LocalDateTime arriveAt
@@ -779,6 +1076,7 @@ public class GameDayStateService {
             BigDecimal rValue,
             EmergencyOrderState emergencyOrderState,
             List<GameStateResponse.AppliedEvent> appliedEvents,
+            EventEffectResolver.EventEffect currentEventEffect,
             Menu currentMenu,
             GameDayLiveState liveState
     ) {

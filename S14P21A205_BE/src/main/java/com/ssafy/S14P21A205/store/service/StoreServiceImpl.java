@@ -2,6 +2,7 @@ package com.ssafy.S14P21A205.store.service;
 
 import com.ssafy.S14P21A205.exception.BaseException;
 import com.ssafy.S14P21A205.exception.ErrorCode;
+import com.ssafy.S14P21A205.game.day.debug.TickDebugActionNote;
 import com.ssafy.S14P21A205.game.day.policy.StoreRankingPolicy;
 import com.ssafy.S14P21A205.game.day.resolver.EventEffectResolver;
 import com.ssafy.S14P21A205.game.day.resolver.NewsRankingResolver;
@@ -92,6 +93,20 @@ public class StoreServiceImpl implements StoreService {
         Integer updatedBalance = deductBalance(storeId, currentDay, location.getInteriorCost());
         recordLocationChangeCost(storeId, currentDay, location.getInteriorCost());
         store.reserveLocationChange(location, currentDay + 1);
+        gameDayStoreStateRedisRepository.appendTickDebugActionNote(
+                storeId,
+                currentDay,
+                resolveDebugTick(store, now),
+                new TickDebugActionNote(
+                        "이동(%s)".formatted(location.getLocationName()),
+                        0L,
+                        0L,
+                        0L,
+                        0L,
+                        location.getInteriorCost() == null ? 0L : location.getInteriorCost().longValue(),
+                        0
+                )
+        );
 
         return new UpdateStoreLocationResponse(
                 location.getId(),
@@ -178,6 +193,18 @@ public class StoreServiceImpl implements StoreService {
     private BigDecimal getDisplayedIngredientDiscountRate(Integer userId) {
         return itemUserRepository.findPurchasedDiscountRateByUserIdAndCategory(userId, ItemCategory.INGREDIENT)
                 .orElse(BigDecimal.ONE);
+    }
+
+    private Integer resolveDebugTick(Store store, LocalDateTime recordedAt) {
+        if (store == null || store.getSeason() == null || recordedAt == null) {
+            return 0;
+        }
+        try {
+            Integer tick = seasonTimelineService.resolve(store.getSeason(), recordedAt).tick();
+            return tick == null ? 0 : Math.max(0, tick);
+        } catch (Exception e) {
+            return 0;
+        }
     }
 
     private int resolveIngredientPrice(
