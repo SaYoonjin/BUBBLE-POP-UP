@@ -14,6 +14,8 @@ import NewsPage from "../pages/NewsPage";
 import CozyPrepPage from "../pages/CozyPrepPage";
 import WaitingPage from "../pages/WaitingPage";
 import AuthCallbackPage from "../pages/AuthCallbackPage";
+import ForbiddenPage from "../pages/ForbiddenPage";
+import NotFoundPage from "../pages/NotFoundPage";
 
 const router = createBrowserRouter([
   { path: "/", element: <HomePage /> },
@@ -21,6 +23,7 @@ const router = createBrowserRouter([
   { path: "/auth/callback", element: <AuthCallbackPage /> },
   { path: "/news", element: <NewsPage /> },
   { path: "/cozy/prep", element: <CozyPrepPage /> },
+  { path: "/403", element: <ForbiddenPage /> },
   {
     element: <PrivateRoute />,
     children: [
@@ -42,6 +45,7 @@ const router = createBrowserRouter([
       },
     ],
   },
+  { path: "*", element: <NotFoundPage /> },
 ]);
 
 export default router;
