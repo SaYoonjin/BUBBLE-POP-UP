@@ -532,7 +532,15 @@ function PlayPageSession({
   const nickname = useUserStore((s) => s.nickname) ?? "버블티";
   const { brandName } = useBrandName();
   const [activeModal, setActiveModal] = useState<ActionType | null>(null);
-  const [usedActions, setUsedActions] = useState<Set<ActionType>>(new Set());
+  const [serverUsedActions, setServerUsedActions] = useState<Set<ActionType>>(new Set());
+  const [optimisticUsedActions, setOptimisticUsedActions] = useState<Set<ActionType>>(new Set());
+  const usedActions = useMemo(() => {
+    const merged = new Set<ActionType>(serverUsedActions);
+    for (const action of optimisticUsedActions) {
+      merged.add(action);
+    }
+    return merged;
+  }, [serverUsedActions, optimisticUsedActions]);
   const [activeEffects, setActiveEffects] = useState<Set<ActionType>>(new Set());
   const [alerts, setAlerts] = useState<GameAlert[]>([]);
   const [eventSchedule, setEventSchedule] = useState<EventScheduleItem[]>([]);
@@ -591,7 +599,7 @@ function PlayPageSession({
   const discountMinimumPrice = currentOrder?.costPrice ?? discountCurrentPrice;
 
   const syncActionUsageState = (action: ActionType, isUsed: boolean) => {
-    setUsedActions((prev) => {
+    setServerUsedActions((prev) => {
       const next = new Set(prev);
 
       if (isUsed) {
@@ -1059,6 +1067,8 @@ function PlayPageSession({
         return;
       }
 
+      setOptimisticUsedActions(new Set());
+
       if (stateResult.status === "fulfilled") {
         applyGameState(stateResult.value);
       } else {
@@ -1083,6 +1093,7 @@ function PlayPageSession({
         syncPromotionActionState(false);
         syncShareActionState(false);
         syncEmergencyActionState(false);
+        setOptimisticUsedActions(new Set());
       }
 
       if (orderResult.status === "fulfilled") {
@@ -1428,7 +1439,7 @@ function PlayPageSession({
       };
     },
   ) => {
-    setUsedActions((prev) => new Set(prev).add(action));
+    setOptimisticUsedActions((prev) => new Set(prev).add(action));
 
     if (persistentActionTypes.has(action)) {
       setActiveEffects((prev) => new Set(prev).add(action));
