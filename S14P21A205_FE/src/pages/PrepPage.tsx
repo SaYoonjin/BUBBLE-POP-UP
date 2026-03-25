@@ -557,6 +557,16 @@ export default function PrepPage() {
     return () => clearTimeout(timer);
   }, [isRegularOrderRouteDay, regularOrderStatus, prepEndTimestampMs]);
 
+  // 토스트 5초 후 자동 숨김
+  useEffect(() => {
+    if (!showOrderReminder) {
+      return;
+    }
+
+    const dismissTimer = setTimeout(() => setShowOrderReminder(false), 5_000);
+    return () => clearTimeout(dismissTimer);
+  }, [showOrderReminder]);
+
   const handleRegularOrderSubmit = async () => {
     if (!canSubmitRegularOrder) {
       return;
@@ -609,10 +619,10 @@ export default function PrepPage() {
       {/* Order reminder toast */}
       {showOrderReminder && (
         <div
-          className="fixed top-4 left-1/2 -translate-x-1/2 z-50 w-[90%] max-w-md cursor-pointer animate-[slideIn_0.3s_ease-out]"
+          className="fixed top-4 right-4 z-50 w-[90%] max-w-md cursor-pointer animate-[slideIn_0.3s_ease-out]"
           onClick={() => setTab("prep")}
         >
-          <div className="flex items-center gap-3 p-3 rounded-xl border bg-amber-50 border-amber-200 shadow-lg">
+          <div className="flex items-center gap-3 p-3 rounded-xl bg-amber-50 shadow-lg">
             <span className="material-symbols-outlined text-amber-600 text-xl">warning</span>
             <div className="flex-1 min-w-0">
               <span className="text-sm font-medium text-gray-900">정규 발주를 아직 완료하지 않았습니다!</span>
@@ -765,7 +775,7 @@ export default function PrepPage() {
                       price={price}
                       min={originalCostPrice}
                       max={maxSellingPrice}
-                      step={100}
+                      step={10}
                       originalCostPrice={originalCostPrice}
                       discountedCostPrice={discountedCostPrice}
                       hasItemDiscount={hasItemDiscount}
