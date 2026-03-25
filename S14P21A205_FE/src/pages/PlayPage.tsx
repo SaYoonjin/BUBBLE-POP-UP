@@ -1978,6 +1978,11 @@ function PlayPageSession({
         <RankingSidebar rankings={rankings} />
         <EventSidebar alerts={alerts} />
         <ActionBar onAction={handleAction} usedActions={usedActions} activeEffects={activeEffects} />
+        <div className="absolute bottom-6 left-6 z-10 flex items-center gap-2 rounded-lg bg-black/40 px-3 py-1.5 text-[11px] font-medium text-white/80 backdrop-blur-sm">
+          <span><kbd className="rounded bg-white/20 px-1.5 py-0.5">Space</kbd> 시점 변경</span>
+          <span className="text-white/30">|</span>
+          <span><kbd className="rounded bg-white/20 px-1.5 py-0.5">WASD</kbd> <kbd className="rounded bg-white/20 px-1.5 py-0.5">↑↓←→</kbd> 이동 (탑뷰)</span>
+        </div>
       </main>
 
       {activeModal === "discount" && (
