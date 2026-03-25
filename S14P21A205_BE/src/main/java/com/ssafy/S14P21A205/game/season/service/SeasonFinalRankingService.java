@@ -109,7 +109,7 @@ public class SeasonFinalRankingService {
                             current.totalNetProfit() + valueOf(report.getNetProfit()),
                             current.totalVisitors() + valueOf(report.getVisitors()),
                             current.daysPlayed() + 1,
-                            Boolean.TRUE.equals(report.getIsBankrupt())
+                            current.bankruptcy() || Boolean.TRUE.equals(report.getIsBankrupt())
                     )
             );
         }
