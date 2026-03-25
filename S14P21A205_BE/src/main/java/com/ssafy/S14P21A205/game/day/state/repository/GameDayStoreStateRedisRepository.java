@@ -2,10 +2,12 @@ package com.ssafy.S14P21A205.game.day.state.repository;
 
 import com.ssafy.S14P21A205.exception.BaseException;
 import com.ssafy.S14P21A205.exception.ErrorCode;
+import com.ssafy.S14P21A205.game.day.debug.TickDebugActionNote;
 import com.ssafy.S14P21A205.game.day.dto.GameDayStartResponse;
 import com.ssafy.S14P21A205.game.day.state.GameDayLiveState;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -26,6 +28,7 @@ public class GameDayStoreStateRedisRepository {
     private static final String STATE_KEY_PATTERN = "game:store:%d:day:%d:state";
     private static final String TICK_LOG_KEY_PATTERN = "game:store:%d:day:%d:tick_log";
     private static final String ACTIONS_KEY_PATTERN = "game:store:%d:day:%d:actions";
+    private static final String DEBUG_ACTIONS_KEY_PATTERN = "game:store:%d:day:%d:debug_actions";
     private static final String FIELD_STARTED_AT = "started_at";
     private static final String FIELD_PURCHASE_LIST = "purchase_list";
     private static final String FIELD_PURCHASE_CURSOR = "purchase_cursor";
@@ -172,6 +175,46 @@ public class GameDayStoreStateRedisRepository {
         return ACTIONS_KEY_PATTERN.formatted(storeId, day);
     }
 
+    String buildDebugActionsKey(Long storeId, Integer day) {
+        return DEBUG_ACTIONS_KEY_PATTERN.formatted(storeId, day);
+    }
+
+    public List<TickDebugActionNote> findTickDebugActionNotes(Long storeId, int day, Integer tick) {
+        int resolvedTick = tick == null ? 0 : Math.max(0, tick);
+        Object rawValue = stringRedisTemplate.opsForHash().get(
+                buildDebugActionsKey(storeId, day),
+                String.valueOf(resolvedTick)
+        );
+        if (rawValue == null) {
+            return List.of();
+        }
+
+        try {
+            return objectMapper.readValue(rawValue.toString(), new TypeReference<>() {});
+        } catch (Exception e) {
+            return List.of();
+        }
+    }
+
+    public void appendTickDebugActionNote(Long storeId, int day, Integer tick, TickDebugActionNote note) {
+        if (note == null) {
+            return;
+        }
+
+        int resolvedTick = tick == null ? 0 : Math.max(0, tick);
+        try {
+            List<TickDebugActionNote> notes = new ArrayList<>(findTickDebugActionNotes(storeId, day, resolvedTick));
+            notes.add(note);
+            stringRedisTemplate.opsForHash().put(
+                    buildDebugActionsKey(storeId, day),
+                    String.valueOf(resolvedTick),
+                    objectMapper.writeValueAsString(notes)
+            );
+        } catch (Exception e) {
+            throw new BaseException(ErrorCode.INTERNAL_SERVER_ERROR, e);
+        }
+    }
+
     private void saveTickLog(Long storeId, Integer day, GameDayLiveState state) {
         if (state.tick() == null || state.tick() <= 0) {
             return;
@@ -211,7 +254,7 @@ public class GameDayStoreStateRedisRepository {
         put(entries, FIELD_CUMULATIVE_TOTAL_COST, state.cumulativeTotalCost());
         put(entries, FIELD_LOCATION_CHANGE_COST, state.locationChangeCost());
         put(entries, FIELD_BALANCE, state.balance());
-        put(entries, FIELD_STOCK, state.stock());
+        put(entries, FIELD_STOCK, normalizeStock(state.stock()));
         put(entries, FIELD_LAST_CALCULATED_AT, state.lastCalculatedAt());
         return entries;
     }
@@ -233,8 +276,12 @@ public class GameDayStoreStateRedisRepository {
         put(entries, prefix + "cumulative_total_cost", state.cumulativeTotalCost());
         put(entries, prefix + "location_change_cost", state.locationChangeCost());
         put(entries, prefix + "balance", state.balance());
-        put(entries, prefix + "stock", state.stock());
+        put(entries, prefix + "stock", normalizeStock(state.stock()));
         return entries;
+    }
+
+    private Integer normalizeStock(Integer value) {
+        return value == null ? null : Math.max(0, value);
     }
 
     private void put(Map<String, String> entries, String field, Object value) {

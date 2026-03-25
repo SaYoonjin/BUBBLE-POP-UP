@@ -28,6 +28,7 @@ import com.ssafy.S14P21A205.game.environment.repository.WeatherDayRedisRepositor
 import com.ssafy.S14P21A205.game.environment.repository.WeatherLocationRepository;
 import com.ssafy.S14P21A205.game.environment.repository.WeatherRepository;
 import com.ssafy.S14P21A205.game.event.entity.DailyEvent;
+import com.ssafy.S14P21A205.game.event.entity.EventCategory;
 import com.ssafy.S14P21A205.game.event.entity.RandomEvent;
 import com.ssafy.S14P21A205.game.event.repository.DailyEventRepository;
 import com.ssafy.S14P21A205.game.event.repository.RandomEventRepository;
@@ -255,6 +256,16 @@ class SeasonLifecycleServiceTests {
         assertThat(savedEvents).hasSize(13);
         assertThat(eventCategories).hasSize(13);
         assertThat(eventCategories.stream().distinct().count()).isLessThan((long) eventCategories.size());
+        List<DailyEvent> locationScopedEvents = savedEvents.stream()
+                .filter(dailyEvent -> switch (dailyEvent.getEvent().getEventCategory()) {
+                    case CELEBRITY_APPEARANCE, EARTHQUAKE, FLOOD, TYPHOON, FIRE -> true;
+                    default -> false;
+                })
+                .toList();
+        assertThat(locationScopedEvents).isNotEmpty();
+        assertThat(locationScopedEvents)
+                .extracting(DailyEvent::getTargetLocationId)
+                .containsOnly(3L);
         assertThat(savedEvents.stream()
                 .filter(dailyEvent -> dailyEvent.getDay() == 6)
                 .map(dailyEvent -> dailyEvent.getEvent().getEventCategory())

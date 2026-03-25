@@ -2,6 +2,7 @@ package com.ssafy.S14P21A205.order.service;
 
 import com.ssafy.S14P21A205.exception.BaseException;
 import com.ssafy.S14P21A205.exception.ErrorCode;
+import com.ssafy.S14P21A205.game.day.debug.TickDebugActionNote;
 import com.ssafy.S14P21A205.game.day.policy.StoreRankingPolicy;
 import com.ssafy.S14P21A205.game.day.resolver.EventEffectResolver;
 import com.ssafy.S14P21A205.game.day.service.GameDayStartService;
@@ -135,6 +136,20 @@ public class OrderServiceImpl implements OrderService {
                 Order.create(menu, store, request.quantity(), totalCost, sellingPrice, regularOrderDay)
         );
         gameDayStartService.synchronizeCurrentDayState(store, now, seasonTimePoint);
+        gameDayStoreStateRedisRepository.appendTickDebugActionNote(
+                storeId,
+                regularOrderDay,
+                resolveDebugTick(seasonTimePoint),
+                new TickDebugActionNote(
+                        "정규발주(%d개)".formatted(request.quantity()),
+                        0L,
+                        0L,
+                        0L,
+                        0L,
+                        0L,
+                        0
+                )
+        );
 
         return RegularOrderResponse.builder()
                 .orderId(savedOrder.getId())
@@ -267,6 +282,13 @@ public class OrderServiceImpl implements OrderService {
         return currentDay;
     }
 
+    private Integer resolveDebugTick(SeasonTimePoint seasonTimePoint) {
+        if (seasonTimePoint == null || seasonTimePoint.tick() == null) {
+            return 0;
+        }
+        return Math.max(0, seasonTimePoint.tick());
+    }
+
     private SeasonTimePoint resolveSeasonTimePoint(Store store) {
         return seasonTimelineService.resolve(store.getSeason(), LocalDateTime.now(clock));
     }
@@ -338,32 +360,37 @@ public class OrderServiceImpl implements OrderService {
 
     private Integer resolveStock(Long storeId, int day) {
         return gameDayStoreStateRedisRepository.find(storeId, day)
-                .map(state -> state.stock() == null ? 0 : state.stock())
+                .map(state -> normalizeStock(state.stock()))
                 .orElseGet(() -> resolveStartingStock(storeId, day));
     }
 
     private Integer resolveStartingStock(Long storeId, int day) {
         int carriedStock;
         if (day <= 1) {
-            carriedStock = StoreStateCarryOverSupport.resolveInitialStock();
+            carriedStock = normalizeStock(StoreStateCarryOverSupport.resolveInitialStock());
         } else {
             Integer reportedStock = findLatestReportBefore(storeId, day)
-                    .map(report -> report.getStockRemaining() == null ? 0 : report.getStockRemaining())
+                    .map(report -> normalizeStock(report.getStockRemaining()))
                     .orElse(null);
             if (reportedStock != null) {
                 carriedStock = reportedStock;
             } else {
                 carriedStock = gameDayStoreStateRedisRepository.find(storeId, day - 1)
-                        .map(state -> state.stock() == null ? 0 : state.stock())
-                        .orElse(StoreStateCarryOverSupport.resolveInitialStock());
+                        .map(state -> normalizeStock(state.stock()))
+                        .orElse(normalizeStock(StoreStateCarryOverSupport.resolveInitialStock()));
             }
         }
 
         int orderedStock = orderRepository.findDailyStartOrder(storeId, day)
                 .map(Order::getQuantity)
+                .map(this::normalizeStock)
                 .orElse(0);
 
-        return Math.addExact(carriedStock, orderedStock);
+        return normalizeStock(Math.addExact(carriedStock, orderedStock));
+    }
+
+    private int normalizeStock(Integer value) {
+        return value == null ? 0 : Math.max(0, value);
     }
 
     private Optional<DailyReport> findLatestReportBefore(Long storeId, int day) {

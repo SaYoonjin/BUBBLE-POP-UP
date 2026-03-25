@@ -167,6 +167,8 @@ public class GameDayReportService {
                 ? store.getLocation().getLocationName()
                 : reportLocation.getLocationName();
 
+        int stockRemaining = normalizeStock(state.stock());
+
         dailyReportRepository.save(DailyReport.create(
                 store,
                 day,
@@ -177,7 +179,7 @@ public class GameDayReportService {
                 safeToInt(profitResult.netProfit()),
                 defaultInt(state.cumulativeCustomerCount()),
                 defaultInt(state.cumulativePurchaseCount()),
-                defaultInt(state.stock()),
+                stockRemaining,
                 deficitBankruptcyResult.consecutiveDeficitDays(),
                 isBankrupt,
                 safeToInt(reportBalance),
@@ -191,6 +193,12 @@ public class GameDayReportService {
                 day,
                 "cumulative_total_cost",
                 String.valueOf(finalTotalCost)
+        );
+        gameDayStoreStateRedisRepository.updateField(
+                store.getId(),
+                day,
+                "stock",
+                String.valueOf(stockRemaining)
         );
         if (isBankrupt) {
             shopService.resetPurchasedItems(store.getUser().getId());
@@ -210,7 +218,7 @@ public class GameDayReportService {
                 .orElseThrow(() -> new BaseException(ErrorCode.REPORT_NOT_FOUND));
         List<DailyReport> storeReports = dailyReportRepository.findByStore_IdOrderByDayAsc(store.getId());
 
-        int stockRemaining = defaultInt(report.getStockRemaining());
+        int stockRemaining = normalizeStock(report.getStockRemaining());
         int stockDisposed = STOCK_DISPOSED_COUNT;
         boolean nextDayIsOrderDay = Boolean.TRUE.equals(
                 resolveIsNextDayOrderDay(report.getDay(), store.getSeason().getTotalDays()));
@@ -463,6 +471,10 @@ public class GameDayReportService {
 
     private int defaultInt(Integer value) {
         return value == null ? 0 : value;
+    }
+
+    private int normalizeStock(Integer value) {
+        return value == null ? 0 : Math.max(0, value);
     }
 
     private long valueOf(Integer value) {
