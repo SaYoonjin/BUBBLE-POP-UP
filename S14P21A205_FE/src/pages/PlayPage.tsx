@@ -30,10 +30,10 @@ import {
   getGameDayState,
   getCurrentSeasonTopRankings,
   startGameDay,
-  type AppliedEvent,
   type CustomerPlanByHourItem,
   type GameStateResponse,
   type GameTrafficStatus,
+  type TodayEventScheduleItem,
 } from "../api/game";
 import { getCurrentOrder, type CurrentOrderResponse } from "../api/order";
 import {
@@ -47,6 +47,7 @@ import {
 import { getNewsRanking, type AreaRankingItemResponse } from "../api/news";
 import {
   BUSINESS_CLOSE_HOUR,
+  GAME_BUSINESS_MINUTES,
   BUSINESS_OPEN_HOUR,
   BUSINESS_SECONDS,
   elapsedToGameTime,
@@ -165,22 +166,38 @@ function isNonEmptyText(value: string | null | undefined): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
 
-function getAppliedEventCandidates(event: AppliedEvent) {
-  return [
-    event.eventCategory,
-    event.eventType,
-    event.eventName,
-    event.newsTitle,
-  ].filter(isNonEmptyText);
+function getTodayEventCandidates(event: TodayEventScheduleItem) {
+  return [event.type, event.newsTitle].filter(isNonEmptyText);
 }
 
-function getAppliedEventTimestampMs(value: string | null | undefined) {
+function parseTodayEventScheduleSeconds(value: string | null | undefined) {
   if (!isNonEmptyText(value)) {
     return null;
   }
 
-  const timestamp = new Date(value).getTime();
-  return Number.isNaN(timestamp) ? null : timestamp;
+  const match = /^(\d{1,2}):(\d{2})$/.exec(value.trim());
+  if (!match) {
+    return null;
+  }
+
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+
+  if (
+    !Number.isInteger(hour) ||
+    !Number.isInteger(minute) ||
+    minute < 0 ||
+    minute >= 60
+  ) {
+    return null;
+  }
+
+  const totalMinutes = (hour - BUSINESS_OPEN_HOUR) * 60 + minute;
+  if (totalMinutes < 0 || totalMinutes > GAME_BUSINESS_MINUTES) {
+    return null;
+  }
+
+  return (totalMinutes * BUSINESS_SECONDS) / GAME_BUSINESS_MINUTES;
 }
 
 function resolveEventTemplate(candidates: string[]) {
@@ -202,26 +219,16 @@ function resolveEventTemplate(candidates: string[]) {
 }
 
 function resolveEventRegionName(
-  event: AppliedEvent,
+  event: TodayEventScheduleItem,
   locationNameById: ReadonlyMap<number, string>,
 ) {
-  const explicitRegionName = [
-    event.targetRegionName,
-    event.regionName,
-    event.locationName,
-  ].find(isNonEmptyText);
-
-  if (explicitRegionName) {
-    return explicitRegionName;
-  }
-
-  const scopedRegionId = event.targetRegionId ?? event.scope?.region ?? null;
+  const scopedRegionId = event.scope?.region ?? null;
 
   if (typeof scopedRegionId === "number") {
     return locationNameById.get(scopedRegionId) ?? null;
   }
 
-  for (const candidate of getAppliedEventCandidates(event)) {
+  for (const candidate of getTodayEventCandidates(event)) {
     const inferredRegionName = [...locationNameById.values()].find((locationName) =>
       candidate.includes(locationName),
     );
@@ -243,9 +250,9 @@ function isGenericFestivalLabel(value: string) {
   return normalized === "FESTIVAL" || normalized === "축제" || normalized === "축제_개최";
 }
 
-function resolveFestivalDisplayName(event: AppliedEvent) {
+function resolveFestivalDisplayName(event: TodayEventScheduleItem) {
   return (
-    [event.newsTitle, event.eventName].find(
+    [event.newsTitle, event.type].find(
       (value) => isNonEmptyText(value) && !isGenericFestivalLabel(value),
     ) ?? null
   );
@@ -264,31 +271,21 @@ function inferFestivalRegionName(festivalName: string | null, fallbackRegionName
   return leadingToken || null;
 }
 
-function resolveAppliedEventKey(event: AppliedEvent) {
-  if (typeof event.eventId === "number") {
-    return `event:${event.eventId}`;
-  }
-
+function resolveTodayEventKey(event: TodayEventScheduleItem) {
   return [
-    event.eventCategory,
-    event.eventType,
-    event.eventName,
+    event.type,
     event.newsTitle,
-    event.targetRegionId,
-    event.targetRegionName,
-    event.regionName,
-    event.locationName,
     event.scope?.region,
     event.scope?.menu,
-    event.appliedAt,
+    event.time,
   ]
     .map((value) => String(value ?? ""))
     .join("|");
 }
 
 /** 악재 이벤트 (재난, 원가 상승, 정책 변경 등) */
-function isBadEvent(event: AppliedEvent): boolean {
-  const candidates = getAppliedEventCandidates(event);
+function isBadEvent(event: TodayEventScheduleItem): boolean {
+  const candidates = getTodayEventCandidates(event);
   const priceEvent = resolvePriceEventDescriptor(candidates);
 
   if (priceEvent?.direction === "UP") {
@@ -399,8 +396,7 @@ Object.assign(EVENT_INFO, {
 });
 
 function getEventInfo(
-  event: AppliedEvent,
-  serverTime: string,
+  event: TodayEventScheduleItem,
   locationNameById: ReadonlyMap<number, string>,
 ): {
   key: string;
@@ -410,17 +406,18 @@ function getEventInfo(
   sortTimestamp: number;
   timeLabel?: string;
 } {
-  const candidates = getAppliedEventCandidates(event);
+  const candidates = getTodayEventCandidates(event);
   const priceEvent = resolvePriceEventDescriptor(candidates);
   const template = resolveEventTemplate(candidates);
   const regionName = resolveEventRegionName(event, locationNameById);
-  const serverTimeMs = getAppliedEventTimestampMs(serverTime) ?? Date.now();
-  const appliedAtMs = getAppliedEventTimestampMs(event.appliedAt);
-  const isScheduled = appliedAtMs !== null && appliedAtMs > serverTimeMs;
+  const scheduledAtSeconds = parseTodayEventScheduleSeconds(event.time);
+  const isScheduled = false;
+  const appliedAtMs = scheduledAtSeconds ?? 0;
+  const serverTimeMs = 0;
   const fallbackTitle = candidates[0] ?? "이벤트";
   let title = template?.title ?? fallbackTitle;
   let description: string;
-  const festivalName = isFestivalAppliedEvent(event) ? resolveFestivalDisplayName(event) : null;
+  const festivalName = isFestivalEvent(event) ? resolveFestivalDisplayName(event) : null;
   const festivalRegionName = inferFestivalRegionName(festivalName, regionName);
 
   if (priceEvent) {
@@ -452,7 +449,7 @@ function getEventInfo(
   }
 
   return {
-    key: resolveAppliedEventKey(event),
+    key: resolveTodayEventKey(event),
     alertType: isBadEvent(event) ? "bad_event" : "event",
     title,
     description,
@@ -653,15 +650,12 @@ const TRAFFIC_STATUS_TO_UNITY_LEVEL: Record<GameTrafficStatus, UnityCongestionLe
   VERY_CONGESTED: 5,
 };
 
+interface QueuedEventAlert extends ReturnType<typeof getEventInfo> {
+  dueElapsedBusinessSeconds: number;
+}
+
 const BUSINESS_HOUR_COUNT = BUSINESS_CLOSE_HOUR - BUSINESS_OPEN_HOUR;
 const BUSINESS_SECONDS_PER_HOUR = BUSINESS_SECONDS / BUSINESS_HOUR_COUNT;
-const EVENT_ALERT_SLOT_HOURS = [14, 18] as const;
-
-type EventAlertSlotHour = (typeof EVENT_ALERT_SLOT_HOURS)[number];
-
-interface QueuedEventAlert extends ReturnType<typeof getEventInfo> {
-  slotHour: EventAlertSlotHour;
-}
 
 function clampNumber(value: number, min: number, max: number) {
   return Math.max(min, Math.min(value, max));
@@ -683,16 +677,8 @@ function getBusinessHourWindowSeconds(gameHour: number) {
   return { start, end };
 }
 
-function getEventAlertSlotStartSeconds(slotHour: EventAlertSlotHour) {
-  return getBusinessHourWindowSeconds(slotHour)?.start ?? 0;
-}
-
-function resolveRegularEventAlertSlotHour(regularEventIndex: number): EventAlertSlotHour {
-  return regularEventIndex <= 0 ? 14 : 18;
-}
-
-function isFestivalAppliedEvent(event: AppliedEvent) {
-  return getAppliedEventCandidates(event).some((candidate) =>
+function isFestivalEvent(event: TodayEventScheduleItem) {
+  return getTodayEventCandidates(event).some((candidate) =>
     normalizeEventToken(candidate).includes("FESTIVAL"),
   );
 }
@@ -763,7 +749,6 @@ function PlayPageSession({
   const locationNameByIdRef = useRef<ReadonlyMap<number, string>>(new Map());
   const seenAppliedEventKeysRef = useRef<Set<string>>(new Set());
   const queuedEventAlertsRef = useRef<QueuedEventAlert[]>([]);
-  const assignedEventAlertCountRef = useRef(0);
   const scheduledVisitorTimersRef = useRef<number[]>([]);
   const dispatchedVisitorsByHourRef = useRef<Map<number, number>>(new Map());
   const latestCustomerPlanRef = useRef<CustomerPlanByHourItem[]>([]);
@@ -1096,9 +1081,7 @@ function PlayPageSession({
     const remainingAlerts: QueuedEventAlert[] = [];
 
     for (const queuedAlert of queuedEventAlertsRef.current) {
-      const slotStartSeconds = getEventAlertSlotStartSeconds(queuedAlert.slotHour);
-
-      if (elapsedBusinessSeconds >= slotStartSeconds) {
+      if (elapsedBusinessSeconds >= queuedAlert.dueElapsedBusinessSeconds) {
         dueAlerts.push(queuedAlert);
       } else {
         remainingAlerts.push(queuedAlert);
@@ -1113,16 +1096,16 @@ function PlayPageSession({
     pushEventAlerts(dueAlerts);
   };
 
-  const syncAppliedEventAlerts = (state: GameStateResponse) => {
-    if (state.appliedEvents.length === 0) {
+  const syncTodayEventAlerts = (state: GameStateResponse) => {
+    if (state.todayEventSchedule.length === 0) {
       return;
     }
 
-    const nextFestivalAlerts: ReturnType<typeof getEventInfo>[] = [];
-    const nextRegularAlerts: ReturnType<typeof getEventInfo>[] = [];
+    const elapsedBusinessSeconds = getElapsedBusinessSeconds(remainingMillisecondsRef.current);
+    const immediateAlerts: ReturnType<typeof getEventInfo>[] = [];
 
-    for (const event of state.appliedEvents) {
-      const eventInfo = getEventInfo(event, state.serverTime, locationNameByIdRef.current);
+    for (const event of state.todayEventSchedule) {
+      const eventInfo = getEventInfo(event, locationNameByIdRef.current);
 
       if (seenAppliedEventKeysRef.current.has(eventInfo.key)) {
         continue;
@@ -1130,31 +1113,15 @@ function PlayPageSession({
 
       seenAppliedEventKeysRef.current.add(eventInfo.key);
 
-      if (isFestivalAppliedEvent(event)) {
-        nextFestivalAlerts.push(eventInfo);
-      } else {
-        nextRegularAlerts.push(eventInfo);
-      }
-    }
+      const dueElapsedBusinessSeconds = parseTodayEventScheduleSeconds(event.time);
 
-    if (nextFestivalAlerts.length === 0 && nextRegularAlerts.length === 0) {
-      return;
-    }
-
-    const elapsedBusinessSeconds = getElapsedBusinessSeconds(remainingMillisecondsRef.current);
-    const immediateAlerts: ReturnType<typeof getEventInfo>[] = [];
-
-    immediateAlerts.push(...nextFestivalAlerts);
-
-    for (const eventInfo of nextRegularAlerts) {
-      const slotHour = resolveRegularEventAlertSlotHour(assignedEventAlertCountRef.current);
-
-      assignedEventAlertCountRef.current += 1;
-
-      if (elapsedBusinessSeconds >= getEventAlertSlotStartSeconds(slotHour)) {
+      if (
+        dueElapsedBusinessSeconds === null ||
+        elapsedBusinessSeconds >= dueElapsedBusinessSeconds
+      ) {
         immediateAlerts.push(eventInfo);
       } else {
-        queuedEventAlertsRef.current.push({ ...eventInfo, slotHour });
+        queuedEventAlertsRef.current.push({ ...eventInfo, dueElapsedBusinessSeconds });
       }
     }
 
@@ -1250,7 +1217,7 @@ function PlayPageSession({
     syncPromotionActionState(state.actionStatus.promotionUsed);
     syncShareActionState(state.actionStatus.donationUsed);
     syncEmergencyActionState(state.actionStatus.emergencyUsed);
-    syncAppliedEventAlerts(state);
+    syncTodayEventAlerts(state);
   };
 
   const [rankings, setRankings] = useState<RankEntry[]>([]);
