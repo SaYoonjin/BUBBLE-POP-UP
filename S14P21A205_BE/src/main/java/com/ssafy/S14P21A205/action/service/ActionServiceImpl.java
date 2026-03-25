@@ -18,6 +18,7 @@ import com.ssafy.S14P21A205.action.repository.ActionRepository;
 import com.ssafy.S14P21A205.exception.BaseException;
 import com.ssafy.S14P21A205.exception.ErrorCode;
 import com.ssafy.S14P21A205.game.day.debug.TickDebugActionNote;
+import com.ssafy.S14P21A205.game.day.service.GameDayStateService;
 import com.ssafy.S14P21A205.game.day.service.GameDayStartService;
 import com.ssafy.S14P21A205.game.day.policy.CaptureRatePolicy;
 import com.ssafy.S14P21A205.game.day.policy.StoreRankingPolicy;
@@ -104,6 +105,7 @@ public class ActionServiceImpl implements ActionService {
     private final StoreRankingPolicy storeRankingPolicy;
     private final NewsRankingResolver newsRankingResolver;
     private final CaptureRatePolicy captureRatePolicy;
+    private final GameDayStateService gameDayStateService;
     private final GameDayStartService gameDayStartService;
     private final Clock clock;
 
@@ -136,7 +138,7 @@ public class ActionServiceImpl implements ActionService {
         Action action = actionRepository
                 .findByCategoryAndPromotionType(ActionCategory.PROMOTION, request.promotionType())
                 .orElseThrow(() -> new BaseException(ErrorCode.RESOURCE_NOT_FOUND));
-        GameDayLiveState state = resolveLiveState(store, context);
+        GameDayLiveState state = resolveCurrentLiveState(store, context);
         long updatedBalance = resolveUpdatedBalance("PROMOTION", userId, store, day, valueOf(action.getCost()), state);
 
         BigDecimal multiplier = BigDecimal.ONE.add(action.getCaptureRate());
@@ -203,7 +205,7 @@ public class ActionServiceImpl implements ActionService {
             throw new BaseException(ErrorCode.INVALID_INPUT_VALUE);
         }
 
-        GameDayLiveState state = resolveLiveState(store, context);
+        GameDayLiveState state = resolveCurrentLiveState(store, context);
         long updatedBalance = resolveUpdatedBalance("DISCOUNT", userId, store, day, valueOf(action.getCost()), state);
         store.changePrice(newPrice);
 
@@ -280,7 +282,7 @@ public class ActionServiceImpl implements ActionService {
         validateNotUsed(store.getId(), day, ACTION_FIELD_DONATION);
 
         Action action = findSingleAction(ActionCategory.DONATION);
-        GameDayLiveState state = resolveLiveState(store, context);
+        GameDayLiveState state = resolveCurrentLiveState(store, context);
         int currentStock = normalizeStock(state.stock());
         if (currentStock < request.quantity()) {
             throw new BaseException(ErrorCode.INSUFFICIENT_STOCK);
@@ -352,7 +354,7 @@ public class ActionServiceImpl implements ActionService {
         validateNotUsed(store.getId(), day, ACTION_FIELD_EMERGENCY);
 
         Action action = findSingleAction(ActionCategory.EMERGENCY_ORDER);
-        GameDayLiveState state = resolveLiveState(store, context);
+        GameDayLiveState state = resolveCurrentLiveState(store, context);
 
         BigDecimal ingredientCostMultiplier = resolveIngredientCostMultiplier(store, menu, day, state, now);
         int menuTrendRank = resolveMenuEntryRank(store, day, menu);
@@ -535,6 +537,11 @@ public class ActionServiceImpl implements ActionService {
         return gameDayStoreStateRedisRepository.find(store.getId(), context.day())
                 .or(() -> gameDayStartService.ensureCurrentDayState(store, context.now(), context.seasonTimePoint()))
                 .orElseThrow(() -> new BaseException(ErrorCode.GAME_STATE_NOT_FOUND));
+    }
+
+    private GameDayLiveState resolveCurrentLiveState(Store store, ActionExecutionContext context) {
+        gameDayStateService.refreshGameState(store);
+        return resolveLiveState(store, context);
     }
 
     private PriceRange determinePriceRange(int sellingPrice, int averagePrice) {

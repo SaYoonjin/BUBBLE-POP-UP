@@ -241,7 +241,7 @@ export default function ReportPage() {
   const showBankruptcyWarning = report.consecutiveDeficitDays > 0 || isBankrupt;
   const warningMessage = isBankrupt
     ? bankruptcyReason === "rent_unpaid"
-      ? "파산했습니다: 임대료를 내지 못해 즉시 파산"
+      ? "임대료를 내지 못해 즉시 파산했습니다."
       : `파산했습니다: ${report.consecutiveDeficitDays}일 연속 적자 발생`
     : `${report.consecutiveDeficitDays}일 연속 적자 중입니다. 3일 연속이면 파산합니다.`;
   const bankruptInfoMessage = bankruptcyReason === "rent_unpaid"
