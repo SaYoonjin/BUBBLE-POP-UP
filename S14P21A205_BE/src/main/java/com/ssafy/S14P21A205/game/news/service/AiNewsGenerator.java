@@ -38,7 +38,7 @@ public class AiNewsGenerator {
             + "출력: {\"title\":\"제목\",\"content\":\"본문\"} JSON만. 다른 텍스트 금지. "
             + "제목은 핵심 정보를 담아 독자가 제목만 읽어도 기사 내용을 파악할 수 있게 써. "
             + "예: 지역명+현상, 메뉴명+변동, 매장명+성과 등 구체적 사실 포함. "
-            + "제목 15~40자. 본문 150~250자 이내로 짧게. "
+            + "제목 50자 이내. 본문 150~250자 이내로 짧게. "
             + "순수 한국어만 사용(영어·한자·아랍어·외국어 절대 금지). "
             + "숫자 직접 쓰지 말고 간접 표현. 괄호·이모지·따옴표 금지. "
             + "마크다운 금지(**, *, #, ```, - 등 절대 쓰지 마). "
@@ -496,15 +496,9 @@ public class AiNewsGenerator {
         if (splitIdx > 0 && splitIdx < plain.length() - 1) {
             title = plain.substring(0, splitIdx + 1).trim();
             content = plain.substring(splitIdx + 1).trim();
-        } else if (plain.length() > 40) {
-            title = plain.substring(0, 40).trim();
-            content = plain;
         } else {
             title = plain;
             content = plain;
-        }
-        if (title.length() > 40) {
-            title = title.substring(0, 40);
         }
         return new NewsGenerationResult(sanitize(title), sanitize(content));
     }
@@ -515,10 +509,6 @@ public class AiNewsGenerator {
             if (node.has("title") && node.has("content")) {
                 String title = sanitize(node.get("title").asText().strip());
                 String content = sanitize(node.get("content").asText().strip());
-                // 제목 40자 제한
-                if (title.length() > 40) {
-                    title = title.substring(0, 40);
-                }
                 // 본문이 너무 길면 마지막 완전한 문장에서 자르기
                 if (content.length() > 300) {
                     content = truncateAtSentence(content, 300);
@@ -581,6 +571,8 @@ public class AiNewsGenerator {
         text = text.replaceAll("\\(\\s*[^\\p{IsHangul}]*\\s+([\\p{IsHangul}].*?)\\)", "$1");
         // 영어 단어 제거
         text = text.replaceAll("[a-zA-Z]+", "");
+        // 영어 제거 후 남는 빈 따옴표·콜론 정리
+        text = text.replaceAll("\"\\s*\"", "").replaceAll(":\\s*:", ":").replaceAll("^[:\\s\"]+", "");
         // 중국어·일본어 문자 제거
         text = text.replaceAll("[\\u4e00-\\u9fff\\u3040-\\u309f\\u30a0-\\u30ff]+", "");
         // 아랍어·키릴 등 비한글·비숫자·비구두점 외국어 제거
@@ -593,6 +585,8 @@ public class AiNewsGenerator {
         text = text.replaceAll("\\s{2,}", " ");
         // 빈 따옴표·괄호 정리
         text = text.replace("''", "").replace("\"\"", "").replace("()", "");
+        // 앞뒤 특수문자 잔해 정리 (콜론, 따옴표, 쉼표 등)
+        text = text.replaceAll("^[:\\s,\"']+", "").replaceAll("[:\\s,\"']+$", "");
         return text.strip();
     }
 
