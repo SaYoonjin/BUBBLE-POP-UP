@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Navigate, useNavigate } from "react-router-dom";
 import ErrorPageDetails from "../components/common/ErrorPageDetails";
 import ErrorStateLayout from "../components/common/ErrorStateLayout";
 import { consumeErrorPageState } from "../utils/errorPageState";
@@ -8,28 +8,32 @@ export default function UnauthorizedPage() {
   const navigate = useNavigate();
   const [errorState] = useState(() => consumeErrorPageState());
 
+  if (errorState?.status !== 401) {
+    return <Navigate to="/" replace />;
+  }
+
   return (
     <ErrorStateLayout
       code="401"
-      badge="Session Expired"
-      title="Authentication is required again"
-      description="Your session is no longer valid. Sign in again to continue your current season flow safely."
+      badge="세션 만료"
+      title="다시 로그인이 필요합니다"
+      description="로그인 정보가 만료되었거나 유효하지 않습니다. 다시 로그인한 뒤 계속 진행해주세요."
       primaryAction={{
-        label: "Go To Login",
+        label: "로그인하기",
         onClick: () => navigate("/login", { replace: true }),
       }}
       secondaryAction={{
-        label: "Go Home",
+        label: "홈으로",
         onClick: () => navigate("/", { replace: true }),
         variant: "secondary",
       }}
-      footer={(
+      footer={
         <ErrorPageDetails
           code={errorState?.code}
           message={errorState?.message}
           path={errorState?.path}
         />
-      )}
+      }
     />
   );
 }
