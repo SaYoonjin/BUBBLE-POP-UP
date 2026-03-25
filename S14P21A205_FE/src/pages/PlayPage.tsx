@@ -57,11 +57,6 @@ import useBrandName from "../hooks/useBrandName";
 import useStatQueue from "../hooks/useStatQueue";
 import { useUserStore } from "../stores/useUserStore";
 import { normalizeDiscountMultiplier } from "../utils/dashboardItems";
-import {
-  readStoredRegularOrderSelection,
-  writeStoredRegularOrderSelection,
-  type StoredRegularOrderSelection,
-} from "../utils/regularOrderSelection";
 
 interface ApiErrorResponse {
   message?: string;
@@ -764,15 +759,13 @@ function PlayPageSession({
   const displayedBalanceRef = useRef(0);
   const [currentLocationName, setCurrentLocationName] = useState("");
   const currentLocationIdRef = useRef<number | null>(null);
-  const currentSeasonNumberRef = useRef<number | null>(null);
-  const storePlayableDayRef = useRef<number | null>(null);
   const locationIdByNameRef = useRef<ReadonlyMap<string, number>>(new Map());
   const scheduledVisitorTimersRef = useRef<number[]>([]);
   const dispatchedVisitorsByHourRef = useRef<Map<number, number>>(new Map());
   const latestCustomerPlanRef = useRef<CustomerPlanByHourItem[]>([]);
   const latestBackendCustomerCountRef = useRef(0);
   const [currentOrder, setCurrentOrder] = useState<CurrentOrderResponse | null>(null);
-  const [storedRegularOrder, setStoredRegularOrder] = useState<StoredRegularOrderSelection | null>(null);
+  const [liveSellingPrice, setLiveSellingPrice] = useState<number | null>(null);
   const [menuItems, setMenuItems] = useState<EmergencyMenuItem[]>([]);
   const [moveRegions, setMoveRegions] = useState<MoveRegion[]>([]);
   const [promotionOptions, setPromotionOptions] = useState<PromotionOption[]>(() =>
@@ -798,22 +791,16 @@ function PlayPageSession({
   const emergencyArrivalGameTime = emergencyArriveAt
     ? formatEmergencyArrivalGameTime(emergencyArriveAt, playEndTimestampMs) || null
     : getEstimatedEmergencyArrivalGameTime(remainingMilliseconds, estimatedEmergencyDelaySeconds);
-  const regularSellingPrice =
-    currentOrder &&
-    storedRegularOrder &&
-    currentOrder.menuId === storedRegularOrder.menuId &&
-    !usedActions.has("discount")
-      ? storedRegularOrder.price
-      : currentOrder?.sellingPrice ?? 0;
+  const currentLiveSellingPrice = liveSellingPrice ?? currentOrder?.sellingPrice ?? 0;
   const currentMenuPricing: CurrentMenuPricing | null = currentOrder
     ? {
         costPrice: currentOrder.costPrice,
         recommendedPrice: currentOrder.recommendedPrice,
         maxSellingPrice: currentOrder.maxSellingPrice,
-        sellingPrice: regularSellingPrice,
+        sellingPrice: currentLiveSellingPrice,
       }
     : null;
-  const discountCurrentPrice = regularSellingPrice;
+  const discountCurrentPrice = currentLiveSellingPrice;
   const discountMinimumPrice = currentOrder?.costPrice ?? discountCurrentPrice;
   const debugPhaseLabel = getPlayDebugPhaseLabel(phase);
 
@@ -1368,7 +1355,7 @@ function PlayPageSession({
     state: GameStateResponse,
     source: "initial" | "poll" | "action_sync" | "emergency_refresh" = "poll",
   ) => {
-    currentSeasonNumberRef.current = state.seasonId;
+    setLiveSellingPrice(state.customerTick.unitPrice);
     const previousDisplayedGuests = displayedGuestsRef.current;
     const previousDisplayedStock = displayedStockRef.current;
     const previousDisplayedBalance = displayedBalanceRef.current;
@@ -1587,7 +1574,6 @@ function PlayPageSession({
       setOptimisticUsedActions(new Set());
 
       if (stateResult.status === "fulfilled") {
-        currentSeasonNumberRef.current = stateResult.value.seasonId;
         applyGameState(stateResult.value, "initial");
       } else {
         // getGameDayState 실패 시 startGameDay의 initialBalance/Stock을 fallback으로 사용
@@ -1612,26 +1598,20 @@ function PlayPageSession({
         syncShareActionState(false);
         syncEmergencyActionState(false);
         setOptimisticUsedActions(new Set());
+        setLiveSellingPrice(null);
       }
 
       if (orderResult.status === "fulfilled") {
         setCurrentOrder(orderResult.value);
+        if (stateResult.status !== "fulfilled") {
+          setLiveSellingPrice(orderResult.value.sellingPrice);
+        }
       } else {
         setCurrentOrder(null);
+        if (stateResult.status !== "fulfilled") {
+          setLiveSellingPrice(null);
+        }
       }
-
-      const nextStoredRegularOrder = readStoredRegularOrderSelection(
-        {
-          seasonNumber:
-            stateResult.status === "fulfilled" ? stateResult.value.seasonId : null,
-          playableDay:
-            storeResult.status === "fulfilled"
-              ? (storeResult.value.playableday ?? dayNumber)
-              : dayNumber,
-        },
-        { includeLatestFallback: true },
-      );
-      setStoredRegularOrder(nextStoredRegularOrder);
 
       if (menuResult.status === "fulfilled") {
         setMenuItems(mapStoreMenusToEmergencyMenus(menuResult.value.menus));
@@ -1656,7 +1636,6 @@ function PlayPageSession({
         storeResult.status === "fulfilled" ? storeResult.value.location : currentLocationName;
 
       if (storeResult.status === "fulfilled") {
-        storePlayableDayRef.current = storeResult.value.playableday ?? dayNumber;
         setCurrentLocationName(storeResult.value.location);
         // 매장 지역의 Unity 인덱스 계산 (locationId - 1 = 0-based index)
         if (locationResult.status === "fulfilled") {
@@ -1667,8 +1646,6 @@ function PlayPageSession({
             setStoreRegionIndex(matched.locationId - 1);
           }
         }
-      } else if (storePlayableDayRef.current == null) {
-        storePlayableDayRef.current = dayNumber;
       }
 
       const trafficRankByAreaName =
@@ -2049,27 +2026,13 @@ function PlayPageSession({
 
             const response = await postDiscount(discountValue);
 
-            setCurrentOrder((prev) =>
-              prev
-                ? {
-                    ...prev,
-                    sellingPrice: response.newPrice,
-                  }
-                : prev,
-            );
+            setLiveSellingPrice(response.newPrice);
             syncDiscountActionState(true);
 
-            const [stateResult, orderResult] = await Promise.allSettled([
-              getGameDayState(),
-              getCurrentOrder(),
-            ]);
+            const [stateResult] = await Promise.allSettled([getGameDayState()]);
 
             if (stateResult.status === "fulfilled") {
               applyGameState(stateResult.value, "action_sync");
-            }
-
-            if (orderResult.status === "fulfilled") {
-              setCurrentOrder(orderResult.value);
             }
 
             if (stateResult.status === "fulfilled") {
@@ -2118,24 +2081,11 @@ function PlayPageSession({
             const actionGameTime = getCurrentDebugGameTime();
             const previousBalance = displayedBalanceRef.current;
             const response = await postEmergencyOrder(menuId, quantity, salePrice);
-            const nextStoredOrderSelection = {
-              menuId,
-              price: salePrice,
-            } satisfies StoredRegularOrderSelection;
             didOrderEmergencyRef.current = true;
             hasEmergencyArrivalAlertRef.current = false;
             const isNewMenuOrder = menuId !== currentOrder?.menuId;
             const arrivalLabel = formatEmergencyArrivalGameTime(response.arrivedTime, playEndTimestampMs);
             const arrivalText = arrivalLabel ? ` ${arrivalLabel} 도착 예정입니다.` : "";
-
-            writeStoredRegularOrderSelection(
-              {
-                seasonNumber: currentSeasonNumberRef.current,
-                playableDay: storePlayableDayRef.current ?? dayNumber,
-              },
-              nextStoredOrderSelection,
-            );
-            setStoredRegularOrder(nextStoredOrderSelection);
             setEmergencyArriveAt(response.arrivedTime);
 
             queueActionDebugLog({
