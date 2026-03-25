@@ -3,6 +3,8 @@ package com.ssafy.S14P21A205.order.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -98,6 +100,13 @@ class OrderServiceImplTests {
         org.mockito.Mockito.lenient()
                 .when(dailyReportRepository.findFirstByStore_IdAndDayLessThanOrderByDayDesc(any(), any()))
                 .thenReturn(Optional.empty());
+        org.mockito.Mockito.lenient()
+                .when(orderRepository.findFirstByStore_IdAndOrderedDayLessThanEqualAndOrderTypeAndSalePriceIsNotNullOrderByOrderedDayDescIdDesc(
+                        any(),
+                        any(),
+                        any()
+                ))
+                .thenReturn(Optional.empty());
     }
 
     @Test
@@ -122,6 +131,35 @@ class OrderServiceImplTests {
                 ));
 
         assertThat(orderService.getCurrentOrder(1).costPrice()).isEqualTo(3_150);
+    }
+
+    @Test
+    void getCurrentOrderUsesLatestRegularOrderSalePriceAsBaseSellingPrice() {
+        Store store = store(15L, 1, 3L, 7L, 2_500, 2_375);
+        Menu menu = store.getMenu();
+
+        when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
+                .thenReturn(Optional.of(store));
+        when(storeRepository.findBySeason_IdOrderByIdAsc(9L)).thenReturn(List.of(store));
+        when(itemUserRepository.findPurchasedDiscountRateByUserIdAndCategory(1, ItemCategory.INGREDIENT))
+                .thenReturn(Optional.of(BigDecimal.ONE));
+        when(newsRankingResolver.resolveMenuEntryRank(9L, 1, menu)).thenReturn(null);
+        when(eventEffectResolver.resolve(any(), any(Integer.class), any(), any(), any()))
+                .thenReturn(new EventEffectResolver.EventEffect(
+                        0L,
+                        0,
+                        BigDecimal.ONE,
+                        BigDecimal.ONE,
+                        Collections.emptyList(),
+                        Collections.emptyList()
+                ));
+        when(orderRepository.findFirstByStore_IdAndOrderedDayLessThanEqualAndOrderTypeAndSalePriceIsNotNullOrderByOrderedDayDescIdDesc(
+                15L,
+                1,
+                com.ssafy.S14P21A205.order.entity.OrderType.NORMAL
+        )).thenReturn(Optional.of(Order.create(menu, store, 50, 150_000, 2_500, 1)));
+
+        assertThat(orderService.getCurrentOrder(1).sellingPrice()).isEqualTo(2_500);
     }
 
     @Test
@@ -162,6 +200,47 @@ class OrderServiceImplTests {
         assertThat(response.orderId()).isEqualTo(101L);
         assertThat(response.sellingPrice()).isEqualTo(7_000);
         assertThat(response.totalCost()).isEqualTo(150_000);
+    }
+
+    @Test
+    void createRegularOrderUsesLatestRegularOrderSalePriceWhenPriceIsOmitted() {
+        Store store = store(15L, 1, 3L, 7L, 2_500, 2_375);
+        Menu menu = store.getMenu();
+        ReflectionTestUtils.setField(store.getSeason(), "currentDay", 3);
+        ReflectionTestUtils.setField(store.getSeason(), "startTime", LocalDateTime.of(2026, 3, 17, 9, 52, 0));
+
+        when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
+                .thenReturn(Optional.of(store));
+        when(orderRepository.findDailyStartOrder(15L, 3)).thenReturn(Optional.empty());
+        when(menuRepository.findById(7L)).thenReturn(Optional.of(menu));
+        when(storeRepository.findBySeason_IdOrderByIdAsc(9L)).thenReturn(List.of(store));
+        when(itemUserRepository.findPurchasedDiscountRateByUserIdAndCategory(1, ItemCategory.INGREDIENT))
+                .thenReturn(Optional.of(BigDecimal.ONE));
+        when(newsRankingResolver.resolveMenuEntryRank(9L, 3, menu)).thenReturn(5);
+        when(eventEffectResolver.resolve(any(), any(Integer.class), any(), any(), any()))
+                .thenReturn(new EventEffectResolver.EventEffect(
+                        0L,
+                        0,
+                        BigDecimal.ONE,
+                        BigDecimal.ONE,
+                        Collections.emptyList(),
+                        Collections.emptyList()
+                ));
+        when(orderRepository.findFirstByStore_IdAndOrderedDayLessThanEqualAndOrderTypeAndSalePriceIsNotNullOrderByOrderedDayDescIdDesc(
+                eq(15L),
+                anyInt(),
+                eq(com.ssafy.S14P21A205.order.entity.OrderType.NORMAL)
+        )).thenReturn(Optional.of(Order.create(menu, store, 50, 150_000, 2_500, 1)));
+        when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> {
+            Order saved = invocation.getArgument(0);
+            ReflectionTestUtils.setField(saved, "id", 151L);
+            return saved;
+        });
+
+        RegularOrderResponse response = orderService.createRegularOrder(1, new RegularOrderRequest(7, 50, null));
+
+        assertThat(response.sellingPrice()).isEqualTo(2_500);
+        assertThat(store.getPrice()).isEqualTo(2_500);
     }
 
     @Test
