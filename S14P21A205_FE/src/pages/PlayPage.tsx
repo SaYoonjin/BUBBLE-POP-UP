@@ -790,7 +790,6 @@ function PlayPageSession({
   const remainingMilliseconds = Math.max(0, playEndTimestampMs - nowMs);
   const remainingSeconds = Math.max(0, Math.ceil(remainingMilliseconds / 1000));
   const remainingMillisecondsRef = useRef(remainingMilliseconds);
-  remainingMillisecondsRef.current = remainingMilliseconds;
   const playStoreName = brandName || "";
   const currentMenuName = currentOrder?.menuName ?? "";
   const emergencyArrivalGameTime = emergencyArriveAt
@@ -875,9 +874,15 @@ function PlayPageSession({
   // Unity arrival 시 고객별 재고/잔액 변동 큐
   const arrivalQueueRef = useRef<Array<{ stockDelta: number; balanceDelta: number }>>([]);
 
-  displayedGuestsRef.current = guests;
-  displayedStockRef.current = stock;
-  displayedBalanceRef.current = balance;
+  useEffect(() => {
+    remainingMillisecondsRef.current = remainingMilliseconds;
+  }, [remainingMilliseconds]);
+
+  useEffect(() => {
+    displayedGuestsRef.current = guests;
+    displayedStockRef.current = stock;
+    displayedBalanceRef.current = balance;
+  }, [balance, guests, stock]);
 
   const getCurrentDebugGameTime = () =>
     elapsedToGameTime(getElapsedBusinessSeconds(remainingMillisecondsRef.current));
@@ -1879,6 +1884,27 @@ function PlayPageSession({
   const didOrderEmergencyRef = useRef(false);
   const hasEmergencyArrivalAlertRef = useRef(false);
 
+  function pushAlert(
+    type: GameAlert["type"],
+    title: string,
+    description: string,
+  ) {
+    setAlerts((prev) => [
+      {
+        id: Date.now() + Math.floor(Math.random() * 1000),
+        type,
+        title,
+        description,
+        createdAt: Date.now(),
+      },
+      ...prev,
+    ]);
+  }
+
+  const pushActionAlert = (title: string, description: string) => {
+    pushAlert("action", title, description);
+  };
+
   useEffect(() => {
     if (!emergencyArriveAt || !didOrderEmergencyRef.current) {
       return;
@@ -1915,27 +1941,6 @@ function PlayPageSession({
   };
 
   const closeModal = () => setActiveModal(null);
-
-  function pushAlert(
-    type: GameAlert["type"],
-    title: string,
-    description: string,
-  ) {
-    setAlerts((prev) => [
-      {
-        id: Date.now() + Math.floor(Math.random() * 1000),
-        type,
-        title,
-        description,
-        createdAt: Date.now(),
-      },
-      ...prev,
-    ]);
-  }
-
-  const pushActionAlert = (title: string, description: string) => {
-    pushAlert("action", title, description);
-  };
 
   const completeAction = (
     action: ActionType,
