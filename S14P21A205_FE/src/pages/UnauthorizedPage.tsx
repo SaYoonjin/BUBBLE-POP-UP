@@ -4,23 +4,23 @@ import ErrorPageDetails from "../components/common/ErrorPageDetails";
 import ErrorStateLayout from "../components/common/ErrorStateLayout";
 import { consumeErrorPageState } from "../utils/errorPageState";
 
-export default function ForbiddenPage() {
+export default function UnauthorizedPage() {
   const navigate = useNavigate();
   const [errorState] = useState(() => consumeErrorPageState());
 
   return (
     <ErrorStateLayout
-      code="403"
-      badge="Access Restricted"
-      title="This page is off limits"
-      description="Your account can sign in, but this page is not available from your current flow or permissions."
+      code="401"
+      badge="Session Expired"
+      title="Authentication is required again"
+      description="Your session is no longer valid. Sign in again to continue your current season flow safely."
       primaryAction={{
-        label: "Go Home",
-        onClick: () => navigate("/", { replace: true }),
+        label: "Go To Login",
+        onClick: () => navigate("/login", { replace: true }),
       }}
       secondaryAction={{
-        label: "Go Back",
-        onClick: () => navigate(-1),
+        label: "Go Home",
+        onClick: () => navigate("/", { replace: true }),
         variant: "secondary",
       }}
       footer={(
