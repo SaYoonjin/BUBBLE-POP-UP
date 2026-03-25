@@ -27,7 +27,6 @@ spring:
   jackson:
     time-zone: Asia/Seoul
   mvc:
-    throw-exception-if-no-handler-found: true
     format:
       time-zone: Asia/Seoul
 # endregion
