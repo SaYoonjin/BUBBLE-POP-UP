@@ -375,8 +375,9 @@ public class GameDayStateService {
     }
 
     private ActionStatusResponse resolveActionStatus(Long storeId, int day) {
-        java.util.Map<String, Boolean> actions = gameDayStoreStateRedisRepository.getActions(storeId, day);
-        return ActionStatusResponse.from(actions == null ? java.util.Map.of() : actions);
+        return ActionStatusResponse.fromActionLogs(
+                actionLogRepository.findByStore_IdAndGameDayAndIsUsedTrue(storeId, day)
+        );
     }
 
     private long resolveActionTotalCost(Long storeId, int day) {

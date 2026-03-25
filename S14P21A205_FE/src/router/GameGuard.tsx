@@ -66,8 +66,12 @@ function isAllowedForJoinedUser(
 }
 
 /** 미참여 유저의 경로 허용 판정 */
-function isAllowedForNewUser(pathname: string): boolean {
-  return pathname.startsWith("/game/setup");
+function isAllowedForNewUser(phase: SeasonPhase, pathname: string): boolean {
+  // 시즌 종료 후에는 누구나 랭킹 조회 가능
+  if ((phase === "SEASON_SUMMARY" || phase === "NEXT_SEASON_WAITING") && pathname === "/ranking") {
+    return true;
+  }
+  return pathname.startsWith("/game/setup") || pathname === "/game/waiting";
 }
 
 /** waiting 페이지로 보낼 때 route state 생성 */
@@ -183,9 +187,15 @@ export default function GameGuard() {
         allowed = isAllowedForJoinedUser(phase, day, pathname, waitingForPlayableDay);
         target = resolveJoinedUserTarget(phase, day, waitingForPlayableDay, timeData, storeData);
       } else {
-        const canEnterSetup = Boolean(joinEnabled && joinIntent);
-        allowed = canEnterSetup && isAllowedForNewUser(pathname);
-        target = resolveNewUserTarget(canEnterSetup);
+        allowed = isAllowedForNewUser(phase, pathname);
+        if (!allowed) {
+          const canEnterSetup = Boolean(joinEnabled && joinIntent);
+          if (canEnterSetup) {
+            target = resolveNewUserTarget(true);
+          } else {
+            target = { path: "/" };
+          }
+        }
       }
 
       if (allowed) {
@@ -247,7 +257,7 @@ export default function GameGuard() {
 
         const stillAllowed = joined
           ? isAllowedForJoinedUser(phase, day, location.pathname, waiting)
-          : false;
+          : isAllowedForNewUser(phase, location.pathname);
 
         if (!stillAllowed) {
           navigate(target.path, { replace: true, state: target.state });

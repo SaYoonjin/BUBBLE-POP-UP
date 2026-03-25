@@ -155,7 +155,10 @@ public class RentPolicy {
             );
         }
 
-        DailyReport previousDayReport = dailyReportRepository.findByStoreIdAndDay(store.getId(), day - 1)
+        DailyReport previousDayReport = dailyReportRepository.findFirstByStore_IdAndDayLessThanOrderByDayDesc(
+                        store.getId(),
+                        day
+                )
                 .orElse(null);
         if (previousDayReport != null) {
             return new CarryOverState(
