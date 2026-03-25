@@ -51,7 +51,7 @@ import {
   DAY_SECONDS,
   elapsedToGameTime,
 } from "../constants/gameTime";
-import { setWeather, startDay, spawnShopAtIndex, setCameraRegion } from "../utils/unity";
+import { sendToUnity, setWeather, startDay, spawnShopAtIndex, setCameraRegion } from "../utils/unity";
 import useBrandName from "../hooks/useBrandName";
 import { useUserStore } from "../stores/useUserStore";
 import { normalizeDiscountMultiplier } from "../utils/dashboardItems";
@@ -536,7 +536,7 @@ function PlayPageSession({
   const [alerts, setAlerts] = useState<GameAlert[]>([]);
   const [eventSchedule, setEventSchedule] = useState<EventScheduleItem[]>([]);
   const unityIframeRef = useRef<HTMLIFrameElement>(null);
-  const [, setUnityReady] = useState(false);
+  const [unityReady, setUnityReady] = useState(false);
   const [dayWeatherType, setDayWeatherType] = useState<string | null>(null);
   const [storeRegionIndex, setStoreRegionIndex] = useState<number | null>(null);
   const hasLoadedCarryOverRef = useRef(false);
@@ -657,14 +657,10 @@ function PlayPageSession({
 
   const spawnPopupVisitorsImmediately = (popupStoreIndex: number, count: number) => {
     const totalCount = Math.max(0, Math.floor(count));
-    let didSendAny = false;
+    if (totalCount <= 0) return false;
 
-    for (let index = 0; index < totalCount; index += 1) {
-      const didSend = unityBridgeRef.current?.spawnSinglePopupVisitor(popupStoreIndex) ?? false;
-      didSendAny = didSend || didSendAny;
-    }
-
-    return didSendAny;
+    // Unity의 SpawnPopupVisitorsRoutine을 사용해 NPC를 분산 스폰
+    return unityBridgeRef.current?.spawnPopupVisitors(popupStoreIndex, totalCount) ?? false;
   };
 
   const schedulePlannedVisitors = (
@@ -784,11 +780,25 @@ function PlayPageSession({
       setWeather(unityIframeRef, dayWeatherType);
     }
     const remaining = Math.max(0, Math.ceil((playEndTimestampMs - Date.now()) / 1000));
-    startDay(unityIframeRef, remaining);
+    const isFirstLoad = remaining >= BUSINESS_SECONDS - 3;
+    if (isFirstLoad) {
+      // 처음 진입: Unity StartDay(ConfiguredDayDuration) 호출
+      sendToUnity(unityIframeRef, "StartDay", "");
+    } else {
+      // 새로고침: 남은 시간으로 동기화 (StartOrSyncDay)
+      startDay(unityIframeRef, remaining);
+    }
     lastUnityCongestionLevelRef.current = null;
     syncUnityCongestionLevel(latestTrafficStatusRef.current);
     schedulePlannedVisitors(latestCustomerPlanRef.current, latestBackendCustomerCountRef.current);
   };
+
+  // Unity ready 이후 날씨 데이터가 도착하면 전송
+  useEffect(() => {
+    if (unityReady && dayWeatherType !== null) {
+      setWeather(unityIframeRef, dayWeatherType);
+    }
+  }, [unityReady, dayWeatherType]);
 
   const handlePopupArrival = (popupStoreIndex: number | null) => {
     const currentPopupStoreIndex = resolvePopupStoreIndex(currentLocationIdRef.current);
