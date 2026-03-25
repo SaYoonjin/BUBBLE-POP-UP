@@ -220,6 +220,19 @@ const MENU_EMOJI_BY_NAME: Record<string, string> = {
   버블티: "🧋",
 };
 
+const MENU_NAME_BY_ID: Record<number, string> = {
+  1: "빵",
+  2: "마라꼬치",
+  3: "젤리",
+  4: "떡볶이",
+  5: "햄버거",
+  6: "아이스크림",
+  7: "닭강정",
+  8: "타코",
+  9: "핫도그",
+  10: "버블티",
+};
+
 interface EventTemplate {
   title: string;
   /** $LOC → 지역명, $MENU → 메뉴명 */
@@ -379,10 +392,23 @@ function buildTodayEventScheduleSignature(events: TodayEventScheduleItem[]) {
   return events.map(buildTodayEventKey).join("||");
 }
 
+function resolveEventMenuName(event: TodayEventScheduleItem, fallbackMenuName: string) {
+  const menuId = event.scope?.menu ?? null;
+  if (typeof menuId === "number") {
+    return MENU_NAME_BY_ID[menuId] ?? fallbackMenuName;
+  }
+
+  const eventName = getEventDisplayName(event);
+  const matchedMenuName = Object.values(MENU_NAME_BY_ID)
+    .find((menuName) => eventName.includes(menuName));
+
+  return matchedMenuName ?? fallbackMenuName;
+}
+
 function getEventInfo(
   event: TodayEventScheduleItem,
   fallbackLocationName: string,
-  _menuName: string,
+  fallbackMenuName: string,
 ): { title: string; description: string } {
   const locationName = resolveEventLocationName(event, fallbackLocationName);
   const eventName = getEventDisplayName(event);
@@ -414,26 +440,20 @@ function getEventInfo(
   }
 
   const priceDirection = getPriceDirection(eventName);
-  if (priceDirection !== null && template) {
-    const menuLabel = template.title.replace(/\s*원가\s*(하락|상승)\s*$/u, "").trim();
+  if (priceDirection !== null) {
+    const menuLabel =
+      template?.title.replace(/\s*원가\s*(하락|상승)\s*$/u, "").trim()
+      || resolveEventMenuName(event, fallbackMenuName);
     const priceChangeLabel = priceDirection === "down" ? "하락" : "상승";
+    const title = menuLabel ? `${menuLabel} 원가 ${priceChangeLabel}` : `원가 ${priceChangeLabel}`;
+    const menuText = menuLabel ? `${menuLabel} ` : "";
     return {
-      title: template.title,
-      description: `내일부터 ${menuLabel} 원재료값이 ${priceChangeLabel}할 예정입니다.`,
+      title,
+      description: `내일부터 ${menuText}원재료값이 ${priceChangeLabel}할 예정입니다.`,
     };
   }
 
   if (!template) {
-    const fallbackSource = [event.type, event.newsTitle].find(Boolean) ?? "";
-
-    if (/price down|가격 하락/i.test(fallbackSource)) {
-      return { title: "원가 하락", description: "내일부터 원재료 시세가 하락할 예정입니다." };
-    }
-
-    if (/price up|가격 상승/i.test(fallbackSource)) {
-      return { title: "원가 상승", description: "내일부터 원재료 시세가 상승할 예정입니다." };
-    }
-
     return { title: event.newsTitle, description: "새로운 이벤트가 발생했습니다." };
   }
   let description = template.description.replace("$LOC", locationName);
