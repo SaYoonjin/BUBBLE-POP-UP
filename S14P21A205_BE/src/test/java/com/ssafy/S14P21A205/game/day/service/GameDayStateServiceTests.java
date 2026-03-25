@@ -159,6 +159,14 @@ class GameDayStateServiceTests {
     void getGameStateCalculatesFromRedisState() {
         User user = user(1);
         Store store = store(user, 15L, 3L, 1L, 9L, 1, 7, 500);
+        GameDayStartResponse.EventSchedule todayEventSchedule = new GameDayStartResponse.EventSchedule(
+                "10:40",
+                "celebrity",
+                null,
+                "celebrity",
+                new BigDecimal("1.50"),
+                200
+        );
         DailyEvent dailyEvent = dailyEvent(
                 store.getSeason(),
                 1,
@@ -194,7 +202,8 @@ class GameDayStateServiceTests {
                 List.of(1, 0, 2, 1, 1, 0),
                 1_000,
                 10,
-                LocalDateTime.of(2026, 3, 9, 14, 30, 0)
+                LocalDateTime.of(2026, 3, 9, 14, 30, 0),
+                List.of(todayEventSchedule)
         );
 
         when(userService.getCurrentUser(any())).thenReturn(user);
@@ -218,6 +227,7 @@ class GameDayStateServiceTests {
         assertThat(response.inventory().totalStock()).isEqualTo(7);
         assertThat(response.population()).isEqualTo("\uB9E4\uC6B0 \uD63C\uC7A1");
         assertThat(response.traffic()).isEqualTo(new GameStateResponse.Traffic(TrafficStatus.NORMAL, 3, 12, 15));
+        assertThat(response.todayEventSchedule()).containsExactly(todayEventSchedule);
         assertThat(response.appliedEvents()).hasSize(1);
         assertThat(response.appliedEvents().get(0).eventType()).isEqualTo("CELEBRITY_APPEARANCE");
         assertThat(response.appliedEvents().get(0).eventName()).isEqualTo("?곗삁???깆옣");
@@ -718,6 +728,17 @@ class GameDayStateServiceTests {
             int initialStock,
             LocalDateTime startedAt
     ) {
+        return state(salePrice, purchaseList, initialBalance, initialStock, startedAt, List.of());
+    }
+
+    private GameDayLiveState state(
+            int salePrice,
+            List<Integer> purchaseList,
+            int initialBalance,
+            int initialStock,
+            LocalDateTime startedAt,
+            List<GameDayStartResponse.EventSchedule> eventSchedule
+    ) {
         return new GameDayLiveState(
                 startedAt,
                 purchaseList,
@@ -730,7 +751,7 @@ class GameDayStateServiceTests {
                         new BigDecimal("1.10"),
                         BigDecimal.ONE,
                         new BigDecimal("0.10"),
-                        List.of(),
+                        eventSchedule,
                         initialBalance,
                         initialStock,
                         null,

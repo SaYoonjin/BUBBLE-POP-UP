@@ -3,6 +3,7 @@ package com.ssafy.S14P21A205.game.day.service;
 import com.ssafy.S14P21A205.action.dto.ActionStatusResponse;
 import com.ssafy.S14P21A205.action.entity.ActionLog;
 import com.ssafy.S14P21A205.action.repository.ActionLogRepository;
+import com.ssafy.S14P21A205.game.day.dto.GameDayStartResponse;
 import com.ssafy.S14P21A205.exception.BaseException;
 import com.ssafy.S14P21A205.exception.ErrorCode;
 import com.ssafy.S14P21A205.game.day.dto.GameStateResponse;
@@ -204,6 +205,7 @@ public class GameDayStateService {
                         calculatedState.regionStoreCount(),
                         calculatedState.rValue()
                 ),
+                resolveTodayEventSchedule(state),
                 new GameStateResponse.Inventory(calculatedState.totalStock()),
                 new GameStateResponse.ActionStatus(
                         actionStatus.discountUsed(),
@@ -738,6 +740,13 @@ public class GameDayStateService {
         return state.startResponse() == null || state.startResponse().initialStock() == null
                 ? 0
                 : state.startResponse().initialStock();
+    }
+
+    private List<GameDayStartResponse.EventSchedule> resolveTodayEventSchedule(GameDayLiveState state) {
+        if (state == null || state.startResponse() == null || state.startResponse().eventSchedule() == null) {
+            return List.of();
+        }
+        return state.startResponse().eventSchedule();
     }
 
     private long valueOf(Integer value) {
