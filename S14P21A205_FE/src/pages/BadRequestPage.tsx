@@ -4,23 +4,23 @@ import ErrorPageDetails from "../components/common/ErrorPageDetails";
 import ErrorStateLayout from "../components/common/ErrorStateLayout";
 import { consumeErrorPageState } from "../utils/errorPageState";
 
-export default function ForbiddenPage() {
+export default function BadRequestPage() {
   const navigate = useNavigate();
   const [errorState] = useState(() => consumeErrorPageState());
 
   return (
     <ErrorStateLayout
-      code="403"
-      badge="Access Restricted"
-      title="This page is off limits"
-      description="Your account can sign in, but this page is not available from your current flow or permissions."
+      code="400"
+      badge="Request Invalid"
+      title="That request could not be processed"
+      description="The page was opened with incomplete data or a request value that no longer matches the current game flow."
       primaryAction={{
-        label: "Go Home",
-        onClick: () => navigate("/", { replace: true }),
-      }}
-      secondaryAction={{
         label: "Go Back",
         onClick: () => navigate(-1),
+      }}
+      secondaryAction={{
+        label: "Go Home",
+        onClick: () => navigate("/", { replace: true }),
         variant: "secondary",
       }}
       footer={(

@@ -209,13 +209,13 @@ public class GameDayReportService {
         gameDayStoreStateRedisRepository.saveBalance(store.getId(), day, reportBalance);
     }
 
+    @Transactional
     public GameDayReportResponse getDayReport(Authentication authentication, int day) {
         User user = userService.getCurrentUser(authentication);
         Store store = getReportStore(user.getId());
         validateDay(day, store.getSeason());
 
-        DailyReport report = dailyReportRepository.findByStoreIdAndDay(store.getId(), day)
-                .orElseThrow(() -> new BaseException(ErrorCode.REPORT_NOT_FOUND));
+        DailyReport report = findOrCreateReport(store, day);
         List<DailyReport> storeReports = dailyReportRepository.findByStore_IdOrderByDayAsc(store.getId());
 
         int stockRemaining = normalizeStock(report.getStockRemaining());
@@ -252,6 +252,18 @@ public class GameDayReportService {
                 defaultInt(report.getConsecutiveDeficitDays()),
                 Boolean.TRUE.equals(report.getIsBankrupt())
         );
+    }
+
+    private DailyReport findOrCreateReport(Store store, int day) {
+        Optional<DailyReport> existingReport = dailyReportRepository.findByStoreIdAndDay(store.getId(), day);
+        if (existingReport.isPresent()) {
+            return existingReport.get();
+        }
+
+        log.info("[DayReport] Missing report on read. attempting materialization. storeId={} day={}", store.getId(), day);
+        recordClosedDayReport(store, day);
+        return dailyReportRepository.findByStoreIdAndDay(store.getId(), day)
+                .orElseThrow(() -> new BaseException(ErrorCode.REPORT_NOT_FOUND));
     }
 
     private Store getReportStore(Integer userId) {

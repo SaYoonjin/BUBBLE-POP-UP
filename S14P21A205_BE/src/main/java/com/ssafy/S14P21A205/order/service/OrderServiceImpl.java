@@ -78,7 +78,7 @@ public class OrderServiceImpl implements OrderService {
                 ingredientCostMultiplier,
                 menuTrendRank
         );
-        Integer stock = resolveStock(storeId, currentDay);
+        Integer stock = resolveStock(store, currentDay);
 
         return CurrentOrderResponse.builder()
                 .menuId(Math.toIntExact(menu.getId()))
@@ -358,13 +358,15 @@ public class OrderServiceImpl implements OrderService {
         return StoreStateCarryOverSupport.resolveInitialBalance(store);
     }
 
-    private Integer resolveStock(Long storeId, int day) {
+    private Integer resolveStock(Store store, int day) {
+        Long storeId = store.getId();
         return gameDayStoreStateRedisRepository.find(storeId, day)
                 .map(state -> normalizeStock(state.stock()))
-                .orElseGet(() -> resolveStartingStock(storeId, day));
+                .orElseGet(() -> resolveStartingStock(store, day));
     }
 
-    private Integer resolveStartingStock(Long storeId, int day) {
+    private Integer resolveStartingStock(Store store, int day) {
+        Long storeId = store.getId();
         int carriedStock;
         if (day <= 1) {
             carriedStock = normalizeStock(StoreStateCarryOverSupport.resolveInitialStock());
@@ -379,6 +381,9 @@ public class OrderServiceImpl implements OrderService {
                         .map(state -> normalizeStock(state.stock()))
                         .orElse(normalizeStock(StoreStateCarryOverSupport.resolveInitialStock()));
             }
+        }
+        if (REGULAR_ORDER_DAYS.contains(day)) {
+            carriedStock = 0;
         }
 
         int orderedStock = orderRepository.findDailyStartOrder(storeId, day)
