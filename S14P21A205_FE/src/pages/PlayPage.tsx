@@ -220,11 +220,47 @@ function resolveEventRegionName(
     return locationNameById.get(scopedRegionId) ?? null;
   }
 
+  for (const candidate of getAppliedEventCandidates(event)) {
+    const inferredRegionName = [...locationNameById.values()].find((locationName) =>
+      candidate.includes(locationName),
+    );
+
+    if (inferredRegionName) {
+      return inferredRegionName;
+    }
+  }
+
   return null;
 }
 
 function replaceLocationPlaceholder(template: string, regionName: string | null) {
   return template.replaceAll("$LOC", regionName ?? "해당 지역");
+}
+
+function isGenericFestivalLabel(value: string) {
+  const normalized = normalizeEventToken(value);
+  return normalized === "FESTIVAL" || normalized === "축제" || normalized === "축제_개최";
+}
+
+function resolveFestivalDisplayName(event: AppliedEvent) {
+  return (
+    [event.newsTitle, event.eventName].find(
+      (value) => isNonEmptyText(value) && !isGenericFestivalLabel(value),
+    ) ?? null
+  );
+}
+
+function inferFestivalRegionName(festivalName: string | null, fallbackRegionName: string | null) {
+  if (fallbackRegionName) {
+    return fallbackRegionName;
+  }
+
+  if (!festivalName) {
+    return null;
+  }
+
+  const [leadingToken] = festivalName.trim().split(/\s+/);
+  return leadingToken || null;
 }
 
 function resolveAppliedEventKey(event: AppliedEvent) {
@@ -383,6 +419,8 @@ function getEventInfo(
   const fallbackTitle = candidates[0] ?? "이벤트";
   let title = template?.title ?? fallbackTitle;
   let description: string;
+  const festivalName = isFestivalAppliedEvent(event) ? resolveFestivalDisplayName(event) : null;
+  const festivalRegionName = inferFestivalRegionName(festivalName, regionName);
 
   if (priceEvent) {
     const directionLabel = priceEvent.direction === "DOWN" ? "하락" : "상승";
@@ -390,6 +428,18 @@ function getEventInfo(
     description = isScheduled
       ? `내일부터 ${priceEvent.menuName} 원재료값 ${directionLabel}이 적용될 예정입니다.`
       : `${priceEvent.menuName} 원재료값이 ${directionLabel}되었습니다.`;
+  } else if (festivalName) {
+    title = festivalName;
+
+    const containsRegionName = festivalRegionName ? festivalName.includes(festivalRegionName) : false;
+
+    description = isScheduled
+      ? containsRegionName
+        ? `${festivalName}가 열릴 예정입니다.`
+        : `${festivalRegionName ?? "해당 지역"}에서 ${festivalName}가 열릴 예정입니다.`
+      : containsRegionName
+        ? `${festivalName}가 열리고 있습니다.`
+        : `${festivalRegionName ?? "해당 지역"}에서 ${festivalName}가 열리고 있습니다.`;
   } else if (template) {
     description = isScheduled
       ? `내일부터 ${title} 이벤트가 적용될 예정입니다.`
