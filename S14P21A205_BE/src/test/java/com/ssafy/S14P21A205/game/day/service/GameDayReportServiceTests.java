@@ -318,6 +318,36 @@ class GameDayReportServiceTests {
     }
 
     @Test
+    void recordClosedDayReportClampsNegativeStockToZero() {
+        Store store = store(15L, 9L, 2, 7, "Seongsu", "Cookie", 300);
+        GameDayLiveState state = state(
+                LocalDateTime.of(2026, 3, 9, 14, 30, 0),
+                new BigDecimal("0.10"),
+                5_000L,
+                1_300L,
+                42,
+                20,
+                15_000L,
+                -12,
+                8
+        );
+
+        when(dailyReportRepository.existsByStoreIdAndDay(15L, 2)).thenReturn(false);
+        when(gameDayStateService.refreshGameState(store)).thenReturn(Optional.empty());
+        when(gameDayStoreStateRedisRepository.find(15L, 2)).thenReturn(Optional.of(state));
+        when(dailyReportRepository.findByStoreIdAndDay(15L, 1)).thenReturn(Optional.empty());
+
+        gameDayReportService.recordClosedDayReport(store, 2);
+
+        ArgumentCaptor<DailyReport> captor = ArgumentCaptor.forClass(DailyReport.class);
+        verify(dailyReportRepository).save(captor.capture());
+
+        DailyReport saved = captor.getValue();
+        assertThat(saved.getStockRemaining()).isZero();
+        verify(gameDayStoreStateRedisRepository).updateField(15L, 2, "stock", "0");
+    }
+
+    @Test
     void getDayReportReturnsComputedFields() {
         User user = user(1);
         Store store = store(15L, 9L, 2, 7, "Current Location", "Current Menu", 300);

@@ -17,6 +17,7 @@ import com.ssafy.S14P21A205.action.repository.ActionLogRepository;
 import com.ssafy.S14P21A205.action.repository.ActionRepository;
 import com.ssafy.S14P21A205.exception.BaseException;
 import com.ssafy.S14P21A205.exception.ErrorCode;
+import com.ssafy.S14P21A205.game.day.debug.TickDebugActionNote;
 import com.ssafy.S14P21A205.game.day.service.GameDayStartService;
 import com.ssafy.S14P21A205.game.day.policy.CaptureRatePolicy;
 import com.ssafy.S14P21A205.game.day.policy.StoreRankingPolicy;
@@ -26,6 +27,7 @@ import com.ssafy.S14P21A205.game.day.resolver.TrafficDelayResolver;
 import com.ssafy.S14P21A205.game.day.state.GameDayLiveState;
 import com.ssafy.S14P21A205.game.day.state.repository.GameDayStoreStateRedisRepository;
 import com.ssafy.S14P21A205.game.season.entity.SeasonStatus;
+import com.ssafy.S14P21A205.game.time.model.SeasonPhase;
 import com.ssafy.S14P21A205.game.time.model.SeasonTimePoint;
 import com.ssafy.S14P21A205.game.time.service.SeasonTimelineService;
 import com.ssafy.S14P21A205.order.entity.Order;
@@ -123,8 +125,10 @@ public class ActionServiceImpl implements ActionService {
     @Override
     @Transactional
     public ActionResponse executePromotion(Integer userId, PromotionRequest request) {
-        Store store = findStore(userId);
-        int day = resolveCurrentDay(store);
+        LocalDateTime actionTime = LocalDateTime.now(clock);
+        Store store = findStore(userId, actionTime);
+        ActionExecutionContext context = resolveActionExecutionContext(store, actionTime);
+        int day = context.day();
         String legacyField = request.promotionType().name().toLowerCase();
 
         validateNotUsed(store.getId(), day, ACTION_FIELD_PROMOTION);
@@ -132,14 +136,14 @@ public class ActionServiceImpl implements ActionService {
         Action action = actionRepository
                 .findByCategoryAndPromotionType(ActionCategory.PROMOTION, request.promotionType())
                 .orElseThrow(() -> new BaseException(ErrorCode.RESOURCE_NOT_FOUND));
-        GameDayLiveState state = resolveLiveState(store, day);
+        GameDayLiveState state = resolveLiveState(store, context);
         long updatedBalance = resolveUpdatedBalance("PROMOTION", userId, store, day, valueOf(action.getCost()), state);
 
         BigDecimal multiplier = BigDecimal.ONE.add(action.getCaptureRate());
         BigDecimal newCaptureRate = resolveAppliedCaptureRate(state, multiplier);
 
         actionLogRepository.save(new ActionLog(action, store, day, null));
-        afterCommit(() -> {
+        afterCommit(() -> synchronizeActionState("PROMOTION", store.getId(), day, () -> {
             gameDayStoreStateRedisRepository.updateField(
                     store.getId(),
                     day,
@@ -149,7 +153,21 @@ public class ActionServiceImpl implements ActionService {
             gameDayStoreStateRedisRepository.markActionUsed(store.getId(), day, ACTION_FIELD_PROMOTION);
             gameDayStoreStateRedisRepository.markActionUsed(store.getId(), day, legacyField);
             gameDayStoreStateRedisRepository.saveBalance(store.getId(), day, updatedBalance);
-        });
+            gameDayStoreStateRedisRepository.appendTickDebugActionNote(
+                    store.getId(),
+                    day,
+                    resolveDebugTick(store, actionTime),
+                    new TickDebugActionNote(
+                            "홍보(%s)".formatted(request.promotionType().name()),
+                            valueOf(action.getCost()),
+                            0L,
+                            0L,
+                            0L,
+                            0L,
+                            0
+                    )
+            );
+        }));
 
         logActionExecution(
                 "PROMOTION",
@@ -170,8 +188,10 @@ public class ActionServiceImpl implements ActionService {
     @Override
     @Transactional
     public DiscountResponse executeDiscount(Integer userId, DiscountRequest request) {
-        Store store = findStore(userId);
-        int day = resolveCurrentDay(store);
+        LocalDateTime actionTime = LocalDateTime.now(clock);
+        Store store = findStore(userId, actionTime);
+        ActionExecutionContext context = resolveActionExecutionContext(store, actionTime);
+        int day = context.day();
 
         validateNotUsed(store.getId(), day, ACTION_FIELD_DISCOUNT);
 
@@ -183,7 +203,7 @@ public class ActionServiceImpl implements ActionService {
             throw new BaseException(ErrorCode.INVALID_INPUT_VALUE);
         }
 
-        GameDayLiveState state = resolveLiveState(store, day);
+        GameDayLiveState state = resolveLiveState(store, context);
         long updatedBalance = resolveUpdatedBalance("DISCOUNT", userId, store, day, valueOf(action.getCost()), state);
         store.changePrice(newPrice);
 
@@ -199,7 +219,7 @@ public class ActionServiceImpl implements ActionService {
         BigDecimal newCaptureRate = resolveAppliedCaptureRate(state, priceRange.multiplier());
 
         actionLogRepository.save(new ActionLog(action, store, day, priceRange.multiplier()));
-        afterCommit(() -> {
+        afterCommit(() -> synchronizeActionState("DISCOUNT", store.getId(), day, () -> {
             gameDayStoreStateRedisRepository.updateField(store.getId(), day, "sale_price", String.valueOf(newPrice));
             gameDayStoreStateRedisRepository.updateField(
                     store.getId(),
@@ -209,7 +229,21 @@ public class ActionServiceImpl implements ActionService {
             );
             gameDayStoreStateRedisRepository.markActionUsed(store.getId(), day, ACTION_FIELD_DISCOUNT);
             gameDayStoreStateRedisRepository.saveBalance(store.getId(), day, updatedBalance);
-        });
+            gameDayStoreStateRedisRepository.appendTickDebugActionNote(
+                    store.getId(),
+                    day,
+                    resolveDebugTick(store, actionTime),
+                    new TickDebugActionNote(
+                            "할인(%d->%d)".formatted(previousPrice, newPrice),
+                            0L,
+                            valueOf(action.getCost()),
+                            0L,
+                            0L,
+                            0L,
+                            0
+                    )
+            );
+        }));
 
         logActionExecution(
                 "DISCOUNT",
@@ -238,14 +272,16 @@ public class ActionServiceImpl implements ActionService {
     @Override
     @Transactional
     public DonationResponse executeDonation(Integer userId, DonationRequest request) {
-        Store store = findStore(userId);
-        int day = resolveCurrentDay(store);
+        LocalDateTime actionTime = LocalDateTime.now(clock);
+        Store store = findStore(userId, actionTime);
+        ActionExecutionContext context = resolveActionExecutionContext(store, actionTime);
+        int day = context.day();
 
         validateNotUsed(store.getId(), day, ACTION_FIELD_DONATION);
 
         Action action = findSingleAction(ActionCategory.DONATION);
-        GameDayLiveState state = resolveLiveState(store, day);
-        int currentStock = state.stock() == null ? 0 : state.stock();
+        GameDayLiveState state = resolveLiveState(store, context);
+        int currentStock = normalizeStock(state.stock());
         if (currentStock < request.quantity()) {
             throw new BaseException(ErrorCode.INSUFFICIENT_STOCK);
         }
@@ -253,12 +289,12 @@ public class ActionServiceImpl implements ActionService {
         long updatedBalance = resolveUpdatedBalance("DONATION", userId, store, day, valueOf(action.getCost()), state);
         BigDecimal captureRateBonus = DONATION_CAPTURE_RATE_BONUS.setScale(2, RoundingMode.HALF_UP);
 
-        int newStock = currentStock - request.quantity();
+        int newStock = normalizeStock(currentStock - request.quantity());
         BigDecimal multiplier = BigDecimal.ONE.add(captureRateBonus);
         BigDecimal newCaptureRate = resolveAppliedCaptureRate(state, multiplier);
 
         actionLogRepository.save(new ActionLog(action, store, day, captureRateBonus));
-        afterCommit(() -> {
+        afterCommit(() -> synchronizeActionState("DONATION", store.getId(), day, () -> {
             gameDayStoreStateRedisRepository.updateField(store.getId(), day, "stock", String.valueOf(newStock));
             gameDayStoreStateRedisRepository.updateField(
                     store.getId(),
@@ -268,7 +304,21 @@ public class ActionServiceImpl implements ActionService {
             );
             gameDayStoreStateRedisRepository.markActionUsed(store.getId(), day, ACTION_FIELD_DONATION);
             gameDayStoreStateRedisRepository.saveBalance(store.getId(), day, updatedBalance);
-        });
+            gameDayStoreStateRedisRepository.appendTickDebugActionNote(
+                    store.getId(),
+                    day,
+                    resolveDebugTick(store, actionTime),
+                    new TickDebugActionNote(
+                            "나눔(%d개)".formatted(request.quantity()),
+                            0L,
+                            0L,
+                            0L,
+                            valueOf(action.getCost()),
+                            0L,
+                            request.quantity()
+                    )
+            );
+        }));
 
         logActionExecution(
                 "DONATION",
@@ -289,8 +339,10 @@ public class ActionServiceImpl implements ActionService {
     @Override
     @Transactional
     public EmergencyOrderResponse executeEmergencyOrder(Integer userId, EmergencyOrderRequest request) {
-        Store store = findStore(userId);
-        int day = resolveCurrentDay(store);
+        LocalDateTime now = LocalDateTime.now(clock);
+        Store store = findStore(userId, now);
+        ActionExecutionContext context = resolveActionExecutionContext(store, now);
+        int day = context.day();
         Menu menu = getMenuById(request.menuId());
 
         if (request.salePrice() < menu.getOriginPrice()) {
@@ -300,8 +352,7 @@ public class ActionServiceImpl implements ActionService {
         validateNotUsed(store.getId(), day, ACTION_FIELD_EMERGENCY);
 
         Action action = findSingleAction(ActionCategory.EMERGENCY_ORDER);
-        GameDayLiveState state = resolveLiveState(store, day);
-        LocalDateTime now = LocalDateTime.now(clock);
+        GameDayLiveState state = resolveLiveState(store, context);
 
         BigDecimal ingredientCostMultiplier = resolveIngredientCostMultiplier(store, menu, day, state, now);
         int menuTrendRank = resolveMenuEntryRank(store, day, menu);
@@ -347,10 +398,24 @@ public class ActionServiceImpl implements ActionService {
                 )
         );
 
-        afterCommit(() -> {
+        afterCommit(() -> synchronizeActionState("EMERGENCY_ORDER", store.getId(), day, () -> {
             gameDayStoreStateRedisRepository.markActionUsed(store.getId(), day, ACTION_FIELD_EMERGENCY);
             gameDayStoreStateRedisRepository.saveBalance(store.getId(), day, updatedBalance);
-        });
+            gameDayStoreStateRedisRepository.appendTickDebugActionNote(
+                    store.getId(),
+                    day,
+                    resolveDebugTick(store, now),
+                    new TickDebugActionNote(
+                            "긴급발주(%d개)".formatted(request.quantity()),
+                            0L,
+                            0L,
+                            valueOf(action.getCost()) + totalCost,
+                            0L,
+                            0L,
+                            0
+                    )
+            );
+        }));
 
         logActionExecution(
                 "EMERGENCY_ORDER",
@@ -371,9 +436,13 @@ public class ActionServiceImpl implements ActionService {
     }
 
     private Store findStore(Integer userId) {
+        return findStore(userId, LocalDateTime.now(clock));
+    }
+
+    private Store findStore(Integer userId, LocalDateTime now) {
         Store store = storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(userId, SeasonStatus.IN_PROGRESS)
                 .orElseThrow(() -> new BaseException(ErrorCode.STORE_NOT_FOUND));
-        STORE_LOCATION_TRANSITION_SUPPORT.applyPendingLocationIfDue(store, LocalDateTime.now(clock));
+        STORE_LOCATION_TRANSITION_SUPPORT.applyPendingLocationIfDue(store, now);
         return store;
     }
 
@@ -444,11 +513,27 @@ public class ActionServiceImpl implements ActionService {
         return captureRatePolicy.applyMultiplier(currentRate, multiplier);
     }
 
-    private GameDayLiveState resolveLiveState(Store store, int day) {
-        LocalDateTime now = LocalDateTime.now(clock);
+    private ActionExecutionContext resolveActionExecutionContext(Store store, LocalDateTime now) {
         SeasonTimePoint seasonTimePoint = seasonTimelineService.resolve(store.getSeason(), now);
-        return gameDayStoreStateRedisRepository.find(store.getId(), day)
-                .or(() -> gameDayStartService.ensureCurrentDayState(store, now, seasonTimePoint))
+        validateActionExecutionPhase(seasonTimePoint.phase());
+
+        Integer currentDay = seasonTimePoint.currentDay();
+        if (currentDay == null || currentDay < 1 || currentDay > store.getSeason().getTotalDays()) {
+            throw new BaseException(ErrorCode.INVALID_INPUT_VALUE, "Current season day is out of range.");
+        }
+
+        return new ActionExecutionContext(now, seasonTimePoint, currentDay);
+    }
+
+    private void validateActionExecutionPhase(SeasonPhase phase) {
+        if (phase != SeasonPhase.DAY_BUSINESS) {
+            throw new BaseException(ErrorCode.INVALID_INPUT_VALUE, "Actions are only available during business hours.");
+        }
+    }
+
+    private GameDayLiveState resolveLiveState(Store store, ActionExecutionContext context) {
+        return gameDayStoreStateRedisRepository.find(store.getId(), context.day())
+                .or(() -> gameDayStartService.ensureCurrentDayState(store, context.now(), context.seasonTimePoint()))
                 .orElseThrow(() -> new BaseException(ErrorCode.GAME_STATE_NOT_FOUND));
     }
 
@@ -622,6 +707,37 @@ public class ActionServiceImpl implements ActionService {
         return amount == null ? 0L : amount.longValue();
     }
 
+    private int normalizeStock(Integer value) {
+        return value == null ? 0 : Math.max(0, value);
+    }
+
+    private Integer resolveDebugTick(Store store, LocalDateTime recordedAt) {
+        if (store == null || store.getSeason() == null || recordedAt == null) {
+            return 0;
+        }
+        try {
+            Integer tick = seasonTimelineService.resolve(store.getSeason(), recordedAt).tick();
+            return tick == null ? 0 : Math.max(0, tick);
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+
+    private void synchronizeActionState(String actionType, Long storeId, int day, Runnable syncAction) {
+        try {
+            syncAction.run();
+        } catch (Exception e) {
+            log.error(
+                    "action-state-sync-failed actionType={} storeId={} day={} message={}",
+                    actionType,
+                    storeId,
+                    day,
+                    e.getMessage(),
+                    e
+            );
+        }
+    }
+
     private void afterCommit(Runnable action) {
         if (TransactionSynchronizationManager.isSynchronizationActive()
                 && TransactionSynchronizationManager.isActualTransactionActive()) {
@@ -637,5 +753,12 @@ public class ActionServiceImpl implements ActionService {
     }
 
     private record PriceRange(String label, BigDecimal multiplier) {
+    }
+
+    private record ActionExecutionContext(
+            LocalDateTime now,
+            SeasonTimePoint seasonTimePoint,
+            int day
+    ) {
     }
 }

@@ -150,7 +150,7 @@ public class RentPolicy {
         if (day <= 1) {
             return new CarryOverState(
                     StoreStateCarryOverSupport.resolveInitialBalance(store),
-                    StoreStateCarryOverSupport.resolveInitialStock(),
+                    normalizeStock(StoreStateCarryOverSupport.resolveInitialStock()),
                     null
             );
         }
@@ -163,7 +163,7 @@ public class RentPolicy {
         if (previousDayReport != null) {
             return new CarryOverState(
                     previousDayReport.getBalance(),
-                    previousDayReport.getStockRemaining(),
+                    normalizeStock(previousDayReport.getStockRemaining()),
                     previousDayReport.getMenuName()
             );
         }
@@ -173,14 +173,14 @@ public class RentPolicy {
         if (previousDayState != null) {
             return new CarryOverState(
                     safeInt(previousDayState.balance()),
-                    previousDayState.stock() == null ? 0 : previousDayState.stock(),
+                    normalizeStock(previousDayState.stock()),
                     null
             );
         }
 
         return new CarryOverState(
                 StoreStateCarryOverSupport.resolveInitialBalance(store),
-                StoreStateCarryOverSupport.resolveInitialStock(),
+                normalizeStock(StoreStateCarryOverSupport.resolveInitialStock()),
                 null
         );
     }
@@ -277,6 +277,10 @@ public class RentPolicy {
 
     private int safeInt(Long value) {
         return value == null ? 0 : Math.toIntExact(value);
+    }
+
+    private int normalizeStock(Integer value) {
+        return value == null ? 0 : Math.max(0, value);
     }
 
     private record OpeningEventAdjustment(

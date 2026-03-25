@@ -1,4 +1,4 @@
-import axios, { type AxiosError } from "axios";
+﻿import axios, { type AxiosError } from "axios";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useOutletContext, useParams } from "react-router-dom";
 import { GAME_EXIT_CODES } from "../api/client";
@@ -50,6 +50,7 @@ import {
   BUSINESS_SECONDS,
   DAY_SECONDS,
   elapsedToGameTime,
+  type SeasonPhase,
 } from "../constants/gameTime";
 import { sendToUnity, setWeather, startDay, spawnShopAtIndex, setCameraRegion } from "../utils/unity";
 import useBrandName from "../hooks/useBrandName";
@@ -59,6 +60,137 @@ import { normalizeDiscountMultiplier } from "../utils/dashboardItems";
 
 interface ApiErrorResponse {
   message?: string;
+}
+
+type PlayDebugPhaseLabel =
+  | "BUSINESS"
+  | "PREPARING"
+  | "REPORT"
+  | "LOCATION_SELECTION"
+  | "SEASON_SUMMARY"
+  | "NEXT_SEASON_WAITING"
+  | "CLOSED";
+
+interface PlayDebugCustomerFactors {
+  serverCustomerCount: number;
+  previousDisplayedGuests: number;
+  pollingIncrease: number;
+  animationAppliedCount: number;
+}
+
+interface PlayDebugStockFactors {
+  previousDisplayedStock: number;
+  guestArrivalDeduction: number;
+  emergencyArrivalReflection: number;
+  donationDeduction: number;
+  serverResyncCorrection: number;
+}
+
+interface PlayDebugBalanceFactors {
+  previousDisplayedBalance: number;
+  salesAmount: number;
+  promotionCost: number;
+  emergencyOrderCost: number;
+  donationCost: number;
+  moveCost: number;
+  serverResyncCorrection: number;
+}
+
+interface PlayDebugPendingLog {
+  dedupeKey: string;
+  day: number;
+  phase: PlayDebugPhaseLabel;
+  tick: string;
+  gameTime: string;
+  eventName: string;
+  actionName: string;
+  targetGuests: number;
+  targetStock: number;
+  targetBalance: number;
+  waitForDisplayedSettlement: boolean;
+  customerFactors: PlayDebugCustomerFactors;
+  stockFactors: PlayDebugStockFactors;
+  balanceFactors: PlayDebugBalanceFactors;
+}
+
+const PLAY_DEBUG_TOGGLE_KEY = "play-debug-tick-logs";
+
+let lastDebugAppliedBusinessDay: number | null = null;
+
+function isPlayDebugLoggingEnabled() {
+  if (!import.meta.env.DEV) {
+    return false;
+  }
+
+  try {
+    return window.localStorage.getItem(PLAY_DEBUG_TOGGLE_KEY) !== "0";
+  } catch {
+    return true;
+  }
+}
+
+function getPlayDebugPhaseLabel(phase: SeasonPhase): PlayDebugPhaseLabel {
+  switch (phase) {
+    case "DAY_BUSINESS":
+      return "BUSINESS";
+    case "DAY_PREPARING":
+      return "PREPARING";
+    case "DAY_REPORT":
+      return "REPORT";
+    default:
+      return phase;
+  }
+}
+
+function formatSignedInteger(value: number) {
+  if (value > 0) {
+    return `+${value.toLocaleString()}`;
+  }
+
+  return value.toLocaleString();
+}
+
+function formatUnsignedInteger(value: number) {
+  return value.toLocaleString();
+}
+
+function formatPlayDebugBlock(input: {
+  day: number;
+  phase: PlayDebugPhaseLabel;
+  tick: string;
+  gameTime: string;
+  eventName: string;
+  actionName: string;
+  guests: number;
+  stock: number;
+  balance: number;
+  customerFactors: PlayDebugCustomerFactors;
+  stockFactors: PlayDebugStockFactors;
+  balanceFactors: PlayDebugBalanceFactors;
+}) {
+  return [
+    "================ 틱 디버그 [프론트] ================",
+    `현재 day     : ${input.day}`,
+    `현재 phase   : ${input.phase}`,
+    `현재 tick    : ${input.tick}`,
+    `게임 시간    : ${input.gameTime}`,
+    "",
+    `이번 틱 이벤트 : ${input.eventName || "없음"}`,
+    `이번 틱 액션   : ${input.actionName || "없음"}`,
+    "",
+    "손님",
+    `- 최종값      : ${input.guests.toLocaleString()}명`,
+    `- 영향요소    : 서버 누적 손님 수=${formatUnsignedInteger(input.customerFactors.serverCustomerCount)} / 직전 화면 손님 수=${formatUnsignedInteger(input.customerFactors.previousDisplayedGuests)} / 이번 폴링 증가분=${formatSignedInteger(input.customerFactors.pollingIncrease)} / 연출 반영 수=${formatUnsignedInteger(input.customerFactors.animationAppliedCount)}`,
+    "",
+    "재고",
+    `- 최종값      : ${input.stock.toLocaleString()}개`,
+    `- 영향요소    : 직전 화면 재고=${formatUnsignedInteger(input.stockFactors.previousDisplayedStock)} / 손님 연출 차감=${formatSignedInteger(input.stockFactors.guestArrivalDeduction)} / 긴급발주 도착 반영=${formatSignedInteger(input.stockFactors.emergencyArrivalReflection)} / 나눔 차감=${formatSignedInteger(input.stockFactors.donationDeduction)} / 서버 재동기화 보정=${formatSignedInteger(input.stockFactors.serverResyncCorrection)}`,
+    "",
+    "잔액",
+    `- 최종값      : ${input.balance.toLocaleString()}원`,
+    `- 영향요소    : 직전 화면 잔액=${formatUnsignedInteger(input.balanceFactors.previousDisplayedBalance)} / 이번 틱 판매금액=${formatSignedInteger(input.balanceFactors.salesAmount)} / 홍보 비용=${formatUnsignedInteger(input.balanceFactors.promotionCost)} / 긴급발주 비용=${formatUnsignedInteger(input.balanceFactors.emergencyOrderCost)} / 나눔 비용=${formatUnsignedInteger(input.balanceFactors.donationCost)} / 이동 비용=${formatUnsignedInteger(input.balanceFactors.moveCost)} / 서버 재동기화 보정=${formatSignedInteger(input.balanceFactors.serverResyncCorrection)}`,
+    "==================================================",
+  ].join("\n");
 }
 
 
@@ -517,6 +649,7 @@ export default function PlayPage() {
     <PlayPageSession
       key={dayNumber}
       dayNumber={dayNumber}
+      phase={guardContext.phase}
       phaseEndTimestamp={guardContext.phaseEndTimestamp}
     />
   );
@@ -524,15 +657,25 @@ export default function PlayPage() {
 
 function PlayPageSession({
   dayNumber,
+  phase,
   phaseEndTimestamp,
 }: {
   dayNumber: number;
+  phase: SeasonPhase;
   phaseEndTimestamp: number;
 }) {
   const nickname = useUserStore((s) => s.nickname) ?? "버블티";
   const { brandName } = useBrandName();
   const [activeModal, setActiveModal] = useState<ActionType | null>(null);
-  const [usedActions, setUsedActions] = useState<Set<ActionType>>(new Set());
+  const [serverUsedActions, setServerUsedActions] = useState<Set<ActionType>>(new Set());
+  const [optimisticUsedActions, setOptimisticUsedActions] = useState<Set<ActionType>>(new Set());
+  const usedActions = useMemo(() => {
+    const merged = new Set<ActionType>(serverUsedActions);
+    for (const action of optimisticUsedActions) {
+      merged.add(action);
+    }
+    return merged;
+  }, [serverUsedActions, optimisticUsedActions]);
   const [activeEffects, setActiveEffects] = useState<Set<ActionType>>(new Set());
   const [alerts, setAlerts] = useState<GameAlert[]>([]);
   const [eventSchedule, setEventSchedule] = useState<EventScheduleItem[]>([]);
@@ -545,6 +688,9 @@ function PlayPageSession({
   const [stock, setStock] = useState(0);
   const [guests, setGuests] = useState(0);
   const statQueue = useStatQueue(setStock, setBalance);
+  const displayedGuestsRef = useRef(0);
+  const displayedStockRef = useRef(0);
+  const displayedBalanceRef = useRef(0);
   const [currentLocationName, setCurrentLocationName] = useState("");
   const currentLocationIdRef = useRef<number | null>(null);
   const locationIdByNameRef = useRef<ReadonlyMap<string, number>>(new Map());
@@ -589,9 +735,10 @@ function PlayPageSession({
     : null;
   const discountCurrentPrice = currentOrder?.sellingPrice ?? 0;
   const discountMinimumPrice = currentOrder?.costPrice ?? discountCurrentPrice;
+  const debugPhaseLabel = getPlayDebugPhaseLabel(phase);
 
   const syncActionUsageState = (action: ActionType, isUsed: boolean) => {
-    setUsedActions((prev) => {
+    setServerUsedActions((prev) => {
       const next = new Set(prev);
 
       if (isUsed) {
@@ -640,12 +787,249 @@ function PlayPageSession({
   const unityBridgeRef = useRef<UnityBridgeHandle | null>(null);
   const latestTrafficStatusRef = useRef<GameTrafficStatus | null>(null);
   const lastUnityCongestionLevelRef = useRef<UnityCongestionLevel | null>(null);
+  const pendingDebugLogsRef = useRef<PlayDebugPendingLog[]>([]);
+  const emittedDebugKeysRef = useRef<Set<string>>(new Set());
+  const [debugFlushVersion, setDebugFlushVersion] = useState(0);
   // ref로 최신 값 추적 (클로저 캡처 문제 방지)
   const prevGuestsRef = useRef<number | null>(null);
   const prevStockRef = useRef<number | null>(null);
   const prevBalanceRef = useRef<number | null>(null);
   // Unity arrival 시 고객별 재고/잔액 변동 큐
   const arrivalQueueRef = useRef<Array<{ stockDelta: number; balanceDelta: number }>>([]);
+
+  displayedGuestsRef.current = guests;
+  displayedStockRef.current = stock;
+  displayedBalanceRef.current = balance;
+
+  const getCurrentDebugGameTime = () =>
+    elapsedToGameTime(getElapsedBusinessSeconds(remainingMillisecondsRef.current));
+
+  const getCurrentDebugTick = (
+    options: { serverTick?: number | null; phase?: PlayDebugPhaseLabel } = {},
+  ) => {
+    if (typeof options.serverTick === "number" && Number.isFinite(options.serverTick)) {
+      return String(options.serverTick);
+    }
+
+    const phase = options.phase ?? debugPhaseLabel;
+
+    if (phase !== "BUSINESS") {
+      return "-";
+    }
+
+    return String(Math.floor(getElapsedBusinessSeconds(remainingMillisecondsRef.current) / 10));
+  };
+
+  const queueDebugLog = (payload: PlayDebugPendingLog) => {
+    if (!isPlayDebugLoggingEnabled()) {
+      return;
+    }
+
+    if (emittedDebugKeysRef.current.has(payload.dedupeKey)) {
+      return;
+    }
+
+    pendingDebugLogsRef.current.push(payload);
+    setDebugFlushVersion((prev) => prev + 1);
+  };
+
+  const buildDebugLogFromState = (
+    state: GameStateResponse,
+    options: {
+      day: number;
+      phase: PlayDebugPhaseLabel;
+      gameTime: string;
+      eventName?: string;
+      actionName?: string;
+      previousDisplayedGuests: number;
+      previousDisplayedStock: number;
+      previousDisplayedBalance: number;
+      promotionCost?: number;
+      emergencyOrderCost?: number;
+      donationCost?: number;
+      moveCost?: number;
+      donationDeduction?: number;
+      emergencyArrivalReflection?: number;
+      dedupeKey: string;
+      waitForDisplayedSettlement: boolean;
+    },
+  ): PlayDebugPendingLog => {
+    const soldUnits = state.customerTick.soldUnits ?? [];
+    const soldUnitsTotal = soldUnits.reduce((sum, units) => sum + units, 0);
+    const salesAmount = soldUnits.reduce(
+      (sum, units) => sum + units * state.customerTick.unitPrice,
+      0,
+    );
+    const pollingIncrease =
+      prevGuestsRef.current !== null ? state.customerCount - prevGuestsRef.current : state.customerCount;
+    const guestArrivalDeduction = soldUnitsTotal > 0 ? -soldUnitsTotal : 0;
+    const emergencyArrivalReflection = options.emergencyArrivalReflection ?? 0;
+    const donationDeduction = options.donationDeduction ?? 0;
+    const promotionCost = options.promotionCost ?? 0;
+    const emergencyOrderCost = options.emergencyOrderCost ?? 0;
+    const donationCost = options.donationCost ?? 0;
+    const moveCost = options.moveCost ?? 0;
+    const expectedStock =
+      options.previousDisplayedStock
+      + guestArrivalDeduction
+      + emergencyArrivalReflection
+      + donationDeduction;
+    const expectedBalance =
+      options.previousDisplayedBalance
+      + salesAmount
+      - promotionCost
+      - emergencyOrderCost
+      - donationCost
+      - moveCost;
+
+    return {
+      dedupeKey: options.dedupeKey,
+      day: options.day,
+      phase: options.phase,
+      tick: getCurrentDebugTick({
+        serverTick: state.customerTick?.tick,
+        phase: options.phase,
+      }),
+      gameTime: options.gameTime,
+      eventName: options.eventName ?? "없음",
+      actionName: options.actionName ?? "없음",
+      targetGuests: state.customerCount,
+      targetStock: state.inventory.totalStock,
+      targetBalance: state.cash,
+      waitForDisplayedSettlement: options.waitForDisplayedSettlement,
+      customerFactors: {
+        serverCustomerCount: state.customerCount,
+        previousDisplayedGuests: options.previousDisplayedGuests,
+        pollingIncrease,
+        animationAppliedCount: Math.max(0, pollingIncrease),
+      },
+      stockFactors: {
+        previousDisplayedStock: options.previousDisplayedStock,
+        guestArrivalDeduction,
+        emergencyArrivalReflection,
+        donationDeduction,
+        serverResyncCorrection: state.inventory.totalStock - expectedStock,
+      },
+      balanceFactors: {
+        previousDisplayedBalance: options.previousDisplayedBalance,
+        salesAmount,
+        promotionCost,
+        emergencyOrderCost,
+        donationCost,
+        moveCost,
+        serverResyncCorrection: state.cash - expectedBalance,
+      },
+    };
+  };
+
+  const buildPassiveDebugLog = (options: {
+    dedupeKey: string;
+    day: number;
+    phase: PlayDebugPhaseLabel;
+    gameTime: string;
+    eventName?: string;
+    actionName?: string;
+  }): PlayDebugPendingLog => ({
+    dedupeKey: options.dedupeKey,
+    day: options.day,
+    phase: options.phase,
+    tick: getCurrentDebugTick({ phase: options.phase }),
+    gameTime: options.gameTime,
+    eventName: options.eventName ?? "없음",
+    actionName: options.actionName ?? "없음",
+    targetGuests: displayedGuestsRef.current,
+    targetStock: displayedStockRef.current,
+    targetBalance: displayedBalanceRef.current,
+    waitForDisplayedSettlement: false,
+    customerFactors: {
+      serverCustomerCount: displayedGuestsRef.current,
+      previousDisplayedGuests: displayedGuestsRef.current,
+      pollingIncrease: 0,
+      animationAppliedCount: 0,
+    },
+    stockFactors: {
+      previousDisplayedStock: displayedStockRef.current,
+      guestArrivalDeduction: 0,
+      emergencyArrivalReflection: 0,
+      donationDeduction: 0,
+      serverResyncCorrection: 0,
+    },
+    balanceFactors: {
+      previousDisplayedBalance: displayedBalanceRef.current,
+      salesAmount: 0,
+      promotionCost: 0,
+      emergencyOrderCost: 0,
+      donationCost: 0,
+      moveCost: 0,
+      serverResyncCorrection: 0,
+    },
+  });
+
+  const queueActionDebugLog = (options: {
+    actionName: string;
+    dedupeKey: string;
+    targetGuests?: number;
+    targetStock?: number;
+    targetBalance?: number;
+    salesAmount?: number;
+    promotionCost?: number;
+    emergencyOrderCost?: number;
+    donationCost?: number;
+    moveCost?: number;
+    donationDeduction?: number;
+  }) => {
+    const targetGuests = options.targetGuests ?? displayedGuestsRef.current;
+    const targetStock = options.targetStock ?? displayedStockRef.current;
+    const targetBalance = options.targetBalance ?? displayedBalanceRef.current;
+
+    queueDebugLog({
+      dedupeKey: options.dedupeKey,
+      day: dayNumber,
+      phase: debugPhaseLabel,
+      tick: getCurrentDebugTick({ phase: debugPhaseLabel }),
+      gameTime: getCurrentDebugGameTime(),
+      eventName: "없음",
+      actionName: options.actionName,
+      targetGuests,
+      targetStock,
+      targetBalance,
+      waitForDisplayedSettlement:
+        targetGuests !== displayedGuestsRef.current
+        || targetStock !== displayedStockRef.current
+        || targetBalance !== displayedBalanceRef.current,
+      customerFactors: {
+        serverCustomerCount: targetGuests,
+        previousDisplayedGuests: displayedGuestsRef.current,
+        pollingIncrease: 0,
+        animationAppliedCount: 0,
+      },
+      stockFactors: {
+        previousDisplayedStock: displayedStockRef.current,
+        guestArrivalDeduction: 0,
+        emergencyArrivalReflection: 0,
+        donationDeduction: options.donationDeduction ?? 0,
+        serverResyncCorrection:
+          targetStock - (displayedStockRef.current + (options.donationDeduction ?? 0)),
+      },
+      balanceFactors: {
+        previousDisplayedBalance: displayedBalanceRef.current,
+        salesAmount: options.salesAmount ?? 0,
+        promotionCost: options.promotionCost ?? 0,
+        emergencyOrderCost: options.emergencyOrderCost ?? 0,
+        donationCost: options.donationCost ?? 0,
+        moveCost: options.moveCost ?? 0,
+        serverResyncCorrection:
+          targetBalance - (
+            displayedBalanceRef.current
+            + (options.salesAmount ?? 0)
+            - (options.promotionCost ?? 0)
+            - (options.emergencyOrderCost ?? 0)
+            - (options.donationCost ?? 0)
+            - (options.moveCost ?? 0)
+          ),
+      },
+    });
+  };
 
   const clearScheduledVisitorTimers = () => {
     for (const timerId of scheduledVisitorTimersRef.current) {
@@ -803,15 +1187,11 @@ function PlayPageSession({
   const handlePopupArrival = (popupStoreIndex: number | null) => {
     const currentPopupStoreIndex = resolvePopupStoreIndex(currentLocationIdRef.current);
 
-    console.log("[PopupArrival] received:", popupStoreIndex, "current:", currentPopupStoreIndex, "locationId:", currentLocationIdRef.current, "queueSize:", arrivalQueueRef.current.length);
-
     if (currentPopupStoreIndex === null) {
-      console.log("[PopupArrival] SKIP: currentPopupStoreIndex is null");
       return;
     }
 
     if (popupStoreIndex !== null && popupStoreIndex !== currentPopupStoreIndex) {
-      console.log("[PopupArrival] SKIP: index mismatch", popupStoreIndex, "!==", currentPopupStoreIndex);
       return;
     }
 
@@ -842,7 +1222,6 @@ function PlayPageSession({
       if (event.data?.type !== "UNITY_POPUP_ARRIVAL") return;
 
       const signalValue = Number(event.data.signalValue ?? 1);
-      console.log("[Unity] UNITY_POPUP_ARRIVAL received, signalValue:", signalValue, "queueSize:", arrivalQueueRef.current.length);
       for (let i = 0; i < signalValue; i += 1) {
         applyOneArrival();
       }
@@ -852,7 +1231,61 @@ function PlayPageSession({
     return () => window.removeEventListener("message", handleUnityMessage);
   }, []);
 
-  const applyGameState = (state: GameStateResponse) => {
+  useEffect(() => {
+    if (!isPlayDebugLoggingEnabled() || pendingDebugLogsRef.current.length === 0) {
+      return;
+    }
+
+    const remainingLogs: PlayDebugPendingLog[] = [];
+
+    for (const pendingLog of pendingDebugLogsRef.current) {
+      const isSettled =
+        !pendingLog.waitForDisplayedSettlement
+        || (
+          guests === pendingLog.targetGuests
+          && stock === pendingLog.targetStock
+          && balance === pendingLog.targetBalance
+        );
+
+      if (!isSettled) {
+        remainingLogs.push(pendingLog);
+        continue;
+      }
+
+      if (emittedDebugKeysRef.current.has(pendingLog.dedupeKey)) {
+        continue;
+      }
+
+      emittedDebugKeysRef.current.add(pendingLog.dedupeKey);
+      console.log(
+        formatPlayDebugBlock({
+          day: pendingLog.day,
+          phase: pendingLog.phase,
+          tick: pendingLog.tick,
+          gameTime: pendingLog.gameTime,
+          eventName: pendingLog.eventName,
+          actionName: pendingLog.actionName,
+          guests,
+          stock,
+          balance,
+          customerFactors: pendingLog.customerFactors,
+          stockFactors: pendingLog.stockFactors,
+          balanceFactors: pendingLog.balanceFactors,
+        }),
+      );
+    }
+
+    pendingDebugLogsRef.current = remainingLogs;
+  }, [balance, debugFlushVersion, guests, stock]);
+
+  const applyGameState = (
+    state: GameStateResponse,
+    source: "initial" | "poll" | "action_sync" | "emergency_refresh" = "poll",
+  ) => {
+    const previousDisplayedGuests = displayedGuestsRef.current;
+    const previousDisplayedStock = displayedStockRef.current;
+    const previousDisplayedBalance = displayedBalanceRef.current;
+    const debugGameTime = getCurrentDebugGameTime();
     const hasCustomerPlan =
       Array.isArray(state.customerPlanByHour) && state.customerPlanByHour.length > 0;
 
@@ -901,9 +1334,40 @@ function PlayPageSession({
     }
 
     // 현재 값을 ref에 저장 (다음 비교용)
+    if (lastDebugAppliedBusinessDay !== null && lastDebugAppliedBusinessDay !== state.day) {
+      queueDebugLog(
+        buildDebugLogFromState(state, {
+          day: state.day,
+          phase: debugPhaseLabel,
+          gameTime: "09:50",
+          previousDisplayedGuests,
+          previousDisplayedStock,
+          previousDisplayedBalance,
+          dedupeKey: `day-change:${state.day}`,
+          waitForDisplayedSettlement: true,
+        }),
+      );
+    }
+
+    if (source === "poll") {
+      queueDebugLog(
+        buildDebugLogFromState(state, {
+          day: state.day,
+          phase: debugPhaseLabel,
+          gameTime: debugGameTime,
+          previousDisplayedGuests,
+          previousDisplayedStock,
+          previousDisplayedBalance,
+          dedupeKey: `poll:${state.day}:${debugPhaseLabel}:${debugGameTime}`,
+          waitForDisplayedSettlement: true,
+        }),
+      );
+    }
+
     prevGuestsRef.current = state.customerCount;
     prevStockRef.current = state.inventory.totalStock;
     prevBalanceRef.current = state.cash;
+    lastDebugAppliedBusinessDay = state.day;
     setTrafficStatus(state.traffic?.status ?? null);
     setDeliveryTrafficLabel(getTrafficStatusLabel(state.traffic?.status));
     syncUnityCongestionLevel(state.traffic?.status);
@@ -935,13 +1399,15 @@ function PlayPageSession({
     if (!hasLoadedCarryOverRef.current && state.appliedEvents.length > 0) {
       hasLoadedCarryOverRef.current = true;
       const carryOverAlerts: GameAlert[] = state.appliedEvents
-        .filter((ae) => shouldDisplayCarryOverAlert(ae.appliedAt, ae.eventName, ae.newsTitle))
+        .filter((ae) =>
+          shouldDisplayCarryOverAlert(ae.appliedAt, ae.eventName ?? "", ae.newsTitle ?? ""),
+        )
         .map((ae) => {
           const fakeSchedule: EventScheduleItem = {
             time: "10:00",
-            type: ae.eventName,
+            type: ae.eventName ?? "",
             scope: null,
-            newsTitle: ae.newsTitle,
+            newsTitle: ae.newsTitle ?? "",
             populationMultiplier: 1,
             balanceChange: 0,
           };
@@ -954,9 +1420,20 @@ function PlayPageSession({
             createdAt: Date.now(),
             timeLabel: getDaysAgoLabel(ae.appliedAt),
           };
-        });
+      });
       if (carryOverAlerts.length > 0) {
         setAlerts((prev) => [...prev, ...carryOverAlerts]);
+        for (const alert of carryOverAlerts) {
+          queueDebugLog(
+            buildPassiveDebugLog({
+              dedupeKey: `event:${state.day}:${debugGameTime}:${alert.title}`,
+              day: state.day,
+              phase: debugPhaseLabel,
+              gameTime: debugGameTime,
+              eventName: alert.title,
+            }),
+          );
+        }
       }
     }
   };
@@ -1059,8 +1536,10 @@ function PlayPageSession({
         return;
       }
 
+      setOptimisticUsedActions(new Set());
+
       if (stateResult.status === "fulfilled") {
-        applyGameState(stateResult.value);
+        applyGameState(stateResult.value, "initial");
       } else {
         // getGameDayState 실패 시 startGameDay의 initialBalance/Stock을 fallback으로 사용
         if (dayStartFallbackBalance !== null) {
@@ -1083,6 +1562,7 @@ function PlayPageSession({
         syncPromotionActionState(false);
         syncShareActionState(false);
         syncEmergencyActionState(false);
+        setOptimisticUsedActions(new Set());
       }
 
       if (orderResult.status === "fulfilled") {
@@ -1249,7 +1729,7 @@ function PlayPageSession({
     const poll = async () => {
       try {
         const state = await getGameDayState();
-        applyGameState(state);
+        applyGameState(state, "poll");
       } catch (err) {
         // 파산/시즌종료 에러 코드 → 메인으로 이동
         const code = (err as AxiosError<{ code?: string }>)?.response?.data?.code;
@@ -1292,6 +1772,15 @@ function PlayPageSession({
           },
           ...prev,
         ]);
+        queueDebugLog(
+          buildPassiveDebugLog({
+            dedupeKey: `event:${dayNumber}:${getCurrentDebugGameTime()}:${info.title}`,
+            day: dayNumber,
+            phase: debugPhaseLabel,
+            gameTime: getCurrentDebugGameTime(),
+            eventName: info.title,
+          }),
+        );
       }, delayMs);
       pendingEventTimersRef.current.push(timerId);
     };
@@ -1377,7 +1866,7 @@ function PlayPageSession({
         // 메뉴/재고/잔액 서버에서 재조회 (BE 반영 타이밍 보정 위해 다중 재시도)
         const refreshData = () => {
           getCurrentOrder().then((order) => setCurrentOrder(order)).catch(() => {});
-          getGameDayState().then((state) => applyGameState(state)).catch(() => {});
+          getGameDayState().then((state) => applyGameState(state, "emergency_refresh")).catch(() => {});
         };
         refreshData();
         setTimeout(refreshData, 2000);
@@ -1428,7 +1917,7 @@ function PlayPageSession({
       };
     },
   ) => {
-    setUsedActions((prev) => new Set(prev).add(action));
+    setOptimisticUsedActions((prev) => new Set(prev).add(action));
 
     if (persistentActionTypes.has(action)) {
       setActiveEffects((prev) => new Set(prev).add(action));
@@ -1503,6 +1992,7 @@ function PlayPageSession({
               rate,
             );
             const discountValue = discountCurrentPrice - discountedPrice;
+            const actionGameTime = getCurrentDebugGameTime();
 
             if (discountValue <= 0) {
               return;
@@ -1526,11 +2016,32 @@ function PlayPageSession({
             ]);
 
             if (stateResult.status === "fulfilled") {
-              applyGameState(stateResult.value);
+              applyGameState(stateResult.value, "action_sync");
             }
 
             if (orderResult.status === "fulfilled") {
               setCurrentOrder(orderResult.value);
+            }
+
+            if (stateResult.status === "fulfilled") {
+              queueDebugLog(
+                buildDebugLogFromState(stateResult.value, {
+                  day: stateResult.value.day,
+                  phase: debugPhaseLabel,
+                  gameTime: actionGameTime,
+                  actionName: "할인",
+                  previousDisplayedGuests: displayedGuestsRef.current,
+                  previousDisplayedStock: displayedStockRef.current,
+                  previousDisplayedBalance: displayedBalanceRef.current,
+                  dedupeKey: `action:discount:${stateResult.value.day}:${actionGameTime}`,
+                  waitForDisplayedSettlement: true,
+                }),
+              );
+            } else {
+              queueActionDebugLog({
+                actionName: "할인",
+                dedupeKey: `action:discount:${dayNumber}:${actionGameTime}`,
+              });
             }
 
             completeAction("discount", {
@@ -1555,6 +2066,8 @@ function PlayPageSession({
           initializationError={emergencyDataError}
           onClose={closeModal}
           onSubmit={async ({ menuId, menuName, quantity, salePrice }) => {
+            const actionGameTime = getCurrentDebugGameTime();
+            const previousBalance = displayedBalanceRef.current;
             const response = await postEmergencyOrder(menuId, quantity, salePrice);
             didOrderEmergencyRef.current = true;
             hasEmergencyArrivalAlertRef.current = false;
@@ -1563,6 +2076,13 @@ function PlayPageSession({
             const arrivalText = arrivalLabel ? ` ${arrivalLabel} 도착 예정입니다.` : "";
 
             setEmergencyArriveAt(response.arrivedTime);
+
+            queueActionDebugLog({
+              actionName: "긴급발주",
+              dedupeKey: `action:emergency:${dayNumber}:${actionGameTime}`,
+              targetBalance: Math.max(0, previousBalance - response.totalCost),
+              emergencyOrderCost: response.totalCost,
+            });
 
             completeAction("emergency", {
               cost: response.totalCost,
@@ -1584,7 +2104,9 @@ function PlayPageSession({
           onClose={closeModal}
           onSubmit={async ({ promotionId, cost }) => {
             const promotionType = promotionId as PromotionType;
+            const actionGameTime = getCurrentDebugGameTime();
             const response = await postPromotion(promotionType);
+            const promotionCost = response.cost || cost;
 
             syncPromotionActionState(true);
 
@@ -1592,11 +2114,35 @@ function PlayPageSession({
             const hasSyncedState = stateSyncResult.status === "fulfilled";
 
             if (hasSyncedState) {
-              applyGameState(stateSyncResult.value);
+              applyGameState(stateSyncResult.value, "action_sync");
+            }
+
+            if (hasSyncedState) {
+              queueDebugLog(
+                buildDebugLogFromState(stateSyncResult.value, {
+                  day: stateSyncResult.value.day,
+                  phase: debugPhaseLabel,
+                  gameTime: actionGameTime,
+                  actionName: "홍보",
+                  previousDisplayedGuests: displayedGuestsRef.current,
+                  previousDisplayedStock: displayedStockRef.current,
+                  previousDisplayedBalance: displayedBalanceRef.current,
+                  promotionCost,
+                  dedupeKey: `action:promotion:${stateSyncResult.value.day}:${actionGameTime}`,
+                  waitForDisplayedSettlement: true,
+                }),
+              );
+            } else {
+              queueActionDebugLog({
+                actionName: "홍보",
+                dedupeKey: `action:promotion:${dayNumber}:${actionGameTime}`,
+                targetBalance: Math.max(0, displayedBalanceRef.current - promotionCost),
+                promotionCost,
+              });
             }
 
             completeAction("promotion", {
-              cost: hasSyncedState ? undefined : response.cost || cost,
+              cost: hasSyncedState ? undefined : promotionCost,
               alert: {
                 title: "홍보 시작",
                 description: `${promotionLabels[promotionId] ?? "홍보"}를 시작했습니다.`,
@@ -1611,6 +2157,7 @@ function PlayPageSession({
           currentStock={stock}
           onClose={closeModal}
           onSubmit={async (quantity) => {
+            const actionGameTime = getCurrentDebugGameTime();
             const response = await postDonation(quantity);
 
             syncShareActionState(true);
@@ -1619,7 +2166,31 @@ function PlayPageSession({
             const hasSyncedState = stateSyncResult.status === "fulfilled";
 
             if (hasSyncedState) {
-              applyGameState(stateSyncResult.value);
+              applyGameState(stateSyncResult.value, "action_sync");
+            }
+
+            if (hasSyncedState) {
+              queueDebugLog(
+                buildDebugLogFromState(stateSyncResult.value, {
+                  day: stateSyncResult.value.day,
+                  phase: debugPhaseLabel,
+                  gameTime: actionGameTime,
+                  actionName: "나눔",
+                  previousDisplayedGuests: displayedGuestsRef.current,
+                  previousDisplayedStock: displayedStockRef.current,
+                  previousDisplayedBalance: displayedBalanceRef.current,
+                  donationDeduction: -response.quantity,
+                  dedupeKey: `action:share:${stateSyncResult.value.day}:${actionGameTime}`,
+                  waitForDisplayedSettlement: true,
+                }),
+              );
+            } else {
+              queueActionDebugLog({
+                actionName: "나눔",
+                dedupeKey: `action:share:${dayNumber}:${actionGameTime}`,
+                targetStock: Math.max(0, displayedStockRef.current - response.quantity),
+                donationDeduction: -response.quantity,
+              });
             }
 
             completeAction("share", {
@@ -1642,6 +2213,8 @@ function PlayPageSession({
           initializationError={moveDataError}
           onClose={closeModal}
           onSubmit={async ({ regionId, regionName }) => {
+            const actionGameTime = getCurrentDebugGameTime();
+            const previousBalance = displayedBalanceRef.current;
             const response = await updateStoreLocation(regionId);
 
             const [stateSyncResult, storeSyncResult] = await Promise.allSettled([
@@ -1651,7 +2224,7 @@ function PlayPageSession({
             const hasSyncedState = stateSyncResult.status === "fulfilled";
 
             if (hasSyncedState) {
-              applyGameState(stateSyncResult.value);
+              applyGameState(stateSyncResult.value, "action_sync");
             } else {
               setBalance(response.balance);
             }
@@ -1669,6 +2242,32 @@ function PlayPageSession({
               latestCustomerPlanRef.current,
               latestBackendCustomerCountRef.current,
             );
+
+            const moveCost = Math.max(0, previousBalance - response.balance);
+
+            if (hasSyncedState) {
+              queueDebugLog(
+                buildDebugLogFromState(stateSyncResult.value, {
+                  day: stateSyncResult.value.day,
+                  phase: debugPhaseLabel,
+                  gameTime: actionGameTime,
+                  actionName: "이동",
+                  previousDisplayedGuests: displayedGuestsRef.current,
+                  previousDisplayedStock: displayedStockRef.current,
+                  previousDisplayedBalance: displayedBalanceRef.current,
+                  moveCost,
+                  dedupeKey: `action:move:${stateSyncResult.value.day}:${actionGameTime}`,
+                  waitForDisplayedSettlement: true,
+                }),
+              );
+            } else {
+              queueActionDebugLog({
+                actionName: "이동",
+                dedupeKey: `action:move:${dayNumber}:${actionGameTime}`,
+                targetBalance: response.balance,
+                moveCost,
+              });
+            }
 
             completeAction("move", {
               alert: {
