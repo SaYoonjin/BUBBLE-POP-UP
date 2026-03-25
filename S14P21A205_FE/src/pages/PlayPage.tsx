@@ -1049,8 +1049,7 @@ function PlayPageSession({
 
         seenAppliedEventKeysRef.current.add(eventInfo.key);
         return true;
-      })
-      .sort((left, right) => left.sortTimestamp - right.sortTimestamp);
+      });
 
     if (nextAlerts.length === 0) {
       return;
@@ -1078,6 +1077,17 @@ function PlayPageSession({
   };
 
   const applyGameState = (state: GameStateResponse) => {
+    if (state.day !== dayNumber) {
+      console.warn(
+        "[PlayPage] Ignore mismatched game state day:",
+        "expected",
+        dayNumber,
+        "received",
+        state.day,
+      );
+      return;
+    }
+
     const hasCustomerPlan =
       Array.isArray(state.customerPlanByHour) && state.customerPlanByHour.length > 0;
 
