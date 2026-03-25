@@ -20,6 +20,16 @@ function getIsBankrupt(report: GameDayReportResponse) {
   return Boolean(report.isBankrupt);
 }
 
+type BankruptcyReason = "consecutive_deficit" | "rent_unpaid" | null;
+
+function getBankruptcyReason(report: GameDayReportResponse): BankruptcyReason {
+  if (!getIsBankrupt(report)) {
+    return null;
+  }
+
+  return report.consecutiveDeficitDays >= 3 ? "consecutive_deficit" : "rent_unpaid";
+}
+
 function getReputation(report: GameDayReportResponse) {
   return Math.min((report.capture_rate ?? 0) * 5, 5);
 }
@@ -128,14 +138,32 @@ export default function ReportPage() {
   const chartData = buildChartData(allReports, report.day);
   const todayProfit = getNetProfit(report);
   const isBankrupt = getIsBankrupt(report);
+  const bankruptcyReason = getBankruptcyReason(report);
   const disposal = isStockDisposalDay(report.day);
   const reputation = getReputation(report);
   const reputationChange = (report.change_capture_rate ?? 0) * 5;
-  const stockSubtext = isBankrupt
-    ? "파산으로 영업 종료"
-    : disposal
-      ? "폐기 대상"
-      : "다음 날 이월";
+  const stockSubtext = bankruptcyReason === "rent_unpaid"
+    ? "임대료 미납으로 영업 종료"
+    : bankruptcyReason === "consecutive_deficit"
+      ? "3일 연속 적자로 영업 종료"
+      : disposal
+        ? "폐기 대상"
+        : "다음 날 이월";
+  const bankruptStatusMessage = bankruptcyReason === "rent_unpaid"
+    ? `Day ${report.day} 영업 종료, 임대료를 내지 못해 바로 파산했습니다.`
+    : `Day ${report.day} 영업 종료, 파산 상태입니다.`;
+  const showBankruptcyWarning = report.consecutiveDeficitDays > 0 || isBankrupt;
+  const warningMessage = isBankrupt
+    ? bankruptcyReason === "rent_unpaid"
+      ? "파산했습니다: 임대료를 내지 못해 즉시 파산"
+      : `파산했습니다: ${report.consecutiveDeficitDays}일 연속 적자 발생`
+    : `${report.consecutiveDeficitDays}일 연속 적자 중입니다. 3일 연속이면 파산합니다.`;
+  const bankruptInfoMessage = bankruptcyReason === "rent_unpaid"
+    ? "임대료를 내지 못해 더 이상 다음 날 영업은 진행할 수 없습니다."
+    : "3일 연속 적자로 더 이상 다음 날 영업은 진행할 수 없습니다.";
+  const weatherDisabledMessage = bankruptcyReason === "rent_unpaid"
+    ? "임대료를 내지 못해 매장이 바로 폐업되었습니다."
+    : "3일 연속 적자로 매장이 폐업되었습니다.";
 
   const formatCurrency = (value: number) => {
     const absolute = Math.abs(value).toLocaleString();
@@ -160,7 +188,7 @@ export default function ReportPage() {
               </h1>
               {isBankrupt ? (
                 <p className="text-base font-medium text-rose-dark">
-                  Day {report.day} 영업 종료, 파산 상태입니다.
+                  {bankruptStatusMessage}
                 </p>
               ) : (
                 <p className="text-base text-slate-500">
@@ -197,7 +225,7 @@ export default function ReportPage() {
             </h3>
           </div>
 
-          {report.consecutiveDeficitDays > 0 && (
+          {showBankruptcyWarning && (
             <div
               className={`flex items-center gap-3 rounded-xl p-4 ${
                 isBankrupt
@@ -213,16 +241,14 @@ export default function ReportPage() {
                 warning
               </span>
               <h3 className="text-lg font-bold tracking-tight">
-                {isBankrupt
-                  ? `파산했습니다: ${report.consecutiveDeficitDays}일 연속 적자 발생`
-                  : `${report.consecutiveDeficitDays}일 연속 적자 중입니다. 3일 연속이면 파산합니다.`}
+                {warningMessage}
               </h3>
             </div>
           )}
 
           {isBankrupt && (
             <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-rose-700">
-              <p className="text-sm font-semibold">더 이상 다음 날 영업은 진행할 수 없습니다.</p>
+              <p className="text-sm font-semibold">{bankruptInfoMessage}</p>
               <p className="mt-1 text-sm">리포트를 확인한 뒤 로비로 이동해 주세요.</p>
             </div>
           )}
@@ -309,6 +335,7 @@ export default function ReportPage() {
             <WeatherCard
               condition={report.tomorrowWeather?.condition ?? null}
               disabled={isBankrupt}
+              disabledMessage={weatherDisabledMessage}
             />
           </div>
         </div>
