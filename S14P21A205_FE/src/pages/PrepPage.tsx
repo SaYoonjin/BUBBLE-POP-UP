@@ -247,7 +247,7 @@ export default function PrepPage() {
   const parsedDay = Number(dayParam);
   const day = Number.isNaN(parsedDay) ? 0 : parsedDay;
   const isRegularOrderRouteDay = isRegularOrderDay(day);
-  const [tab, setTab] = useState<Tab>("prep");
+  const [tab, setTab] = useState<Tab>("news");
   const [menus, setMenus] = useState<PrepMenu[]>(fallbackMenus);
   const [isMenusLoading, setIsMenusLoading] = useState(true);
   const [menuError, setMenuError] = useState<string | null>(null);
@@ -264,6 +264,7 @@ export default function PrepPage() {
   const [selectedMenu, setSelectedMenu] = useState<number | null>(1);
   const [quantity, setQuantity] = useState(120);
   const [expandedNewsId, setExpandedNewsId] = useState<number | null>(null);
+  const [showOrderReminder, setShowOrderReminder] = useState(false);
   const selectedMenuData = menus.find((menu) => menu.id === selectedMenu) ?? menus[0] ?? fallbackMenus[0];
   const originalCostPrice = selectedMenuData.costPrice;
   const ingredientDiscountMultiplier = selectedMenuData.ingredientDiscountMultiplier;
@@ -532,10 +533,29 @@ export default function PrepPage() {
   }, [defaultSellingPrice]);
 
   useEffect(() => {
-    setTab("prep");
+    setTab("news");
     setRegularOrderStatus("idle");
     setRegularOrderError(null);
+    setShowOrderReminder(false);
   }, [day]);
+
+  // 정규 발주일에 발주 미완료 시 종료 20초 전 토스트
+  useEffect(() => {
+    if (!isRegularOrderRouteDay || regularOrderStatus !== "idle" || !prepEndTimestampMs) {
+      setShowOrderReminder(false);
+      return;
+    }
+
+    const msUntilReminder = prepEndTimestampMs - Date.now() - 20_000;
+
+    if (msUntilReminder <= 0) {
+      setShowOrderReminder(true);
+      return;
+    }
+
+    const timer = setTimeout(() => setShowOrderReminder(true), msUntilReminder);
+    return () => clearTimeout(timer);
+  }, [isRegularOrderRouteDay, regularOrderStatus, prepEndTimestampMs]);
 
   const handleRegularOrderSubmit = async () => {
     if (!canSubmitRegularOrder) {
@@ -585,6 +605,21 @@ export default function PrepPage() {
   return (
     <div className="min-h-screen bg-[#FDFDFB] text-slate-900 font-display flex flex-col">
       <AppHeader />
+
+      {/* Order reminder toast */}
+      {showOrderReminder && (
+        <div
+          className="fixed top-4 left-1/2 -translate-x-1/2 z-50 w-[90%] max-w-md cursor-pointer animate-[slideIn_0.3s_ease-out]"
+          onClick={() => setTab("prep")}
+        >
+          <div className="flex gap-3 p-3 rounded-xl border bg-amber-50 border-amber-200 shadow-lg">
+            <span className="material-symbols-outlined text-amber-600 text-xl mt-0.5">warning</span>
+            <div className="flex-1 min-w-0">
+              <span className="text-sm font-medium text-gray-900">정규 발주를 아직 완료하지 않았습니다!</span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main */}
       <main className="flex-1 flex flex-col items-center py-6 pt-24 px-4 sm:px-8">
