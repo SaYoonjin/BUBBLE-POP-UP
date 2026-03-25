@@ -28,6 +28,8 @@ export default function PriceSlider({
   onChange,
 }: PriceSliderProps) {
   const [showTooltip, setShowTooltip] = useState(false);
+  const [inputValue, setInputValue] = useState(String(price));
+  const [isFocused, setIsFocused] = useState(false);
   const margin = price - discountedCostPrice;
   const isProfit = margin > 0;
 
@@ -58,28 +60,42 @@ export default function PriceSlider({
       <div className="flex grow flex-col justify-center gap-6">
         <div className="py-1 text-center">
           <p className="mb-2 text-[13px] font-medium text-slate-400">판매 가격</p>
-          <p className="text-[2.5rem] font-black tracking-tight text-slate-900 md:text-[2.875rem]">
-            ₩{price.toLocaleString()}
-          </p>
+          <div className="flex items-center justify-center gap-1">
+            <span className="text-[2.5rem] font-black tracking-tight text-slate-900 md:text-[2.875rem]">₩</span>
+            <input
+              type="text"
+              inputMode="numeric"
+              value={isFocused ? inputValue : price.toLocaleString()}
+              onChange={(event) => {
+                setInputValue(event.target.value.replace(/[^0-9]/g, ""));
+              }}
+              onFocus={() => {
+                setIsFocused(true);
+                setInputValue(String(price));
+              }}
+              onBlur={() => {
+                setIsFocused(false);
+                const value = Number(inputValue);
+                if (!Number.isNaN(value) && inputValue !== "") {
+                  onChange(Math.max(min, Math.min(max, value)));
+                } else {
+                  setInputValue(String(price));
+                }
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.currentTarget.blur();
+                }
+              }}
+              className="w-40 border-b-2 border-slate-200 bg-transparent text-center text-[2.5rem] font-black tracking-tight text-slate-900 outline-none transition-colors focus:border-primary md:text-[2.875rem]"
+            />
+          </div>
           <p className="mt-2.5 text-[13px] font-semibold text-primary-dark">
             {defaultPriceLabel} ₩{defaultPrice.toLocaleString()}
           </p>
-        </div>
-
-        <div className="w-full px-1">
-          <input
-            type="range"
-            min={min}
-            max={max}
-            step={step}
-            value={price}
-            onChange={(event) => onChange(Number(event.target.value))}
-            className="h-2 w-full cursor-pointer appearance-none rounded-lg bg-slate-100 accent-primary transition-all hover:accent-primary-dark"
-          />
-          <div className="mt-2.5 flex justify-between text-xs font-medium text-slate-400">
-            <span>최소 ₩{min.toLocaleString()}</span>
-            <span>최대 ₩{max.toLocaleString()}</span>
-          </div>
+          <p className="mt-1.5 text-xs font-medium text-slate-400">
+            ₩{min.toLocaleString()} ~ ₩{max.toLocaleString()}
+          </p>
         </div>
 
         <div className="mt-auto grid grid-cols-2 gap-3 pt-3">
