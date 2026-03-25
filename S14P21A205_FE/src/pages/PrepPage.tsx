@@ -612,8 +612,8 @@ export default function PrepPage() {
           className="fixed top-4 left-1/2 -translate-x-1/2 z-50 w-[90%] max-w-md cursor-pointer animate-[slideIn_0.3s_ease-out]"
           onClick={() => setTab("prep")}
         >
-          <div className="flex gap-3 p-3 rounded-xl border bg-amber-50 border-amber-200 shadow-lg">
-            <span className="material-symbols-outlined text-amber-600 text-xl mt-0.5">warning</span>
+          <div className="flex items-center gap-3 p-3 rounded-xl border bg-amber-50 border-amber-200 shadow-lg">
+            <span className="material-symbols-outlined text-amber-600 text-xl">warning</span>
             <div className="flex-1 min-w-0">
               <span className="text-sm font-medium text-gray-900">정규 발주를 아직 완료하지 않았습니다!</span>
             </div>
