@@ -484,7 +484,7 @@ public class SeasonLifecycleService {
         return trafficRepository.saveAll(fixedRows);
     }
 
-    private void rebuildDailyEvents(Season season, List<Menu> menus, Random random) {
+    private void rebuildDailyEvents(Season season, List<Menu> menus, List<Location> locations, Random random) {
         dailyEventRepository.deleteBySeasonId(season.getId());
 
         List<WeightedEventSpec> fullPool = buildWeightedEventPool(menus);
@@ -507,6 +507,7 @@ public class SeasonLifecycleService {
 
                 WeightedEventSpec selectedEvent = selectedBaseEvent
                         .withApplyOffsetSeconds(index == 0 ? FIRST_EVENT_OFFSET_SECONDS : SECOND_EVENT_OFFSET_SECONDS);
+                Long targetLocationId = resolveTargetLocationId(selectedEvent, locations, random);
                 RandomEvent randomEvent = upsertRandomEvent(selectedEvent);
                 dailyEvents.add(DailyEvent.create(
                         season,
@@ -514,7 +515,7 @@ public class SeasonLifecycleService {
                         day,
                         selectedEvent.applyOffsetSeconds(),
                         selectedEvent.expireOffsetSeconds(),
-                        selectedEvent.targetLocationId(),
+                        targetLocationId,
                         selectedEvent.targetMenuId()
                 ));
             }
@@ -606,7 +607,27 @@ public class SeasonLifecycleService {
 
         List<Menu> menus = requireMenus();
         Random random = createDailyEventRandom(season, locations);
-        rebuildDailyEvents(season, menus, random);
+        rebuildDailyEvents(season, menus, locations, random);
+    }
+
+    private Long resolveTargetLocationId(WeightedEventSpec event, List<Location> locations, Random random) {
+        if (event.targetLocationId() != null || !requiresTargetLocation(event.category())) {
+            return event.targetLocationId();
+        }
+        if (locations == null || locations.isEmpty()) {
+            throw new BaseException(
+                    ErrorCode.RESOURCE_NOT_FOUND,
+                    "No locations available for location-scoped event"
+            );
+        }
+        return locations.get(random.nextInt(locations.size())).getId();
+    }
+
+    private boolean requiresTargetLocation(EventCategory category) {
+        return switch (category) {
+            case CELEBRITY_APPEARANCE, EARTHQUAKE, FLOOD, TYPHOON, FIRE -> true;
+            default -> false;
+        };
     }
 
     private Random createDailyEventRandom(Season season, List<Location> locations) {
