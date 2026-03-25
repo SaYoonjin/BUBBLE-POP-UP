@@ -20,12 +20,14 @@ import {
   getStoredSelectedDashboardItems,
 } from "../utils/dashboardItems";
 
+import {
+  BUSINESS_SECONDS,
+  DAY_SECONDS,
+  REPORT_SECONDS,
+} from "../constants/gameTime";
+
 const DEFAULT_PREP_DAY = 1;
 const INITIAL_CAPITAL = 5_000_000;
-const PREP_SECONDS = 50;
-const BUSINESS_SECONDS = 120;
-const REPORT_SECONDS = 10;
-const DAY_SECONDS = PREP_SECONDS + BUSINESS_SECONDS + REPORT_SECONDS;
 const MIDSEASON_CUTOFF_DAY = 6;
 const BRAND_NAME_MAX_LENGTH = 10;
 
