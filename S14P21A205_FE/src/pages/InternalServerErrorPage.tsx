@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Navigate, useNavigate } from "react-router-dom";
 import ErrorPageDetails from "../components/common/ErrorPageDetails";
 import ErrorStateLayout from "../components/common/ErrorStateLayout";
 import { consumeErrorPageState } from "../utils/errorPageState";
@@ -8,19 +8,23 @@ export default function InternalServerErrorPage() {
   const navigate = useNavigate();
   const [errorState] = useState(() => consumeErrorPageState());
 
+  if (errorState?.status !== 500) {
+    return <Navigate to="/" replace />;
+  }
+
   return (
     <ErrorStateLayout
       code="500"
-      badge="Server Error"
-      title="The server could not finish that request"
-      description="Something failed on our side while the current page was loading. Try again once, then return home if the issue continues."
+      badge="서버 오류"
+      title="서버에서 요청을 처리하지 못했습니다"
+      description="서버 내부 오류가 발생했습니다. 잠시 후 다시 시도하거나 홈으로 이동해 주세요."
       primaryAction={{
-        label: "Try Again",
-        onClick: () => window.location.reload(),
+        label: "홈으로",
+        onClick: () => navigate("/", { replace: true }),
       }}
       secondaryAction={{
-        label: "Go Home",
-        onClick: () => navigate("/", { replace: true }),
+        label: "이전으로",
+        onClick: () => navigate(-1),
         variant: "secondary",
       }}
       footer={(

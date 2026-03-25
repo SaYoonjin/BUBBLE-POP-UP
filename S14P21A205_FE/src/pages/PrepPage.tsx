@@ -401,7 +401,7 @@ export default function PrepPage() {
 
         const prevOrder = orderResult.status === "fulfilled" ? orderResult.value : null;
         const storePlayableDay = storeResult.status === "fulfilled" ? storeResult.value?.playableday : null;
-        const orderKey = storePlayableDay != null ? `hasPlayerOrdered_${nextWaitingStatus?.nextSeasonNumber}_${storePlayableDay}` : null;
+        const orderKey = storePlayableDay != null ? `hasPlayerOrdered_${waitingStatus?.nextSeasonNumber}_${storePlayableDay}` : null;
         const hasPlayerOrdered = (() => { try { return orderKey != null && localStorage.getItem(orderKey) === "true"; } catch { return false; } })();
         const nextMenus = mapStoreMenusToPrepMenus(
           fetchedMenus,
@@ -433,7 +433,7 @@ export default function PrepPage() {
     return () => {
       isActive = false;
     };
-  }, [day]);
+  }, [day, waitingStatus?.nextSeasonNumber]);
 
   useEffect(() => {
     let isActive = true;
