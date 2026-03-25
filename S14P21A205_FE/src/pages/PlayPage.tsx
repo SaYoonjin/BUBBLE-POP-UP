@@ -53,6 +53,7 @@ import {
 } from "../constants/gameTime";
 import { sendToUnity, setWeather, startDay, spawnShopAtIndex, setCameraRegion } from "../utils/unity";
 import useBrandName from "../hooks/useBrandName";
+import useStatQueue from "../hooks/useStatQueue";
 import { useUserStore } from "../stores/useUserStore";
 import { normalizeDiscountMultiplier } from "../utils/dashboardItems";
 
@@ -543,6 +544,7 @@ function PlayPageSession({
   const [balance, setBalance] = useState(0);
   const [stock, setStock] = useState(0);
   const [guests, setGuests] = useState(0);
+  const statQueue = useStatQueue(setStock, setBalance);
   const [currentLocationName, setCurrentLocationName] = useState("");
   const currentLocationIdRef = useRef<number | null>(null);
   const locationIdByNameRef = useRef<ReadonlyMap<string, number>>(new Map());
@@ -634,9 +636,7 @@ function PlayPageSession({
     syncActionUsageState("emergency", emergencyUsed);
   };
 
-  const [guestsDelta, setGuestsDelta] = useState<number | null>(null);
-  const [stockDelta, setStockDelta] = useState<number | null>(null);
-  const [balanceDelta, setBalanceDelta] = useState<number | null>(null);
+  const spawnTimingRef = useRef<{ totalSpawned: number; totalArrived: number; lastRequestAt: number }>({ totalSpawned: 0, totalArrived: 0, lastRequestAt: 0 });
   const unityBridgeRef = useRef<UnityBridgeHandle | null>(null);
   const latestTrafficStatusRef = useRef<GameTrafficStatus | null>(null);
   const lastUnityCongestionLevelRef = useRef<UnityCongestionLevel | null>(null);
@@ -777,7 +777,7 @@ function PlayPageSession({
   const handleUnityReady = () => {
     // spawnShop + setCameraRegion은 이미 큐에 들어있으므로 여기서는 생략
     if (dayWeatherType !== null) {
-      setWeather(unityIframeRef, dayWeatherType);
+      setWeather(unityIframeRef, dayWeatherType, storeRegionIndex ?? 0);
     }
     const remaining = Math.max(0, Math.ceil((playEndTimestampMs - Date.now()) / 1000));
     const isFirstLoad = remaining >= BUSINESS_SECONDS - 3;
@@ -796,7 +796,7 @@ function PlayPageSession({
   // Unity ready 이후 날씨 데이터가 도착하면 전송
   useEffect(() => {
     if (unityReady && dayWeatherType !== null) {
-      setWeather(unityIframeRef, dayWeatherType);
+      setWeather(unityIframeRef, dayWeatherType, storeRegionIndex ?? 0);
     }
   }, [unityReady, dayWeatherType]);
 
@@ -828,6 +828,11 @@ function PlayPageSession({
       setStock((prev) => prev + change.stockDelta);
       setBalance((prev) => prev + change.balanceDelta);
     }
+
+    spawnTimingRef.current.totalArrived += 1;
+    const { totalSpawned, totalArrived } = spawnTimingRef.current;
+    const remainingUntilEnd = Math.max(0, playEndTimestampMs - Date.now());
+    console.log(`[SpawnTiming] 도착 (누적 도착: ${totalArrived}/${totalSpawned}, 미도착: ${totalSpawned - totalArrived}), 남은 시간: ${remainingUntilEnd}ms`);
   };
 
   // Unity UNITY_POPUP_ARRIVAL 이벤트 수신
@@ -872,12 +877,21 @@ function PlayPageSession({
 
           if (popupStoreIndex !== null) {
             spawnPopupVisitorsImmediately(popupStoreIndex, gd);
+            spawnTimingRef.current.totalSpawned += gd;
+            spawnTimingRef.current.lastRequestAt = Date.now();
+            const { totalSpawned, totalArrived } = spawnTimingRef.current;
+            const remainingUntilEnd = Math.max(0, playEndTimestampMs - Date.now());
+            console.log(`[SpawnTiming] 스폰 요청: +${gd}명 (누적 스폰: ${totalSpawned}, 도착: ${totalArrived}, 미도착: ${totalSpawned - totalArrived}), 남은 시간: ${remainingUntilEnd}ms`);
           }
         }
       } else {
-        // 새 손님 없으면 백엔드 값으로 직접 동기화
-        setStock(state.inventory.totalStock);
-        setBalance(state.cash);
+        // 새 손님 없으면 큐를 통해 점진적으로 동기화
+        statQueue.enqueue({
+          targetStock: state.inventory.totalStock,
+          targetBalance: state.cash,
+          currentStock: prevStockRef.current ?? 0,
+          currentBalance: prevBalanceRef.current ?? 0,
+        });
       }
     } else {
       // 최초 폴링: 백엔드 값으로 초기화
@@ -1214,6 +1228,15 @@ function PlayPageSession({
 
       if (nextRemainingMilliseconds <= 0) {
         window.clearInterval(timer);
+        const { totalSpawned, totalArrived } = spawnTimingRef.current;
+        if (totalSpawned > 0) {
+          const missing = totalSpawned - totalArrived;
+          if (missing > 0) {
+            console.warn(`[SpawnTiming] ⚠️ 하루 종료! 누적 미도착: ${missing}/${totalSpawned}명 (도착률: ${Math.round(totalArrived / totalSpawned * 100)}%)`);
+          } else {
+            console.log(`[SpawnTiming] ✅ 하루 종료! 전원 도착: ${totalArrived}/${totalSpawned}명`);
+          }
+        }
       }
     }, 100);
 
@@ -1417,11 +1440,11 @@ function PlayPageSession({
       typeof stockDelta === "number" && stockDelta !== 0 ? Math.max(0, stock + stockDelta) : stock;
 
     if (typeof cost === "number" && cost > 0) {
-      setBalance((prev) => prev - cost);
+      statQueue.enqueueDelta({ balanceDelta: -cost });
     }
 
     if (typeof stockDelta === "number" && stockDelta !== 0) {
-      setStock(nextStock);
+      statQueue.enqueueDelta({ stockDelta });
 
       if (nextStock > 30) {
         hasLowStockAlertRef.current = false;
@@ -1451,9 +1474,6 @@ function PlayPageSession({
         guests={guests}
         stock={stock}
         balance={balance}
-        guestsDelta={null}
-        stockDelta={null}
-        balanceDelta={null}
       />
 
       <main className="relative flex flex-1 overflow-hidden">
