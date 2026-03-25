@@ -8,7 +8,7 @@ import MenuSelector from "../components/game/MenuSelector";
 import PriceSlider from "../components/game/PriceSlider";
 import QuantityCounter from "../components/game/QuantityCounter";
 import CozyNewspaper from "../components/game/CozyNewspaper";
-import { getCurrentOrder, postRegularOrder } from "../api/order";
+import { postRegularOrder } from "../api/order";
 import { getGameWaitingStatus, type GameWaitingResponse } from "../api/game";
 import {
   getNewsRanking,
@@ -22,6 +22,10 @@ import {
   applyDiscount,
   normalizeDiscountMultiplier,
 } from "../utils/dashboardItems";
+import {
+  readStoredRegularOrderSelection,
+  writeStoredRegularOrderSelection,
+} from "../utils/regularOrderSelection";
 
 interface PrepMenu {
   id: number;
@@ -366,10 +370,9 @@ export default function PrepPage() {
 
     const loadPrepMenus = async () => {
       try {
-        const [menusResult, storeResult, orderResult] = await Promise.allSettled([
+        const [menusResult, storeResult] = await Promise.allSettled([
           getStoreMenus(),
           day >= 2 ? getStore() : Promise.resolve<StoreResponse | null>(null),
-          day >= 2 ? getCurrentOrder() : Promise.resolve(null),
         ]);
 
         if (!isActive) {
@@ -399,14 +402,18 @@ export default function PrepPage() {
           return;
         }
 
-        const prevOrder = orderResult.status === "fulfilled" ? orderResult.value : null;
-        const storePlayableDay = storeResult.status === "fulfilled" ? storeResult.value?.playableday : null;
-        const orderKey = storePlayableDay != null ? `hasPlayerOrdered_${waitingStatus?.nextSeasonNumber}_${storePlayableDay}` : null;
-        const hasPlayerOrdered = (() => { try { return orderKey != null && localStorage.getItem(orderKey) === "true"; } catch { return false; } })();
+        const storePlayableDay =
+          storeResult.status === "fulfilled" && storeResult.value?.playableday != null
+            ? storeResult.value.playableday
+            : day;
+        const storedRegularOrder = readStoredRegularOrderSelection({
+          seasonNumber: waitingStatus?.nextSeasonNumber ?? null,
+          playableDay: storePlayableDay,
+        });
         const nextMenus = mapStoreMenusToPrepMenus(
           fetchedMenus,
-          hasPlayerOrdered ? (prevOrder?.sellingPrice ?? null) : null,
-          hasPlayerOrdered ? (prevOrder?.menuId ?? null) : null,
+          storedRegularOrder?.price ?? null,
+          storedRegularOrder?.menuId ?? null,
         );
         setMenus(nextMenus);
         setSelectedMenu((currentMenuId) =>
@@ -594,10 +601,13 @@ export default function PrepPage() {
         price,
       });
       setRegularOrderStatus("submitted");
-      try {
-        const orderKey = playableday != null ? `hasPlayerOrdered_${waitingStatus?.nextSeasonNumber}_${playableday}` : null;
-        if (orderKey) localStorage.setItem(orderKey, "true");
-      } catch { /* ignore */ }
+      writeStoredRegularOrderSelection({
+        seasonNumber: latestWaitingStatus.nextSeasonNumber,
+        playableDay: playableday ?? day,
+      }, {
+        menuId: selectedMenuData.id,
+        price,
+      });
     } catch (error) {
       setRegularOrderStatus("idle");
 

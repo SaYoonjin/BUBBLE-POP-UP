@@ -57,6 +57,10 @@ import useBrandName from "../hooks/useBrandName";
 import useStatQueue from "../hooks/useStatQueue";
 import { useUserStore } from "../stores/useUserStore";
 import { normalizeDiscountMultiplier } from "../utils/dashboardItems";
+import {
+  readStoredRegularOrderSelection,
+  type StoredRegularOrderSelection,
+} from "../utils/regularOrderSelection";
 
 interface ApiErrorResponse {
   message?: string;
@@ -765,6 +769,7 @@ function PlayPageSession({
   const latestCustomerPlanRef = useRef<CustomerPlanByHourItem[]>([]);
   const latestBackendCustomerCountRef = useRef(0);
   const [currentOrder, setCurrentOrder] = useState<CurrentOrderResponse | null>(null);
+  const [storedRegularOrder, setStoredRegularOrder] = useState<StoredRegularOrderSelection | null>(null);
   const [menuItems, setMenuItems] = useState<EmergencyMenuItem[]>([]);
   const [moveRegions, setMoveRegions] = useState<MoveRegion[]>([]);
   const [promotionOptions, setPromotionOptions] = useState<PromotionOption[]>(() =>
@@ -791,15 +796,22 @@ function PlayPageSession({
   const emergencyArrivalGameTime = emergencyArriveAt
     ? formatEmergencyArrivalGameTime(emergencyArriveAt, playEndTimestampMs) || null
     : getEstimatedEmergencyArrivalGameTime(remainingMilliseconds, estimatedEmergencyDelaySeconds);
+  const regularSellingPrice =
+    currentOrder &&
+    storedRegularOrder &&
+    currentOrder.menuId === storedRegularOrder.menuId &&
+    !usedActions.has("discount")
+      ? storedRegularOrder.price
+      : currentOrder?.sellingPrice ?? 0;
   const currentMenuPricing: CurrentMenuPricing | null = currentOrder
     ? {
         costPrice: currentOrder.costPrice,
         recommendedPrice: currentOrder.recommendedPrice,
         maxSellingPrice: currentOrder.maxSellingPrice,
-        sellingPrice: currentOrder.sellingPrice,
+        sellingPrice: regularSellingPrice,
       }
     : null;
-  const discountCurrentPrice = currentOrder?.sellingPrice ?? 0;
+  const discountCurrentPrice = regularSellingPrice;
   const discountMinimumPrice = currentOrder?.costPrice ?? discountCurrentPrice;
   const debugPhaseLabel = getPlayDebugPhaseLabel(phase);
 
@@ -1598,6 +1610,19 @@ function PlayPageSession({
         setCurrentOrder(null);
       }
 
+      const nextStoredRegularOrder = readStoredRegularOrderSelection(
+        {
+          seasonNumber:
+            stateResult.status === "fulfilled" ? stateResult.value.seasonId : null,
+          playableDay:
+            storeResult.status === "fulfilled"
+              ? (storeResult.value.playableday ?? dayNumber)
+              : dayNumber,
+        },
+        { includeLatestFallback: true },
+      );
+      setStoredRegularOrder(nextStoredRegularOrder);
+
       if (menuResult.status === "fulfilled") {
         setMenuItems(mapStoreMenusToEmergencyMenus(menuResult.value.menus));
       } else {
@@ -1891,11 +1916,11 @@ function PlayPageSession({
 
   const closeModal = () => setActiveModal(null);
 
-  const pushAlert = (
+  function pushAlert(
     type: GameAlert["type"],
     title: string,
     description: string,
-  ) => {
+  ) {
     setAlerts((prev) => [
       {
         id: Date.now() + Math.floor(Math.random() * 1000),
@@ -1906,7 +1931,7 @@ function PlayPageSession({
       },
       ...prev,
     ]);
-  };
+  }
 
   const pushActionAlert = (title: string, description: string) => {
     pushAlert("action", title, description);
