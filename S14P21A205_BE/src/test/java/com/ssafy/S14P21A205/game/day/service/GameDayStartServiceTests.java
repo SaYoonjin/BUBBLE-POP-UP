@@ -326,7 +326,7 @@ class GameDayStartServiceTests {
     }
 
     @Test
-    void startDayUsesLatestEarlierReportWhenPreviousDayReportIsMissing() {
+    void startDayDisposesCarryOverStockOnRegularOrderDayWhenPreviousDayReportIsMissing() {
         User user = user(1);
         Store store = store(user, 15L, 3L, 1L, 9L, 3, 7, 5_000, 100_000, 2_000);
 
@@ -360,9 +360,12 @@ class GameDayStartServiceTests {
         GameDayStartResponse response = gameDayStartService.startDay(mock(Authentication.class));
 
         assertThat(response.initialBalance()).isEqualTo(9_000_000);
-        assertThat(response.initialStock()).isEqualTo(10);
+        assertThat(response.initialStock()).isZero();
         assertThat(response.openingSummary().previousClosingBalance()).isEqualTo(9_000_000);
         assertThat(response.openingSummary().previousClosingStock()).isEqualTo(10);
+        assertThat(response.openingSummary().disposalQuantity()).isEqualTo(10);
+        assertThat(response.openingSummary().openingAgedStock()).isZero();
+        assertThat(response.openingSummary().openingFreshStock()).isZero();
     }
 
     @Test

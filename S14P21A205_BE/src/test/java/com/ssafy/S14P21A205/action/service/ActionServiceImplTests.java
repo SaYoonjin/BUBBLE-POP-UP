@@ -25,6 +25,8 @@ import com.ssafy.S14P21A205.action.repository.ActionRepository;
 import com.ssafy.S14P21A205.exception.BaseException;
 import com.ssafy.S14P21A205.exception.ErrorCode;
 import com.ssafy.S14P21A205.game.day.dto.GameDayStartResponse;
+import com.ssafy.S14P21A205.game.day.dto.GameStateResponse;
+import com.ssafy.S14P21A205.game.day.service.GameDayStateService;
 import com.ssafy.S14P21A205.game.day.service.GameDayStartService;
 import com.ssafy.S14P21A205.game.day.policy.CaptureRatePolicy;
 import com.ssafy.S14P21A205.game.day.policy.StoreRankingPolicy;
@@ -100,6 +102,9 @@ class ActionServiceImplTests {
     private NewsRankingResolver newsRankingResolver;
 
     @Mock
+    private GameDayStateService gameDayStateService;
+
+    @Mock
     private GameDayStartService gameDayStartService;
 
     private ActionServiceImpl actionService;
@@ -121,9 +126,13 @@ class ActionServiceImplTests {
                 new StoreRankingPolicy(),
                 newsRankingResolver,
                 new CaptureRatePolicy(),
+                gameDayStateService,
                 gameDayStartService,
                 fixedClock
         );
+        org.mockito.Mockito.lenient()
+                .when(gameDayStateService.refreshGameState(any()))
+                .thenReturn(Optional.empty());
     }
 
     @Test
@@ -430,6 +439,27 @@ class ActionServiceImplTests {
     }
 
     @Test
+    void executeDonationRefreshesCurrentGameStateBeforeCheckingStock() {
+        Store store = store(15L, 1, 3L, 7L, 2, 7, 2_000, 4_000);
+        Action donationAction = action(ActionCategory.DONATION, 0);
+
+        when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
+                .thenReturn(Optional.of(store));
+        when(actionRepository.findByCategory(ActionCategory.DONATION)).thenReturn(List.of(donationAction));
+        when(gameDayStoreStateRedisRepository.find(15L, 2)).thenReturn(Optional.of(state(500_000L, 0)));
+        when(gameDayStateService.refreshGameState(store)).thenAnswer(invocation -> {
+            when(gameDayStoreStateRedisRepository.find(15L, 2)).thenReturn(Optional.of(state(500_000L, 130)));
+            return Optional.of(org.mockito.Mockito.mock(GameStateResponse.class));
+        });
+
+        DonationResponse response = actionService.executeDonation(1, new DonationRequest(1));
+
+        assertThat(response.quantity()).isEqualTo(1);
+        verify(gameDayStateService).refreshGameState(store);
+        verify(gameDayStoreStateRedisRepository).updateField(15L, 2, "stock", "129");
+    }
+
+    @Test
     void executeEmergencyOrderAppliesIngredientDiscountTrendMultiplierAndCostMultiplierFromActiveEvent() {
         Store store = store(15L, 1, 3L, 7L, 2, 7, 2_000);
         com.ssafy.S14P21A205.shop.entity.Menu emergencyMenu = menu(8L, 3_000, "emergency-cookie");
@@ -600,6 +630,7 @@ class ActionServiceImplTests {
                 new StoreRankingPolicy(),
                 newsRankingResolver,
                 new CaptureRatePolicy(),
+                gameDayStateService,
                 gameDayStartService,
                 fixedClock
         );

@@ -43,6 +43,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -413,6 +414,52 @@ class GameDayReportServiceTests {
     }
 
     @Test
+    void getDayReportMaterializesMissingReportOnRead() {
+        User user = user(1);
+        Store store = store(15L, 9L, 1, 7, "Seongsu", "Cookie", 300);
+        GameDayLiveState state = state(
+                LocalDateTime.of(2026, 3, 9, 14, 30, 0),
+                new BigDecimal("0.10"),
+                5_000L,
+                1_300L,
+                42,
+                20,
+                15_000L,
+                12,
+                8
+        );
+        AtomicReference<DailyReport> savedReport = new AtomicReference<>();
+
+        when(userService.getCurrentUser(any())).thenReturn(user);
+        when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
+                .thenReturn(Optional.of(store));
+        when(dailyReportRepository.findByStoreIdAndDay(15L, 1))
+                .thenAnswer(invocation -> Optional.ofNullable(savedReport.get()));
+        when(dailyReportRepository.existsByStoreIdAndDay(15L, 1)).thenReturn(false);
+        when(dailyReportRepository.findFirstByStore_IdOrderByDayDesc(15L)).thenReturn(Optional.empty());
+        when(gameDayStateService.refreshGameState(store)).thenReturn(Optional.empty());
+        when(gameDayStoreStateRedisRepository.find(15L, 1)).thenReturn(Optional.of(state));
+        when(dailyReportRepository.save(any(DailyReport.class))).thenAnswer(invocation -> {
+            DailyReport report = invocation.getArgument(0);
+            savedReport.set(report);
+            return report;
+        });
+        when(dailyReportRepository.findByStore_IdOrderByDayAsc(15L))
+                .thenAnswer(invocation -> savedReport.get() == null ? List.of() : List.of(savedReport.get()));
+        when(weatherLocationRepository.findByDayOrderByLocation_IdAsc(2)).thenReturn(List.of(
+                weatherLocation(store.getLocation(), 2, weather(WeatherType.SUNNY))
+        ));
+
+        GameDayReportResponse response = gameDayReportService.getDayReport(mock(Authentication.class), 1);
+
+        assertThat(response.day()).isEqualTo(1);
+        assertThat(response.revenue()).isEqualTo(5_000L);
+        assertThat(response.totalCost()).isEqualTo(1_600L);
+        assertThat(response.locationName()).isEqualTo("Seongsu");
+        verify(dailyReportRepository).save(any(DailyReport.class));
+    }
+
+    @Test
     void getDayReportUsesReservedLocationForTomorrowWeather() {
         User user = user(1);
         Store store = store(15L, 9L, 2, 7, "Current Location", "Current Menu", 300);
@@ -527,6 +574,29 @@ class GameDayReportServiceTests {
                 .isInstanceOf(BaseException.class)
                 .satisfies(exception -> assertThat(((BaseException) exception).getErrorCode())
                         .isEqualTo(ErrorCode.NOT_PARTICIPATING));
+    }
+
+    @Test
+    void getDayReportThrowsWhenMissingReportCannotBeMaterialized() {
+        User user = user(1);
+        Store store = store(15L, 9L, 1, 7, "Seongsu", "Cookie", 300);
+
+        when(userService.getCurrentUser(any())).thenReturn(user);
+        when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
+                .thenReturn(Optional.of(store));
+        when(dailyReportRepository.findByStoreIdAndDay(15L, 1)).thenReturn(Optional.empty());
+        when(dailyReportRepository.existsByStoreIdAndDay(15L, 1)).thenReturn(false);
+        when(dailyReportRepository.findFirstByStore_IdOrderByDayDesc(15L)).thenReturn(Optional.empty());
+        when(gameDayStateService.refreshGameState(store)).thenReturn(Optional.empty());
+        when(gameDayStoreStateRedisRepository.find(15L, 1)).thenReturn(Optional.empty());
+        when(gameDayStateService.restoreClosedDayState(store, 1)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> gameDayReportService.getDayReport(mock(Authentication.class), 1))
+                .isInstanceOf(BaseException.class)
+                .satisfies(exception -> assertThat(((BaseException) exception).getErrorCode())
+                        .isEqualTo(ErrorCode.REPORT_NOT_FOUND));
+
+        verify(dailyReportRepository, never()).save(any(DailyReport.class));
     }
 
     @Test
