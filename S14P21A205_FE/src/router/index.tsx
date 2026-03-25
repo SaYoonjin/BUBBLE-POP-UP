@@ -14,8 +14,12 @@ import NewsPage from "../pages/NewsPage";
 import CozyPrepPage from "../pages/CozyPrepPage";
 import WaitingPage from "../pages/WaitingPage";
 import AuthCallbackPage from "../pages/AuthCallbackPage";
+import BadRequestPage from "../pages/BadRequestPage";
 import ForbiddenPage from "../pages/ForbiddenPage";
+import InternalServerErrorPage from "../pages/InternalServerErrorPage";
 import NotFoundPage from "../pages/NotFoundPage";
+import ServiceUnavailablePage from "../pages/ServiceUnavailablePage";
+import UnauthorizedPage from "../pages/UnauthorizedPage";
 
 const router = createBrowserRouter([
   { path: "/", element: <HomePage /> },
@@ -23,7 +27,12 @@ const router = createBrowserRouter([
   { path: "/auth/callback", element: <AuthCallbackPage /> },
   { path: "/news", element: <NewsPage /> },
   { path: "/cozy/prep", element: <CozyPrepPage /> },
+  { path: "/400", element: <BadRequestPage /> },
+  { path: "/401", element: <UnauthorizedPage /> },
   { path: "/403", element: <ForbiddenPage /> },
+  { path: "/404", element: <NotFoundPage /> },
+  { path: "/500", element: <InternalServerErrorPage /> },
+  { path: "/503", element: <ServiceUnavailablePage /> },
   {
     element: <PrivateRoute />,
     children: [
