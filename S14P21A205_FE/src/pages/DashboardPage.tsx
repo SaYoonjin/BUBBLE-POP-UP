@@ -646,6 +646,16 @@ export default function DashboardPage() {
               </button>
             )}
 
+            {(waitingStatus?.seasonPhase === "SEASON_SUMMARY" || waitingStatus?.seasonPhase === "NEXT_SEASON_WAITING") && (
+              <button
+                onClick={() => navigate("/ranking")}
+                className="w-full flex items-center justify-center gap-2 rounded-2xl bg-slate-800 px-6 py-4 text-white font-bold shadow-lg hover:bg-slate-900 transition-all hover:-translate-y-0.5"
+              >
+                <span className="material-symbols-outlined text-xl">leaderboard</span>
+                최종 랭킹 조회하기
+              </button>
+            )}
+
             {showMidSeasonNotice && (
               <div className="rounded-[20px] border border-amber-200 bg-amber-50/90 p-5 shadow-soft">
                 <div className="flex items-start gap-3">
