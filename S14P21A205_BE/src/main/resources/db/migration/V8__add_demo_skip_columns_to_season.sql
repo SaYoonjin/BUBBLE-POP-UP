@@ -1,5 +1,3 @@
 ALTER TABLE season
-    ADD COLUMN IF NOT EXISTS demo_playable_days INT NULL;
-
-ALTER TABLE season
-    ADD COLUMN IF NOT EXISTS demo_skip_status VARCHAR(20) NOT NULL DEFAULT 'NONE';
+    ADD COLUMN demo_playable_days INT NULL,
+    ADD COLUMN demo_skip_status VARCHAR(20) NOT NULL DEFAULT 'NONE';
