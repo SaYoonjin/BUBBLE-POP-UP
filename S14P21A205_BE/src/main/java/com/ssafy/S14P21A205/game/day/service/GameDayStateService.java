@@ -153,10 +153,6 @@ public class GameDayStateService {
                 regionStoreCount
         );
 
-        if (calculatedState.liveState().salePrice() != null
-                && !calculatedState.liveState().salePrice().equals(store.getPrice())) {
-            store.changePrice(calculatedState.liveState().salePrice());
-        }
         if (calculatedState.currentMenu() != null
                 && (store.getMenu() == null || !calculatedState.currentMenu().equals(store.getMenu()))) {
             store.changeMenu(calculatedState.currentMenu());
