@@ -176,7 +176,7 @@ export default function VirusFogEffect({ durationMs }: Props) {
       {/* 독안개 */}
       <instancedMesh ref={fogRef} args={[undefined, undefined, FOG_COUNT]}>
         <sphereGeometry args={[1.2, 12, 12]} />
-        <meshBasicMaterial color="#6b21a8" transparent opacity={0} />
+        <meshBasicMaterial color="#6b21a8" transparent opacity={0} depthWrite={false} />
       </instancedMesh>
 
       {/* 바이러스 (텍스처) */}
