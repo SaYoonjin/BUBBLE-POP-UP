@@ -468,7 +468,7 @@ export default function DashboardPage() {
     }
 
     // 파산 유저 또는 시즌 종료 시 버튼 숨김
-    if (bankruptNoticeSeasonNumber != null || phase === "SEASON_SUMMARY" || phase === "NEXT_SEASON_WAITING") {
+    if (bankruptNoticeSeasonNumber != null || !participation.storeAccessible || phase === "SEASON_SUMMARY" || phase === "NEXT_SEASON_WAITING") {
       setGameReturnPath(null);
       return;
     }
