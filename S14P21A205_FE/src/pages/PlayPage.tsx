@@ -577,8 +577,8 @@ function mapStoreMenusToEmergencyMenus(menus: StoreMenuResponse[]): EmergencyMen
     ingredientPrice: menu.ingredientPrice,
     ingredientDiscountMultiplier: normalizeDiscountMultiplier(menu.discount),
     emoji: resolveMenuEmoji(menu.menuId, menu.menuName),
-    recommendedPrice: menu.recommendedPrice,
-    maxSellingPrice: menu.maxSellingPrice,
+    recommendedPrice: menu.recommendedPrice ?? 0,
+    maxSellingPrice: menu.maxSellingPrice ?? 0,
   }));
 }
 
@@ -816,8 +816,8 @@ function PlayPageSession({
   const currentMenuPricing: CurrentMenuPricing | null = currentOrder
     ? {
         costPrice: currentOrder.costPrice,
-        recommendedPrice: currentOrder.recommendedPrice,
-        maxSellingPrice: currentOrder.maxSellingPrice,
+        recommendedPrice: currentOrder.recommendedPrice ?? 0,
+        maxSellingPrice: currentOrder.maxSellingPrice ?? 0,
         sellingPrice: currentLiveSellingPrice,
       }
     : null;
