@@ -52,7 +52,7 @@ import {
   elapsedToGameTime,
   type SeasonPhase,
 } from "../constants/gameTime";
-import { sendToUnity, setWeather, startDay, spawnShopAtIndex, setCameraRegion } from "../utils/unity";
+import { sendToUnity, setWeather, setDay, startDay, spawnShopAtIndex, setCameraRegion } from "../utils/unity";
 import { classifyEventEffect } from "../components/play/effects/effects";
 import { useEventEffectStore } from "../components/play/effects/useEventEffect";
 import EventEffect3DOverlay from "../components/play/effects/EventEffect3DOverlay";
@@ -761,6 +761,9 @@ function PlayPageSession({
     }
     // 탑뷰 상태일 수 있으니 가게 뷰로 복귀
     sendToUnity(unityIframeRef, "ReturnToMain");
+    if (storeRegionIndex !== null) {
+      setCameraRegion(unityIframeRef, storeRegionIndex);
+    }
     // iframe blur로 키보드 입력 차단
     unityIframeRef.current?.blur();
   }, [activeEventEffect]);
@@ -1251,10 +1254,9 @@ function PlayPageSession({
     const remaining = Math.max(0, Math.ceil((playEndTimestampMs - Date.now()) / 1000));
     const isFirstLoad = remaining >= BUSINESS_SECONDS - 3;
     if (isFirstLoad) {
-      // 처음 진입: Unity StartDay(ConfiguredDayDuration) 호출
-      sendToUnity(unityIframeRef, "StartDay", "");
-    } else {
-      // 새로고침: 남은 시간으로 동기화 (StartOrSyncDay)
+      // 처음 진입: Unity autoStart가 이미 StartDay(120) 실행하므로 중복 호출 안 함
+    } else if (remaining > 5) {
+      // 새로고침: 남은 시간으로 동기화 (너무 짧으면 밤 덮어쓰기 방지)
       startDay(unityIframeRef, remaining);
     }
     lastUnityCongestionLevelRef.current = null;
