@@ -379,6 +379,25 @@ export default function DashboardPage() {
     waitingStatus?.status === "IN_PROGRESS" &&
       isJoinableDay(waitingStatus.currentDay ?? null),
   );
+  const recentSeasonNumber = useMemo(() => {
+    if (!waitingStatus) {
+      return null;
+    }
+
+    if (waitingStatus.seasonPhase === "SEASON_SUMMARY") {
+      return currentSeasonNumber;
+    }
+
+    if (waitingStatus.seasonPhase === "NEXT_SEASON_WAITING") {
+      return (waitingStatus.nextSeasonNumber ?? 1) - 1;
+    }
+
+    return null;
+  }, [currentSeasonNumber, waitingStatus]);
+  const showRecentSeasonRankingButton =
+    (waitingStatus?.seasonPhase === "SEASON_SUMMARY" ||
+      waitingStatus?.seasonPhase === "NEXT_SEASON_WAITING") &&
+    (recentSeasonNumber ?? 0) >= 2;
 
   useEffect(() => {
     if (shopItems.length === 0) {
@@ -649,13 +668,13 @@ export default function DashboardPage() {
               </button>
             )}
 
-            {(waitingStatus?.seasonPhase === "SEASON_SUMMARY" || waitingStatus?.seasonPhase === "NEXT_SEASON_WAITING") && (
+            {showRecentSeasonRankingButton && (
               <button
                 onClick={() => navigate("/ranking")}
                 className="w-full flex items-center justify-center gap-2 rounded-2xl bg-slate-800 px-6 py-4 text-white font-bold shadow-lg hover:bg-slate-900 transition-all hover:-translate-y-0.5"
               >
                 <span className="material-symbols-outlined text-xl">leaderboard</span>
-                최종 랭킹 조회하기
+                최근 시즌 랭킹 조회하기
               </button>
             )}
 
