@@ -361,6 +361,7 @@ export default function LocationSelectPage() {
       });
       // join 응답의 playableFromDay를 store에 저장 (GameGuard에서 참조)
       useGameStore.getState().setPlayableFromDay(joinResponse.playableFromDay);
+      useGameStore.getState().setCurrentLocationName(selectedDistrict.name);
       const nextPrepPath = `/game/${joinResponse.playableFromDay ?? DEFAULT_PREP_DAY}/prep`;
       const remainingSelectionSeconds = Math.max(
         0,
