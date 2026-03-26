@@ -1830,28 +1830,34 @@ function PlayPageSession({
           },
           ...prev,
         ]);
-        // 3D 이벤트 이펙트 트리거 (Unity + 프론트엔드 동시)
+        // 3D 이벤트 이펙트 트리거 (내 지역 또는 전역 이벤트만)
         const effectType = classifyEventEffect(event);
         if (effectType) {
-          const regionIdx = storeRegionIndex ?? 0;
-          if (effectType === "TYPHOON") {
-            sendToUnity(unityIframeRef, "SetWeather", `Wind,${regionIdx}`);
-          } else if (effectType === "EARTHQUAKE") {
-            sendToUnity(unityIframeRef, "SetWeather", `Earthquake,${regionIdx}`);
-          } else if (effectType === "FIRE") {
-            sendToUnity(unityIframeRef, "SetWeather", `Fire,${regionIdx}`);
-          } else if (effectType === "FLOOD") {
-            sendToUnity(unityIframeRef, "SetWeather", `Rain,${regionIdx}`);
+          const eventRegionId = event.targetRegionId ?? event.scope?.region ?? null;
+          const isGlobal = eventRegionId === null;
+          const isMyRegion = eventRegionId === currentLocationIdRef.current;
+
+          if (isGlobal || isMyRegion) {
+            const regionIdx = storeRegionIndex ?? 0;
+            if (effectType === "TYPHOON") {
+              sendToUnity(unityIframeRef, "SetWeather", `Wind,${regionIdx}`);
+            } else if (effectType === "EARTHQUAKE") {
+              sendToUnity(unityIframeRef, "SetWeather", `Earthquake,${regionIdx}`);
+            } else if (effectType === "FIRE") {
+              sendToUnity(unityIframeRef, "SetWeather", `Fire,${regionIdx}`);
+            } else if (effectType === "FLOOD") {
+              sendToUnity(unityIframeRef, "SetWeather", `Rain,${regionIdx}`);
+            }
+            // Unity 날씨 이펙트 종료 후 원래 날씨로 복원
+            if (effectType === "TYPHOON" || effectType === "EARTHQUAKE" || effectType === "FIRE" || effectType === "FLOOD") {
+              const restoreId = window.setTimeout(() => {
+                const weather = mapWeatherToUnity(dayWeatherType ?? "SUNNY");
+                sendToUnity(unityIframeRef, "SetWeather", `${weather},${regionIdx}`);
+              }, EFFECT_CONFIG[effectType].durationMs);
+              pendingEventTimersRef.current.push(restoreId);
+            }
+            triggerEffect(effectType);
           }
-          // Unity 날씨 이펙트 종료 후 원래 날씨로 복원
-          if (effectType === "TYPHOON" || effectType === "EARTHQUAKE" || effectType === "FIRE" || effectType === "FLOOD") {
-            const restoreId = window.setTimeout(() => {
-              const weather = mapWeatherToUnity(dayWeatherType ?? "SUNNY");
-              sendToUnity(unityIframeRef, "SetWeather", `${weather},${regionIdx}`);
-            }, EFFECT_CONFIG[effectType].durationMs);
-            pendingEventTimersRef.current.push(restoreId);
-          }
-          triggerEffect(effectType);
         }
 
         queueDebugLog(
