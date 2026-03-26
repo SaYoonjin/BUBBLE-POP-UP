@@ -1,11 +1,13 @@
 package com.ssafy.S14P21A205.game.day.state.repository;
 
+import com.ssafy.S14P21A205.config.RedisTtlProperties;
 import com.ssafy.S14P21A205.exception.BaseException;
 import com.ssafy.S14P21A205.exception.ErrorCode;
 import com.ssafy.S14P21A205.game.day.debug.TickDebugActionNote;
 import com.ssafy.S14P21A205.game.day.dto.GameDayStartResponse;
 import com.ssafy.S14P21A205.game.day.state.GameDayLiveState;
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -14,7 +16,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Repository;
 import org.springframework.util.StringUtils;
@@ -22,7 +24,6 @@ import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
 
 @Repository
-@RequiredArgsConstructor
 public class GameDayStoreStateRedisRepository {
 
     private static final String STATE_KEY_PATTERN = "game:store:%d:day:%d:state";
@@ -53,6 +54,22 @@ public class GameDayStoreStateRedisRepository {
 
     private final StringRedisTemplate stringRedisTemplate;
     private final ObjectMapper objectMapper;
+    private final Duration gameDayTtl;
+
+    @Autowired
+    public GameDayStoreStateRedisRepository(
+            StringRedisTemplate stringRedisTemplate,
+            ObjectMapper objectMapper,
+            RedisTtlProperties redisTtlProperties
+    ) {
+        this.stringRedisTemplate = stringRedisTemplate;
+        this.objectMapper = objectMapper;
+        this.gameDayTtl = redisTtlProperties.gameDay();
+    }
+
+    GameDayStoreStateRedisRepository(StringRedisTemplate stringRedisTemplate, ObjectMapper objectMapper) {
+        this(stringRedisTemplate, objectMapper, RedisTtlProperties.defaults());
+    }
 
     public Optional<GameDayLiveState> find(Long storeId, Integer day) {
         Map<Object, Object> entries = stringRedisTemplate.opsForHash().entries(buildStateKey(storeId, day));
@@ -91,15 +108,19 @@ public class GameDayStoreStateRedisRepository {
 
     public void save(Long storeId, Integer day, GameDayLiveState state) {
         try {
-            stringRedisTemplate.opsForHash().putAll(buildStateKey(storeId, day), buildEntries(state));
+            String stateKey = buildStateKey(storeId, day);
+            stringRedisTemplate.opsForHash().putAll(stateKey, buildEntries(state));
+            expire(stateKey);
         } catch (Exception e) {
             throw new BaseException(ErrorCode.INTERNAL_SERVER_ERROR, e);
         }
     }
 
     public void saveStateAndTickLog(Long storeId, Integer day, GameDayLiveState state) {
+        String stateKey = buildStateKey(storeId, day);
         try {
-            stringRedisTemplate.opsForHash().putAll(buildStateKey(storeId, day), buildLiveEntries(state));
+            stringRedisTemplate.opsForHash().putAll(stateKey, buildLiveEntries(state));
+            expire(stateKey);
         } catch (Exception e) {
             throw new BaseException(ErrorCode.INTERNAL_SERVER_ERROR, e);
         }
@@ -107,7 +128,9 @@ public class GameDayStoreStateRedisRepository {
     }
 
     public void updateField(Long storeId, Integer day, String field, String value) {
-        stringRedisTemplate.opsForHash().put(buildStateKey(storeId, day), field, value);
+        String stateKey = buildStateKey(storeId, day);
+        stringRedisTemplate.opsForHash().put(stateKey, field, value);
+        expire(stateKey);
     }
 
     public boolean exists(Long storeId, Integer day) {
@@ -126,12 +149,15 @@ public class GameDayStoreStateRedisRepository {
     }
 
     public void saveBalance(Long storeId, Integer day, Long balance) {
+        String stateKey = buildStateKey(storeId, day);
         try {
             if (balance == null) {
-                stringRedisTemplate.opsForHash().delete(buildStateKey(storeId, day), FIELD_BALANCE);
+                stringRedisTemplate.opsForHash().delete(stateKey, FIELD_BALANCE);
+                expire(stateKey);
                 return;
             }
-            stringRedisTemplate.opsForHash().put(buildStateKey(storeId, day), FIELD_BALANCE, balance.toString());
+            stringRedisTemplate.opsForHash().put(stateKey, FIELD_BALANCE, balance.toString());
+            expire(stateKey);
         } catch (Exception e) {
             throw new BaseException(ErrorCode.INTERNAL_SERVER_ERROR, e);
         }
@@ -157,7 +183,7 @@ public class GameDayStoreStateRedisRepository {
         Map<String, Boolean> actions = getActions(storeId, day);
         actions.put(actionField, true);
         try {
-            stringRedisTemplate.opsForValue().set(buildActionsKey(storeId, day), objectMapper.writeValueAsString(actions));
+            stringRedisTemplate.opsForValue().set(buildActionsKey(storeId, day), objectMapper.writeValueAsString(actions), gameDayTtl);
         } catch (Exception e) {
             throw new RuntimeException("Failed to serialize actions", e);
         }
@@ -205,11 +231,13 @@ public class GameDayStoreStateRedisRepository {
         try {
             List<TickDebugActionNote> notes = new ArrayList<>(findTickDebugActionNotes(storeId, day, resolvedTick));
             notes.add(note);
+            String debugActionsKey = buildDebugActionsKey(storeId, day);
             stringRedisTemplate.opsForHash().put(
-                    buildDebugActionsKey(storeId, day),
+                    debugActionsKey,
                     String.valueOf(resolvedTick),
                     objectMapper.writeValueAsString(notes)
             );
+            expire(debugActionsKey);
         } catch (Exception e) {
             throw new BaseException(ErrorCode.INTERNAL_SERVER_ERROR, e);
         }
@@ -221,10 +249,16 @@ public class GameDayStoreStateRedisRepository {
         }
 
         try {
-            stringRedisTemplate.opsForHash().putAll(buildTickLogKey(storeId, day), buildTickLogEntries(state));
+            String tickLogKey = buildTickLogKey(storeId, day);
+            stringRedisTemplate.opsForHash().putAll(tickLogKey, buildTickLogEntries(state));
+            expire(tickLogKey);
         } catch (Exception e) {
             throw new BaseException(ErrorCode.INTERNAL_SERVER_ERROR, e);
         }
+    }
+
+    private void expire(String key) {
+        stringRedisTemplate.expire(key, gameDayTtl);
     }
 
     private Map<String, String> buildEntries(GameDayLiveState state) {

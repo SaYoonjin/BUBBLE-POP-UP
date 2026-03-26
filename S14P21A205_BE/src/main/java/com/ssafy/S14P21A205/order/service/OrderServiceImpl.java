@@ -63,11 +63,11 @@ public class OrderServiceImpl implements OrderService {
     private final SeasonTimelineService seasonTimelineService = new SeasonTimelineService();
 
     @Override
-    public CurrentOrderResponse getCurrentOrder(Integer userId) {
+    public CurrentOrderResponse getCurrentOrder(Integer userId, Integer menuId) {
         Store store = getStoreByUserId(userId);
         Long storeId = store.getId();
         int currentDay = resolveRegularOrderDay(store);
-        Menu menu = store.getMenu();
+        Menu menu = resolvePreviewMenu(store, menuId);
         List<Store> seasonStores = storeRepository.findBySeason_IdOrderByIdAsc(store.getSeason().getId());
 
         BigDecimal ingredientDiscountRate = getIngredientDiscountRate(store.getUser().getId());
@@ -81,14 +81,21 @@ public class OrderServiceImpl implements OrderService {
         );
         Integer stock = resolveStock(store, currentDay);
         Integer baseSellingPrice = resolveBaseSellingPrice(store, currentDay);
+        Integer sellingPrice = resolveSellingPrice(
+                null,
+                Objects.equals(store.getMenu().getId(), menu.getId()),
+                baseSellingPrice,
+                pricingPolicy
+        );
 
         return CurrentOrderResponse.builder()
                 .menuId(Math.toIntExact(menu.getId()))
                 .menuName(menu.getMenuName())
                 .costPrice(pricingPolicy.costPrice())
+                .minimumSellingPrice(pricingPolicy.minimumSellingPrice())
                 .recommendedPrice(pricingPolicy.recommendedPrice())
                 .maxSellingPrice(pricingPolicy.maxSellingPrice())
-                .sellingPrice(baseSellingPrice)
+                .sellingPrice(sellingPrice)
                 .stock(stock)
                 .build();
     }
@@ -173,6 +180,13 @@ public class OrderServiceImpl implements OrderService {
     private Menu getMenuById(Integer menuId) {
         return menuRepository.findById(Long.valueOf(menuId))
                 .orElseThrow(() -> new BaseException(ErrorCode.MENU_NOT_FOUND));
+    }
+
+    private Menu resolvePreviewMenu(Store store, Integer menuId) {
+        if (menuId == null || Objects.equals(store.getMenu().getId(), Long.valueOf(menuId))) {
+            return store.getMenu();
+        }
+        return getMenuById(menuId);
     }
 
     private BigDecimal getIngredientDiscountRate(Integer userId) {
