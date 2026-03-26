@@ -53,7 +53,8 @@ import {
   type SeasonPhase,
 } from "../constants/gameTime";
 import { sendToUnity, setWeather, startDay, spawnShopAtIndex, setCameraRegion } from "../utils/unity";
-import { classifyEventEffect } from "../components/play/effects/effects";
+import { classifyEventEffect, EFFECT_CONFIG } from "../components/play/effects/effects";
+import { mapWeatherToUnity } from "../utils/unity";
 import { useEventEffectStore } from "../components/play/effects/useEventEffect";
 import EventEffect3DOverlay from "../components/play/effects/EventEffect3DOverlay";
 import useBrandName from "../hooks/useBrandName";
@@ -1291,7 +1292,9 @@ function PlayPageSession({
   };
 
   const applyOneArrival = () => {
-    // 숫자 변경은 statQueue가 담당, 여기는 Unity 스폰 타이밍 추적만
+    // 유니티 손님 도착 → 헤더 손님 수 +1
+    setGuests((prev) => prev + 1);
+    displayedGuestsRef.current += 1;
     spawnTimingRef.current.totalArrived += 1;
     const { totalSpawned, totalArrived } = spawnTimingRef.current;
     const remainingUntilEnd = Math.max(0, playEndTimestampMs - Date.now());
@@ -1384,8 +1387,13 @@ function PlayPageSession({
         currentBalance: displayedBalanceRef.current,
       });
 
-      // 손님수는 서버 값으로 직접 업데이트
-      setGuests(state.customerCount);
+      // 손님수: 유니티 도착 신호가 메인, 서버와 많이 벌어지면 보정
+      const guestDiff = state.customerCount - displayedGuestsRef.current;
+      if (Math.abs(guestDiff) > 20) {
+        const correction = Math.round(guestDiff / 2);
+        setGuests((prev) => prev + correction);
+        displayedGuestsRef.current += correction;
+      }
 
       // Unity 비주얼 스폰 (숫자 변경과 분리, 시각 효과만)
       if (gd > 0 && !hasCustomerPlan) {
@@ -1832,6 +1840,16 @@ function PlayPageSession({
             sendToUnity(unityIframeRef, "SetWeather", `Earthquake,${regionIdx}`);
           } else if (effectType === "FIRE") {
             sendToUnity(unityIframeRef, "SetWeather", `Fire,${regionIdx}`);
+          } else if (effectType === "FLOOD") {
+            sendToUnity(unityIframeRef, "SetWeather", `Rain,${regionIdx}`);
+          }
+          // Unity 날씨 이펙트 종료 후 원래 날씨로 복원
+          if (effectType === "TYPHOON" || effectType === "EARTHQUAKE" || effectType === "FIRE" || effectType === "FLOOD") {
+            const restoreId = window.setTimeout(() => {
+              const weather = mapWeatherToUnity(dayWeatherType ?? "SUNNY");
+              sendToUnity(unityIframeRef, "SetWeather", `${weather},${regionIdx}`);
+            }, EFFECT_CONFIG[effectType].durationMs);
+            pendingEventTimersRef.current.push(restoreId);
           }
           triggerEffect(effectType);
         }
