@@ -60,6 +60,7 @@ import { useEventEffectStore } from "../components/play/effects/useEventEffect";
 import EventEffect3DOverlay from "../components/play/effects/EventEffect3DOverlay";
 import useBrandName from "../hooks/useBrandName";
 import useStatQueue from "../hooks/useStatQueue";
+import { useGameStore } from "../stores/useGameStore";
 import { useUserStore } from "../stores/useUserStore";
 import { normalizeDiscountMultiplier } from "../utils/dashboardItems";
 
@@ -1700,6 +1701,7 @@ function PlayPageSession({
 
       if (storeResult.status === "fulfilled") {
         setCurrentLocationName(storeResult.value.location);
+        useGameStore.getState().setCurrentLocationName(storeResult.value.location);
         // 매장 지역의 Unity 인덱스 계산 (locationId - 1 = 0-based index)
         if (locationResult.status === "fulfilled") {
           const matched = locationResult.value.locations.find(
@@ -2340,9 +2342,11 @@ function PlayPageSession({
               currentLocationIdRef.current =
                 locationIdByNameRef.current.get(normalizeAreaName(storeSyncResult.value.location)) ?? regionId;
               setCurrentLocationName(storeSyncResult.value.location);
+              useGameStore.getState().setCurrentLocationName(storeSyncResult.value.location);
             } else {
               currentLocationIdRef.current = regionId;
               setCurrentLocationName(regionName);
+              useGameStore.getState().setCurrentLocationName(regionName);
             }
 
             schedulePlannedVisitors(
