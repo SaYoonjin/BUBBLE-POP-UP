@@ -1823,14 +1823,8 @@ function PlayPageSession({
           ...prev,
         ]);
         // 3D 이벤트 이펙트 트리거 (Unity + 프론트엔드 동시)
-        // 지역 이벤트는 플레이어의 지역과 일치할 때만 애니메이션 표시
-        const eventRegion = event.scope?.region ?? null;
-        const playerRegion = storeRegionIndex !== null ? storeRegionIndex + 1 : null;
-        const isGlobal = eventRegion === null;
-        const isMyRegion = eventRegion !== null && eventRegion === playerRegion;
-
         const effectType = classifyEventEffect(event);
-        if (effectType && (isGlobal || isMyRegion)) {
+        if (effectType) {
           const regionIdx = storeRegionIndex ?? 0;
           if (effectType === "TYPHOON") {
             sendToUnity(unityIframeRef, "SetWeather", `Wind,${regionIdx}`);

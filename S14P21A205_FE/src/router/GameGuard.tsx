@@ -33,11 +33,12 @@ async function resolveJoinedStoreAccess(day: number | null) {
       return { joined: false, storeData: null as StoreResponse | null };
     }
 
-    const fallbackStoreData = buildFallbackStoreData(participation, day);
-
+    // 파산한 유저(storeAccessible=false)는 미참여 취급 → setup 재진입 허용
     if (!participation.storeAccessible) {
-      return { joined: true, storeData: fallbackStoreData };
+      return { joined: false, storeData: null as StoreResponse | null };
     }
+
+    const fallbackStoreData = buildFallbackStoreData(participation, day);
 
     try {
       const storeData = await getStore();
