@@ -89,6 +89,11 @@ app:
     secret: ${JWT_SECRET:}
     access-token-ttl: ${JWT_ACCESS_TOKEN_TTL:PT30M}
     refresh-token-ttl: ${JWT_REFRESH_TOKEN_TTL:P14D}
+  redis:
+    ttl:
+      game-day: ${APP_REDIS_TTL_GAME_DAY:PT2H}
+      season-data: ${APP_REDIS_TTL_SEASON_DATA:PT2H}
+      season-ranking: ${APP_REDIS_TTL_SEASON_RANKING:PT15M}
 # endregion
 
 # region ===== Dotenv =====

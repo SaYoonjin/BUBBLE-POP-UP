@@ -130,7 +130,7 @@ class OrderServiceImplTests {
                         Collections.emptyList()
                 ));
 
-        assertThat(orderService.getCurrentOrder(1).costPrice()).isEqualTo(3_150);
+        assertThat(orderService.getCurrentOrder(1, null).costPrice()).isEqualTo(3_150);
     }
 
     @Test
@@ -143,7 +143,7 @@ class OrderServiceImplTests {
         when(storeRepository.findBySeason_IdOrderByIdAsc(9L)).thenReturn(List.of(store));
         when(itemUserRepository.findPurchasedDiscountRateByUserIdAndCategory(1, ItemCategory.INGREDIENT))
                 .thenReturn(Optional.of(BigDecimal.ONE));
-        when(newsRankingResolver.resolveMenuEntryRank(9L, 1, menu)).thenReturn(null);
+        when(newsRankingResolver.resolveMenuEntryRank(9L, 1, menu)).thenReturn(5);
         when(eventEffectResolver.resolve(any(), any(Integer.class), any(), any(), any()))
                 .thenReturn(new EventEffectResolver.EventEffect(
                         0L,
@@ -159,7 +159,68 @@ class OrderServiceImplTests {
                 com.ssafy.S14P21A205.order.entity.OrderType.NORMAL
         )).thenReturn(Optional.of(Order.create(menu, store, 50, 150_000, 2_500, 1)));
 
-        assertThat(orderService.getCurrentOrder(1).sellingPrice()).isEqualTo(2_500);
+        assertThat(orderService.getCurrentOrder(1, null).sellingPrice()).isEqualTo(2_500);
+    }
+
+    @Test
+    void getCurrentOrderFallsBackToRecommendedSellingPriceWhenBasePriceIsOutOfRange() {
+        Store store = store(15L, 1, 3L, 7L, 2_400, 15_600);
+        Menu menu = store.getMenu();
+
+        when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
+                .thenReturn(Optional.of(store));
+        when(storeRepository.findBySeason_IdOrderByIdAsc(9L)).thenReturn(List.of(store));
+        when(itemUserRepository.findPurchasedDiscountRateByUserIdAndCategory(1, ItemCategory.INGREDIENT))
+                .thenReturn(Optional.of(BigDecimal.ONE));
+        when(newsRankingResolver.resolveMenuEntryRank(9L, 1, menu)).thenReturn(5);
+        when(eventEffectResolver.resolve(any(), any(Integer.class), any(), any(), any()))
+                .thenReturn(new EventEffectResolver.EventEffect(
+                        0L,
+                        0,
+                        BigDecimal.ONE,
+                        BigDecimal.ONE,
+                        Collections.emptyList(),
+                        Collections.emptyList()
+                ));
+
+        var response = orderService.getCurrentOrder(1, null);
+        assertThat(response.minimumSellingPrice()).isEqualTo(2_400);
+        assertThat(response.recommendedPrice()).isEqualTo(6_000);
+        assertThat(response.maxSellingPrice()).isEqualTo(12_000);
+        assertThat(response.sellingPrice()).isEqualTo(6_000);
+    }
+
+    @Test
+    void getCurrentOrderUsesRequestedMenuPricingWhenMenuIdIsProvided() {
+        Store store = store(15L, 1, 3L, 7L, 2_500, 15_600);
+        Menu requestedMenu = instantiate(Menu.class);
+        ReflectionTestUtils.setField(requestedMenu, "id", 8L);
+        ReflectionTestUtils.setField(requestedMenu, "menuName", "requested-menu");
+        ReflectionTestUtils.setField(requestedMenu, "originPrice", 2_000);
+
+        when(storeRepository.findFirstByUser_IdAndSeasonStatusOrderByIdDesc(1, SeasonStatus.IN_PROGRESS))
+                .thenReturn(Optional.of(store));
+        when(menuRepository.findById(8L)).thenReturn(Optional.of(requestedMenu));
+        when(storeRepository.findBySeason_IdOrderByIdAsc(9L)).thenReturn(List.of(store));
+        when(itemUserRepository.findPurchasedDiscountRateByUserIdAndCategory(1, ItemCategory.INGREDIENT))
+                .thenReturn(Optional.of(BigDecimal.ONE));
+        when(newsRankingResolver.resolveMenuEntryRank(9L, 1, requestedMenu)).thenReturn(1);
+        when(eventEffectResolver.resolve(any(), any(Integer.class), any(), any(), any()))
+                .thenReturn(new EventEffectResolver.EventEffect(
+                        0L,
+                        0,
+                        BigDecimal.ONE,
+                        BigDecimal.ONE,
+                        Collections.emptyList(),
+                        Collections.emptyList()
+                ));
+
+        var response = orderService.getCurrentOrder(1, 8);
+        assertThat(response.menuId()).isEqualTo(8);
+        assertThat(response.minimumSellingPrice()).isEqualTo(2_400);
+        assertThat(response.recommendedPrice()).isEqualTo(6_000);
+        assertThat(response.maxSellingPrice()).isEqualTo(12_000);
+        assertThat(response.sellingPrice()).isEqualTo(6_000);
     }
 
     @Test
@@ -443,7 +504,7 @@ class OrderServiceImplTests {
         when(orderRepository.findDailyStartOrder(15L, 3))
                 .thenReturn(Optional.of(Order.create(menu, store, 50, 150_000, 7_000, 3)));
 
-        assertThat(orderService.getCurrentOrder(1).stock()).isEqualTo(50);
+        assertThat(orderService.getCurrentOrder(1, null).stock()).isEqualTo(50);
     }
 
     @Test
@@ -473,7 +534,7 @@ class OrderServiceImplTests {
                 .thenReturn(Optional.of(previousDailyReport(store, 2, 150_000, 15)));
         when(orderRepository.findDailyStartOrder(15L, 3)).thenReturn(Optional.empty());
 
-        assertThat(orderService.getCurrentOrder(1).stock()).isZero();
+        assertThat(orderService.getCurrentOrder(1, null).stock()).isZero();
     }
 
     private Store store(Long storeId, Integer userId, Long locationId, Long menuId, int originPrice, int currentPrice) {
