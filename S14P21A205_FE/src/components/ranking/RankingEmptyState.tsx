@@ -49,7 +49,7 @@ export default function RankingEmptyState() {
           <h2 className="text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">
             이번 시즌에는 참여자가 없었어요
           </h2>
-          <p className="mx-auto max-w-[360px] break-keep text-sm leading-7 text-slate-500 sm:text-base">
+          <p className="mx-auto break-keep text-sm leading-7 text-slate-500 sm:text-base sm:whitespace-nowrap">
             참여한 팝업스토어가 없어 시즌 랭킹을 표시할 수 없어요.
           </p>
         </div>
