@@ -385,7 +385,13 @@ export default function DashboardPage() {
     }
 
     if (waitingStatus.seasonPhase === "SEASON_SUMMARY") {
-      return currentSeasonNumber;
+      if (currentSeasonNumber != null) {
+        return currentSeasonNumber;
+      }
+
+      return waitingStatus.nextSeasonNumber != null
+        ? waitingStatus.nextSeasonNumber - 1
+        : null;
     }
 
     if (waitingStatus.seasonPhase === "NEXT_SEASON_WAITING") {
@@ -397,7 +403,7 @@ export default function DashboardPage() {
   const showRecentSeasonRankingButton =
     (waitingStatus?.seasonPhase === "SEASON_SUMMARY" ||
       waitingStatus?.seasonPhase === "NEXT_SEASON_WAITING") &&
-    (recentSeasonNumber ?? 0) >= 2;
+    (recentSeasonNumber ?? 0) >= 1;
 
   useEffect(() => {
     if (shopItems.length === 0) {
