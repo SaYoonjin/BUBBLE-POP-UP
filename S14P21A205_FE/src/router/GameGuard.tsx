@@ -3,6 +3,7 @@ import { Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { getDayReport, getSeasonTime, type CurrentSeasonTimeResponse } from "../api/game";
 import { getStore, type StoreResponse } from "../api/store";
 import { phaseToRoute, type SeasonPhase } from "../constants/gameTime";
+import { setStoredBrandName } from "../hooks/useBrandName";
 import { useGameStore } from "../stores/useGameStore";
 import type { WaitingRouteState } from "../types/waiting";
 import { clearSeasonJoinIntent, hasSeasonJoinIntent } from "../utils/seasonJoinIntent";
@@ -26,6 +27,10 @@ async function resolveJoinedStoreAccess(
 ) {
   try {
     const storeData = await getStore();
+    // 서버 브랜드명으로 localStorage 동기화 (다른 브라우저에서 변경된 경우 대비)
+    if (storeData.popupName) {
+      setStoredBrandName(storeData.popupName);
+    }
     return { joined: true, storeData };
   } catch {
     if (phase === "DAY_REPORT" && day != null) {
