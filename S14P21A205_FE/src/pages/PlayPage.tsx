@@ -736,6 +736,7 @@ function PlayPageSession({
   const nickname = useUserStore((s) => s.nickname) ?? "버블티";
   const { brandName } = useBrandName();
   const triggerEffect = useEventEffectStore((s) => s.triggerEffect);
+  const activeEventEffect = useEventEffectStore((s) => s.activeEffect);
   const [activeModal, setActiveModal] = useState<ActionType | null>(null);
   const [serverUsedActions, setServerUsedActions] = useState<Set<ActionType>>(new Set());
   const [optimisticUsedActions, setOptimisticUsedActions] = useState<Set<ActionType>>(new Set());
@@ -750,6 +751,20 @@ function PlayPageSession({
   const [alerts, setAlerts] = useState<GameAlert[]>([]);
   const [todayEventSchedule, setTodayEventSchedule] = useState<TodayEventScheduleItem[]>([]);
   const unityIframeRef = useRef<HTMLIFrameElement>(null);
+
+  // 이벤트 이펙트 중 스페이스바(뷰 전환) 차단 + 탑뷰면 가게 뷰로 복귀
+  useEffect(() => {
+    if (!activeEventEffect) {
+      // 이펙트 끝나면 iframe에 포커스 복원
+      unityIframeRef.current?.focus();
+      return;
+    }
+    // 탑뷰 상태일 수 있으니 가게 뷰로 복귀
+    sendToUnity(unityIframeRef, "ReturnToMain");
+    // iframe blur로 키보드 입력 차단
+    unityIframeRef.current?.blur();
+  }, [activeEventEffect]);
+
   const [unityReady, setUnityReady] = useState(false);
   const [dayWeatherType, setDayWeatherType] = useState<string | null>(null);
   const [storeRegionIndex, setStoreRegionIndex] = useState<number | null>(null);
