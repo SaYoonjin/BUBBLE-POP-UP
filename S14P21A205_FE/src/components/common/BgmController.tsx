@@ -347,7 +347,7 @@ export default function BgmController() {
 
             {requiresInteraction ? (
               <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50/85 px-3.5 py-2.5 text-[12px] font-medium leading-relaxed text-amber-800">
-                브라우저 자동 재생 제한으로 음악이 바로 시작되지 않았어요. 화면을 한 번 누르면
+                브라우저 자동 재생 제한으로 음악이 바로 시작되지 않았어요. 재생 목록 중 하나를 누르면
                 재생돼요.
               </div>
             ) : null}
