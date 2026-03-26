@@ -496,7 +496,7 @@ export default function LocationSelectPage() {
         </div>
       </div>
 
-      <SeoulMap3D selectedId={selectedId} onSelect={setSelectedId} />
+      <SeoulMap3D districts={mergedDistricts} selectedId={selectedId} onSelect={setSelectedId} />
 
       {selectedDistrict && (
         <DistrictDetailPanel

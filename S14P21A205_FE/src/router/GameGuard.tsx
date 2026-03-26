@@ -34,16 +34,17 @@ async function resolveJoinedStoreAccess(day: number | null) {
       return { joined: false, storeData: null as StoreResponse | null };
     }
 
-    const fallbackStoreData = buildFallbackStoreData(participation, day);
-
     // 서버 브랜드명으로 localStorage 동기화 (다른 브라우저에서 변경된 경우 대비)
     if (participation.storeName) {
       setStoredBrandName(participation.storeName);
     }
 
+    // 파산한 유저(storeAccessible=false)는 미참여 취급 → setup 재진입 허용
     if (!participation.storeAccessible) {
-      return { joined: true, storeData: fallbackStoreData };
+      return { joined: false, storeData: null as StoreResponse | null };
     }
+
+    const fallbackStoreData = buildFallbackStoreData(participation, day);
 
     try {
       const storeData = await getStore();
