@@ -9,6 +9,43 @@ interface Props {
   durationMs: number;
 }
 
+/** 빨간 "규제" 스탬프 텍스처 */
+function createStampTexture(): THREE.CanvasTexture {
+  const size = 256;
+  const c = document.createElement("canvas");
+  c.width = size;
+  c.height = size;
+  const ctx = c.getContext("2d")!;
+  ctx.clearRect(0, 0, size, size);
+
+  // 외곽 원
+  ctx.strokeStyle = "rgba(200, 30, 30, 0.9)";
+  ctx.lineWidth = 8;
+  ctx.beginPath();
+  ctx.arc(128, 128, 100, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // 내곽 원
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.arc(128, 128, 82, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // 텍스트
+  ctx.fillStyle = "rgba(200, 30, 30, 0.9)";
+  ctx.font = "bold 52px serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText("규 제", 128, 118);
+
+  ctx.font = "bold 28px serif";
+  ctx.fillText("시 행", 128, 158);
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.needsUpdate = true;
+  return tex;
+}
+
 /**
  * 정책변경 이펙트 - 공문서/서류가 휘날리는 느낌
  */
@@ -16,7 +53,12 @@ export default function DocumentEffect({ durationMs }: Props) {
   const opacity = useEffectLifecycle(durationMs, 400, 2000);
 
   const paperRef = useRef<THREE.InstancedMesh>(null);
+  const stampRef = useRef<THREE.Mesh>(null);
+  const stampMatRef = useRef<THREE.MeshBasicMaterial>(null);
   const dummy = useMemo(() => new THREE.Object3D(), []);
+  const startTimeRef = useRef<number | null>(null);
+
+  const stampTex = useMemo(() => createStampTexture(), []);
 
   const docData = useMemo(() => {
     return Array.from({ length: DOC_COUNT }, () => ({
@@ -129,7 +171,29 @@ export default function DocumentEffect({ durationMs }: Props) {
 
   useFrame(({ clock }) => {
     const t = clock.getElapsedTime();
+    if (startTimeRef.current === null) startTimeRef.current = t;
+    const elapsed = t - startTimeRef.current;
     const o = opacity.current;
+
+    // 스탬프: 2초 후 등장, 바운스하며 찍힘
+    if (stampRef.current && stampMatRef.current) {
+      const stampDelay = 1.5;
+      const stampT = Math.max(0, elapsed - stampDelay);
+      if (stampT > 0) {
+        const impactDuration = 0.3;
+        const progress = Math.min(stampT / impactDuration, 1);
+        // 스케일: 크게 → 작게 바운스
+        const bounce = progress < 0.5
+          ? 2.5 - progress * 3.0
+          : 1.0 + Math.sin((progress - 0.5) * Math.PI * 4) * 0.15 * (1 - progress);
+        stampRef.current.scale.setScalar(bounce);
+        // 살짝 랜덤 회전
+        stampRef.current.rotation.z = -0.15;
+        stampMatRef.current.opacity = o * Math.min(stampT * 3, 1.0);
+      } else {
+        stampMatRef.current.opacity = 0;
+      }
+    }
 
     if (paperRef.current) {
       for (let i = 0; i < DOC_COUNT; i++) {
@@ -157,6 +221,7 @@ export default function DocumentEffect({ durationMs }: Props) {
 
   return (
     <group>
+      {/* 서류 */}
       <instancedMesh ref={paperRef} args={[undefined, undefined, DOC_COUNT]}>
         <planeGeometry args={[0.5, 0.65]} />
         <meshBasicMaterial
@@ -166,6 +231,19 @@ export default function DocumentEffect({ durationMs }: Props) {
           side={THREE.DoubleSide}
         />
       </instancedMesh>
+
+      {/* 규제 스탬프 */}
+      <mesh ref={stampRef} position={[1.5, -0.5, 1]} scale={0}>
+        <planeGeometry args={[3, 3]} />
+        <meshBasicMaterial
+          ref={stampMatRef}
+          map={stampTex}
+          transparent
+          opacity={0}
+          side={THREE.DoubleSide}
+          depthWrite={false}
+        />
+      </mesh>
     </group>
   );
 }

@@ -4,7 +4,6 @@ import * as THREE from "three";
 import { useEffectLifecycle } from "../useEffectLifecycle";
 
 const ARROW_COUNT = 8;
-const GLOW_COUNT = 30;
 const TRAIL_COUNT = 40;
 
 interface Props {
@@ -88,32 +87,6 @@ function createArrowTexture(color: string): THREE.CanvasTexture {
   return tex;
 }
 
-/* ── 글로우 텍스처 (방사형 그라데이션 원) ── */
-function createGlowTexture(color: string): THREE.CanvasTexture {
-  const size = 128;
-  const c = document.createElement("canvas");
-  c.width = size;
-  c.height = size;
-  const ctx = c.getContext("2d")!;
-  ctx.clearRect(0, 0, size, size);
-
-  const r = parseInt(color.slice(1, 3), 16);
-  const g = parseInt(color.slice(3, 5), 16);
-  const b = parseInt(color.slice(5, 7), 16);
-
-  const grad = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
-  grad.addColorStop(0, `rgba(${Math.min(r + 60, 255)}, ${Math.min(g + 60, 255)}, ${Math.min(b + 60, 255)}, 0.8)`);
-  grad.addColorStop(0.3, `rgba(${r}, ${g}, ${b}, 0.4)`);
-  grad.addColorStop(0.7, `rgba(${r}, ${g}, ${b}, 0.1)`);
-  grad.addColorStop(1, "rgba(0, 0, 0, 0)");
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, size, size);
-
-  const tex = new THREE.CanvasTexture(c);
-  tex.needsUpdate = true;
-  return tex;
-}
-
 /* ── 트레일 텍스처 (부드러운 점) ── */
 function createTrailTexture(color: string): THREE.CanvasTexture {
   const size = 64;
@@ -147,12 +120,10 @@ export default function PriceArrowEffect({ durationMs, direction = "down" }: Pro
   const dir = isUp ? 1 : -1;
 
   const arrowRef = useRef<THREE.InstancedMesh>(null);
-  const glowRef = useRef<THREE.InstancedMesh>(null);
   const trailRef = useRef<THREE.InstancedMesh>(null);
   const dummy = useMemo(() => new THREE.Object3D(), []);
 
   const arrowTex = useMemo(() => createArrowTexture(color), [color]);
-  const glowTex = useMemo(() => createGlowTexture(color), [color]);
   const trailTex = useMemo(() => createTrailTexture(color), [color]);
 
   /* ── 화살표 데이터 ── */
@@ -167,25 +138,12 @@ export default function PriceArrowEffect({ durationMs, direction = "down" }: Pro
         yOffset: (Math.random() - 0.5) * 3,
         waveGroup: Math.floor(i / 4),
         size: 0.8 + Math.random() * 0.4,
-        extraDelay: Math.random() * 0.2,
-        cycle: 0.8 + Math.random() * 0.4, // 0.8~1.2초 주기
+        extraDelay: Math.random() * 0.3,
+        cycle: 2.2 + Math.random() * 0.8, // 2.2~3.0초 주기 (느긋하게)
         wobblePhase: Math.random() * Math.PI * 2,
       };
     });
   }, []);
-
-  /* ── 글로우 데이터 ── */
-  const glowData = useMemo(() =>
-    Array.from({ length: GLOW_COUNT }, () => ({
-      x: (Math.random() - 0.5) * 16,
-      yOffset: (Math.random() - 0.5) * 4,
-      size: 0.6 + Math.random() * 1.0,
-      speed: 0.5 + Math.random() * 0.5,
-      cycle: 0.8 + Math.random() * 0.6,
-      delay: Math.random() * 1.5,
-      pulsePhase: Math.random() * Math.PI * 2,
-    })),
-  []);
 
   /* ── 트레일 데이터 ── */
   const trailData = useMemo(() =>
@@ -208,9 +166,9 @@ export default function PriceArrowEffect({ durationMs, direction = "down" }: Pro
       for (let i = 0; i < ARROW_COUNT; i++) {
         const d = arrowData[i];
         const cycle = t % d.cycle;
-        const groupDelay = d.waveGroup * 0.15 + d.extraDelay;
+        const groupDelay = d.waveGroup * 0.3 + d.extraDelay;
         const localT = cycle - groupDelay;
-        const sweepDuration = d.cycle * 0.6;
+        const sweepDuration = d.cycle * 0.8;
 
         if (localT < 0 || localT > sweepDuration) {
           dummy.scale.setScalar(0);
@@ -218,20 +176,20 @@ export default function PriceArrowEffect({ durationMs, direction = "down" }: Pro
           const progress = localT / sweepDuration;
           const easedProgress = easeOutCubic(progress);
 
-          // 페이드: 빠른 등장 → 점진적 소멸
-          const alpha = progress < 0.2
-            ? progress / 0.2
-            : 1 - ((progress - 0.2) / 0.8) ** 1.5;
+          // 페이드: 부드러운 등장 → 부드러운 소멸
+          const alpha = progress < 0.15
+            ? progress / 0.15
+            : 1 - ((progress - 0.15) / 0.85) ** 2;
 
-          // 스케일 바운스: 등장 시 1.3배 → 1.0배
-          const bounce = progress < 0.2
-            ? 1.0 + 0.3 * (1 - progress / 0.2)
+          // 스케일: 살짝 커졌다 안정 (과하지 않게)
+          const bounce = progress < 0.15
+            ? 1.0 + 0.12 * (1 - progress / 0.15)
             : 1.0;
 
-          const moveDistance = 3.5;
-          const y = dir * (-0.5 + easedProgress * moveDistance) + d.yOffset;
-          // 미세 좌우 흔들림
-          const wobbleX = Math.sin(t * 6 + d.wobblePhase) * 0.15;
+          const moveDistance = 4.5;
+          const y = dir * (-1.0 + easedProgress * moveDistance) + d.yOffset;
+          // 미세 좌우 흔들림 (느리고 작게)
+          const wobbleX = Math.sin(t * 1.5 + d.wobblePhase) * 0.06;
 
           dummy.position.set(d.x + wobbleX, y, 0);
           dummy.rotation.set(0, 0, isUp ? 0 : Math.PI);
@@ -243,37 +201,6 @@ export default function PriceArrowEffect({ durationMs, direction = "down" }: Pro
       }
       arrowRef.current.instanceMatrix.needsUpdate = true;
       (arrowRef.current.material as THREE.MeshBasicMaterial).opacity = o * 0.85;
-    }
-
-    /* ── 글로우 애니메이션 ── */
-    if (glowRef.current) {
-      for (let i = 0; i < GLOW_COUNT; i++) {
-        const g = glowData[i];
-        const cycle = (t - g.delay) % g.cycle;
-        const sweepDuration = g.cycle * 0.7;
-
-        if (cycle < 0 || cycle > sweepDuration) {
-          dummy.scale.setScalar(0);
-        } else {
-          const progress = cycle / sweepDuration;
-          const alpha = progress < 0.3
-            ? progress / 0.3
-            : 1 - ((progress - 0.3) / 0.7);
-          // 부드러운 펄스
-          const pulse = 1 + Math.sin(t * 4 + g.pulsePhase) * 0.2;
-          const moveDistance = 2.5 * g.speed;
-          const y = dir * (-1 + easeOutCubic(progress) * moveDistance) + g.yOffset;
-
-          dummy.position.set(g.x, y, -0.1);
-          dummy.rotation.set(0, 0, 0);
-          dummy.scale.setScalar(g.size * pulse * Math.max(0, alpha));
-        }
-
-        dummy.updateMatrix();
-        glowRef.current.setMatrixAt(i, dummy.matrix);
-      }
-      glowRef.current.instanceMatrix.needsUpdate = true;
-      (glowRef.current.material as THREE.MeshBasicMaterial).opacity = o * 0.5;
     }
 
     /* ── 트레일 애니메이션 ── */
@@ -314,19 +241,6 @@ export default function PriceArrowEffect({ durationMs, direction = "down" }: Pro
         <planeGeometry args={[0.4, 0.4]} />
         <meshBasicMaterial
           map={trailTex}
-          transparent
-          opacity={0}
-          side={THREE.DoubleSide}
-          depthWrite={false}
-          blending={THREE.AdditiveBlending}
-        />
-      </instancedMesh>
-
-      {/* 글로우 (중간) */}
-      <instancedMesh ref={glowRef} args={[undefined, undefined, GLOW_COUNT]}>
-        <planeGeometry args={[1.6, 1.6]} />
-        <meshBasicMaterial
-          map={glowTex}
           transparent
           opacity={0}
           side={THREE.DoubleSide}

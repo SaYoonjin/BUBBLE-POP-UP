@@ -4,8 +4,8 @@ import * as THREE from "three";
 import { useEffectLifecycle } from "../useEffectLifecycle";
 
 const FOG_COUNT = 30;
-const VIRUS_COUNT = 60;
-const SPORE_COUNT = 100;
+const VIRUS_COUNT = 30;
+const SPORE_COUNT = 50;
 
 interface Props {
   durationMs: number;
