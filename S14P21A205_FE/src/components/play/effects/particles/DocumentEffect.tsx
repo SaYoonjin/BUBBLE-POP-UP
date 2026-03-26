@@ -9,37 +9,114 @@ interface Props {
   durationMs: number;
 }
 
-/** 빨간 "규제" 스탬프 텍스처 */
+/** 빨간 "규제" 스탬프 텍스처 — 잉크 번짐이 있는 실제 도장 느낌 */
 function createStampTexture(): THREE.CanvasTexture {
-  const size = 256;
+  const size = 512;
+  const cx = size / 2;
+  const cy = size / 2;
   const c = document.createElement("canvas");
   c.width = size;
   c.height = size;
   const ctx = c.getContext("2d")!;
   ctx.clearRect(0, 0, size, size);
 
-  // 외곽 원
-  ctx.strokeStyle = "rgba(200, 30, 30, 0.9)";
-  ctx.lineWidth = 8;
+  const red = "rgb(180, 22, 22)";
+  const redA = (a: number) => `rgba(180, 22, 22, ${a})`;
+
+  // 잉크 노이즈 — 도장 찍힌 느낌을 위해 반투명 점을 흩뿌림
+  const addInkNoise = (region: Path2D | null, count: number, alpha: number) => {
+    ctx.save();
+    if (region) ctx.clip(region);
+    for (let i = 0; i < count; i++) {
+      const nx = cx + (Math.random() - 0.5) * size * 0.85;
+      const ny = cy + (Math.random() - 0.5) * size * 0.85;
+      const nr = 0.5 + Math.random() * 2.5;
+      ctx.globalAlpha = alpha * (0.3 + Math.random() * 0.7);
+      ctx.fillStyle = red;
+      ctx.beginPath();
+      ctx.arc(nx, ny, nr, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  };
+
+  // 클리핑용 원 영역
+  const stampClip = new Path2D();
+  stampClip.arc(cx, cy, 210, 0, Math.PI * 2);
+
+  // ── 외곽 원 (두꺼운 테두리) ──
+  ctx.strokeStyle = red;
+  ctx.lineWidth = 16;
   ctx.beginPath();
-  ctx.arc(128, 128, 100, 0, Math.PI * 2);
+  ctx.arc(cx, cy, 200, 0, Math.PI * 2);
   ctx.stroke();
 
-  // 내곽 원
-  ctx.lineWidth = 3;
+  // ── 내곽 원 ──
+  ctx.lineWidth = 6;
   ctx.beginPath();
-  ctx.arc(128, 128, 82, 0, Math.PI * 2);
+  ctx.arc(cx, cy, 170, 0, Math.PI * 2);
   ctx.stroke();
 
-  // 텍스트
-  ctx.fillStyle = "rgba(200, 30, 30, 0.9)";
-  ctx.font = "bold 52px serif";
+  // ── 가로 구분선 (위/아래) ──
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.moveTo(cx - 165, cy - 40);
+  ctx.lineTo(cx + 165, cy - 40);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(cx - 165, cy + 40);
+  ctx.lineTo(cx + 165, cy + 40);
+  ctx.stroke();
+
+  // ── 메인 텍스트 "규 제" ──
+  ctx.fillStyle = red;
+  ctx.font = "bold 110px sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText("규 제", 128, 118);
+  ctx.fillText("규 제", cx, cy);
 
-  ctx.font = "bold 28px serif";
-  ctx.fillText("시 행", 128, 158);
+  // ── 상단 소제목 ──
+  ctx.font = "bold 36px sans-serif";
+  ctx.fillText("정 책 변 경", cx, cy - 72);
+
+  // ── 하단 소제목 ──
+  ctx.fillText("시 행 완 료", cx, cy + 72);
+
+  // ── 별 장식 (상단/하단) ──
+  ctx.font = "28px sans-serif";
+  ctx.fillText("★", cx - 130, cy - 72);
+  ctx.fillText("★", cx + 130, cy - 72);
+  ctx.fillText("★", cx - 130, cy + 72);
+  ctx.fillText("★", cx + 130, cy + 72);
+
+  // ── 잉크 번짐/노이즈 오버레이 ──
+  addInkNoise(stampClip, 600, 0.15);
+
+  // ── 잉크가 약간 빠진 부분 (지우개 효과) ──
+  ctx.save();
+  ctx.globalCompositeOperation = "destination-out";
+  for (let i = 0; i < 200; i++) {
+    const nx = cx + (Math.random() - 0.5) * 400;
+    const ny = cy + (Math.random() - 0.5) * 400;
+    const nr = 1 + Math.random() * 4;
+    ctx.globalAlpha = 0.08 + Math.random() * 0.15;
+    ctx.beginPath();
+    ctx.arc(nx, ny, nr, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+
+  // ── 외곽 글로우 (부드러운 번짐) ──
+  ctx.save();
+  ctx.globalCompositeOperation = "source-over";
+  ctx.shadowColor = redA(0.4);
+  ctx.shadowBlur = 8;
+  ctx.strokeStyle = redA(0.08);
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(cx, cy, 204, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
 
   const tex = new THREE.CanvasTexture(c);
   tex.needsUpdate = true;
@@ -233,8 +310,8 @@ export default function DocumentEffect({ durationMs }: Props) {
       </instancedMesh>
 
       {/* 규제 스탬프 */}
-      <mesh ref={stampRef} position={[1.5, -0.5, 1]} scale={0}>
-        <planeGeometry args={[3, 3]} />
+      <mesh ref={stampRef} position={[5, -2.5, 1]} scale={0}>
+        <planeGeometry args={[4, 4]} />
         <meshBasicMaterial
           ref={stampMatRef}
           map={stampTex}
