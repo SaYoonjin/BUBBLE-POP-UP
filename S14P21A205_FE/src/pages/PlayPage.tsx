@@ -1,5 +1,5 @@
 ﻿import axios, { type AxiosError } from "axios";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useOutletContext, useParams } from "react-router-dom";
 import { GAME_EXIT_CODES } from "../api/client";
 import type { GameGuardContext } from "../router/GameGuard";
@@ -28,6 +28,7 @@ import {
 } from "../api/action";
 import {
   getGameDayState,
+  getSeasonTime,
   getCurrentSeasonTopRankings,
   startGameDay,
   type CustomerPlanByHourItem,
@@ -801,7 +802,7 @@ function PlayPageSession({
   const [emergencyDataError, setEmergencyDataError] = useState<string | null>(null);
   const [isMoveDataLoading, setIsMoveDataLoading] = useState(true);
   const [moveDataError, setMoveDataError] = useState<string | null>(null);
-  const playEndTimestampMs = phaseEndTimestamp;
+  const [playEndTimestampMs, setPlayEndTimestampMs] = useState(phaseEndTimestamp);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const hasDeadlineAlertRef = useRef(false);
   const hasLowStockAlertRef = useRef(false);
@@ -888,6 +889,60 @@ function PlayPageSession({
   useEffect(() => {
     remainingMillisecondsRef.current = remainingMilliseconds;
   }, [remainingMilliseconds]);
+
+  // --- 서버 시간 동기화 ---
+
+  const resyncPlayEnd = useCallback(async () => {
+    try {
+      const timeData = await getSeasonTime();
+      if (timeData.seasonPhase !== "DAY_BUSINESS") return;
+      const correctedEnd = Date.now() + timeData.phaseRemainingSeconds * 1000;
+      const drift = Math.abs(correctedEnd - playEndTimestampMs);
+      if (drift > 1000) {
+        setPlayEndTimestampMs(correctedEnd);
+      }
+    } catch {
+      /* 무시 — GameGuard가 에러 처리 */
+    }
+  }, [playEndTimestampMs]);
+
+  // 3.1 화면 진입 시 sync
+  useEffect(() => {
+    resyncPlayEnd();
+  }, []);
+
+  // 3.3 이벤트 5초 전 sync (14:00 = 40초 경과, 18:00 = 80초 경과)
+  useEffect(() => {
+    const businessStartMs = playEndTimestampMs - BUSINESS_SECONDS * 1000;
+    const syncPoints = [35, 75];
+    const timers = syncPoints.map((sec) => {
+      const delay = businessStartMs + sec * 1000 - Date.now();
+      if (delay > 0) return window.setTimeout(() => resyncPlayEnd(), delay);
+      return null;
+    });
+    return () => timers.forEach((t) => t !== null && clearTimeout(t));
+  }, [playEndTimestampMs, resyncPlayEnd]);
+
+  // 3.4 영업 종료 5초 전 sync
+  useEffect(() => {
+    const delay = playEndTimestampMs - 5000 - Date.now();
+    if (delay <= 0) return;
+    const timer = window.setTimeout(() => resyncPlayEnd(), delay);
+    return () => clearTimeout(timer);
+  }, [playEndTimestampMs, resyncPlayEnd]);
+
+  // 3.5 탭 복귀 시 sync
+  useEffect(() => {
+    const handler = () => {
+      if (document.visibilityState === "visible") {
+        resyncPlayEnd();
+      }
+    };
+    document.addEventListener("visibilitychange", handler);
+    return () => document.removeEventListener("visibilitychange", handler);
+  }, [resyncPlayEnd]);
+
+  // --- 서버 시간 동기화 끝 ---
 
   useEffect(() => {
     displayedGuestsRef.current = guests;
