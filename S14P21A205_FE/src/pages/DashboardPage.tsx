@@ -543,9 +543,8 @@ export default function DashboardPage() {
     }
 
     const isBankruptSeason = currentSeasonNumber === bankruptNoticeSeasonNumber;
-    const isBeforeDaySix = (waitingStatus.currentDay ?? 0) < 6;
 
-    if (isBankruptSeason && isBeforeDaySix) {
+    if (isBankruptSeason) {
       setIsBankruptWarningVisible(true);
       return;
     }
