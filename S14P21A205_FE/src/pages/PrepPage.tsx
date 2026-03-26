@@ -196,6 +196,22 @@ function normalizeMenuName(value: string | null | undefined) {
   return value?.trim() ?? "";
 }
 
+function resolvePlayableDay(store: StoreResponse | null) {
+  if (!store) {
+    return null;
+  }
+
+  if (typeof store.playableFromDay === "number") {
+    return store.playableFromDay;
+  }
+
+  return typeof store.playableday === "number" ? store.playableday : null;
+}
+
+function canUseExistingOrder(day: number, playableDay: number | null) {
+  return playableDay !== null && day > playableDay;
+}
+
 function resolveSelectedMenuId(
   menus: PrepMenu[],
   currentMenuId: number | null,
@@ -385,7 +401,7 @@ export default function PrepPage() {
       try {
         const [menusResult, storeResult, orderResult] = await Promise.allSettled([
           getStoreMenus(),
-          day >= 2 ? getStore() : Promise.resolve<StoreResponse | null>(null),
+          getStore(),
           getCurrentOrder(),
         ]);
 
@@ -393,20 +409,25 @@ export default function PrepPage() {
           return;
         }
 
-        const nextBaseOrder = orderResult.status === "fulfilled" ? orderResult.value : null;
-        setBaseOrder(nextBaseOrder);
-        const nextStoreMenuName =
+        const nextStore =
           storeResult.status === "fulfilled"
-            ? normalizeMenuName(storeResult.value?.menu)
-            : "";
+            ? storeResult.value
+            : null;
+        const nextPlayableDay = resolvePlayableDay(nextStore);
+        const shouldReuseExistingOrder = canUseExistingOrder(day, nextPlayableDay);
+        const nextBaseOrder =
+          orderResult.status === "fulfilled" && shouldReuseExistingOrder
+            ? orderResult.value
+            : null;
+
+        setBaseOrder(nextBaseOrder);
+        const nextStoreMenuName = shouldReuseExistingOrder
+          ? normalizeMenuName(nextStore?.menu)
+          : "";
         const nextCurrentStoreMenuName =
           nextStoreMenuName || normalizeMenuName(nextBaseOrder?.menuName);
         setCurrentStoreMenuName(nextCurrentStoreMenuName || null);
-        setPlayableday(
-          storeResult.status === "fulfilled" && storeResult.value?.playableday != null
-            ? storeResult.value.playableday
-            : null,
-        );
+        setPlayableday(nextPlayableDay);
 
         if (menusResult.status !== "fulfilled") {
           setMenuError("메뉴 정보를 불러오지 못했습니다. 정규 발주 요청은 잠시 후 다시 시도해주세요.");

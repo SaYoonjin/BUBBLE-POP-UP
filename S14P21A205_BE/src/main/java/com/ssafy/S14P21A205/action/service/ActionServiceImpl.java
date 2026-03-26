@@ -207,7 +207,6 @@ public class ActionServiceImpl implements ActionService {
 
         GameDayLiveState state = resolveCurrentLiveState(store, context);
         long updatedBalance = resolveUpdatedBalance("DISCOUNT", userId, store, day, valueOf(action.getCost()), state);
-        store.changePrice(newPrice);
 
         int averagePrice = storeRepository.findAveragePriceBySeasonIdAndMenuId(
                 store.getSeason().getId(),
