@@ -5,7 +5,7 @@ const WEATHER_NAME_MAP: Record<string, string> = {
   RAIN: "Rain",
   SNOW: "Snow",
   HEATWAVE: "Clear",
-  COLDWAVE: "Wind",
+  COLDWAVE: "Clear",
   FOG: "Fog",
 };
 

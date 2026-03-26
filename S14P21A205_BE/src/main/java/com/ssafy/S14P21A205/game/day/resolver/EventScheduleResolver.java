@@ -109,13 +109,17 @@ public class EventScheduleResolver {
         Integer balanceChange = event.getCapitalFlat() == null || event.getCapitalFlat() == 0
                 ? null
                 : event.getCapitalFlat();
+        String category = event.getEventCategory() == null
+                ? null
+                : event.getEventCategory().name();
         return new GameDayStartResponse.EventSchedule(
                 seasonTimelineService.formatGameTime(dailyEvent.getApplyOffsetSeconds()),
                 event.getEventName(),
                 resolveScope(dailyEvent),
                 event.getEventName(),
                 normalizeScale(event.getPopulationRate()),
-                balanceChange
+                balanceChange,
+                category
         );
     }
 

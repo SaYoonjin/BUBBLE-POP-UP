@@ -52,7 +52,10 @@ import {
   elapsedToGameTime,
   type SeasonPhase,
 } from "../constants/gameTime";
-import { sendToUnity, setWeather, startDay, spawnShopAtIndex, setCameraRegion } from "../utils/unity";
+import { sendToUnity, setWeather, setDay, startDay, spawnShopAtIndex, setCameraRegion } from "../utils/unity";
+import { classifyEventEffect } from "../components/play/effects/effects";
+import { useEventEffectStore } from "../components/play/effects/useEventEffect";
+import EventEffect3DOverlay from "../components/play/effects/EventEffect3DOverlay";
 import useBrandName from "../hooks/useBrandName";
 import useStatQueue from "../hooks/useStatQueue";
 import { useUserStore } from "../stores/useUserStore";
@@ -732,6 +735,8 @@ function PlayPageSession({
 }) {
   const nickname = useUserStore((s) => s.nickname) ?? "버블티";
   const { brandName } = useBrandName();
+  const triggerEffect = useEventEffectStore((s) => s.triggerEffect);
+  const activeEventEffect = useEventEffectStore((s) => s.activeEffect);
   const [activeModal, setActiveModal] = useState<ActionType | null>(null);
   const [serverUsedActions, setServerUsedActions] = useState<Set<ActionType>>(new Set());
   const [optimisticUsedActions, setOptimisticUsedActions] = useState<Set<ActionType>>(new Set());
@@ -746,6 +751,23 @@ function PlayPageSession({
   const [alerts, setAlerts] = useState<GameAlert[]>([]);
   const [todayEventSchedule, setTodayEventSchedule] = useState<TodayEventScheduleItem[]>([]);
   const unityIframeRef = useRef<HTMLIFrameElement>(null);
+
+  // 이벤트 이펙트 중 스페이스바(뷰 전환) 차단 + 탑뷰면 가게 뷰로 복귀
+  useEffect(() => {
+    if (!activeEventEffect) {
+      // 이펙트 끝나면 iframe에 포커스 복원
+      unityIframeRef.current?.focus();
+      return;
+    }
+    // 탑뷰 상태일 수 있으니 가게 뷰로 복귀
+    sendToUnity(unityIframeRef, "ReturnToMain");
+    if (storeRegionIndex !== null) {
+      setCameraRegion(unityIframeRef, storeRegionIndex);
+    }
+    // iframe blur로 키보드 입력 차단
+    unityIframeRef.current?.blur();
+  }, [activeEventEffect]);
+
   const [unityReady, setUnityReady] = useState(false);
   const [dayWeatherType, setDayWeatherType] = useState<string | null>(null);
   const [storeRegionIndex, setStoreRegionIndex] = useState<number | null>(null);
@@ -1239,10 +1261,9 @@ function PlayPageSession({
     const remaining = Math.max(0, Math.ceil((playEndTimestampMs - Date.now()) / 1000));
     const isFirstLoad = remaining >= BUSINESS_SECONDS - 3;
     if (isFirstLoad) {
-      // 처음 진입: Unity StartDay(ConfiguredDayDuration) 호출
-      sendToUnity(unityIframeRef, "StartDay", "");
-    } else {
-      // 새로고침: 남은 시간으로 동기화 (StartOrSyncDay)
+      // 처음 진입: Unity autoStart가 이미 StartDay(120) 실행하므로 중복 호출 안 함
+    } else if (remaining > 5) {
+      // 새로고침: 남은 시간으로 동기화 (너무 짧으면 밤 덮어쓰기 방지)
       startDay(unityIframeRef, remaining);
     }
     lastUnityCongestionLevelRef.current = null;
@@ -1822,6 +1843,26 @@ function PlayPageSession({
           },
           ...prev,
         ]);
+        // 3D 이벤트 이펙트 트리거 (Unity + 프론트엔드 동시)
+        // 지역 이벤트는 플레이어의 지역과 일치할 때만 애니메이션 표시
+        const eventRegion = event.scope?.region ?? null;
+        const playerRegion = storeRegionIndex !== null ? storeRegionIndex + 1 : null;
+        const isGlobal = eventRegion === null;
+        const isMyRegion = eventRegion !== null && eventRegion === playerRegion;
+
+        const effectType = classifyEventEffect(event);
+        if (effectType && (isGlobal || isMyRegion)) {
+          const regionIdx = storeRegionIndex ?? 0;
+          if (effectType === "TYPHOON") {
+            sendToUnity(unityIframeRef, "SetWeather", `Wind,${regionIdx}`);
+          } else if (effectType === "EARTHQUAKE") {
+            sendToUnity(unityIframeRef, "SetWeather", `Earthquake,${regionIdx}`);
+          } else if (effectType === "FIRE") {
+            sendToUnity(unityIframeRef, "SetWeather", `Fire,${regionIdx}`);
+          }
+          triggerEffect(effectType);
+        }
+
         queueDebugLog(
           buildPassiveDebugLog({
             dedupeKey: `event:${dayNumber}:${getCurrentDebugGameTime()}:${info.title}`,
@@ -1995,6 +2036,8 @@ function PlayPageSession({
           onReady={handleUnityReady}
           onPopupArrival={handlePopupArrival}
         />
+
+        <EventEffect3DOverlay />
 
         <RankingSidebar rankings={rankings} />
         <EventSidebar alerts={alerts} />
