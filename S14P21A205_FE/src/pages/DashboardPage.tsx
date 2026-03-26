@@ -1,8 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { getCurrentSeasonTopRankings, getGameWaitingStatus, getSeasonTime, type GameWaitingResponse } from "../api/game";
+import {
+  getCurrentParticipation,
+  getCurrentSeasonTopRankings,
+  getGameWaitingStatus,
+  type GameWaitingResponse,
+  type ParticipationResponse,
+} from "../api/game";
 import { getShopItems, type ShopItemResponse } from "../api/shop";
-import { getStore } from "../api/store";
 import { getUserPoints } from "../api/user";
 import {
   BUSINESS_SECONDS,
@@ -209,6 +214,7 @@ function resolveSeasonCardData(
   waitingStatus: GameWaitingResponse | null,
   currentSeasonNumber: number | null,
 ) {
+
   if (!waitingStatus) {
     return {
       title: "시즌 정보를 불러오는 중",
@@ -291,6 +297,7 @@ export default function DashboardPage() {
     getStoredSelectedDashboardItemIds,
   );
   const [waitingStatus, setWaitingStatus] = useState<GameWaitingResponse | null>(null);
+  const [participation, setParticipation] = useState<ParticipationResponse | null>(null);
   const [currentSeasonNumber, setCurrentSeasonNumber] = useState<number | null>(null);
   const [isResolvingCurrentSeasonNumber, setIsResolvingCurrentSeasonNumber] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -377,7 +384,8 @@ export default function DashboardPage() {
   );
   const showMidSeasonNotice = Boolean(
     waitingStatus?.status === "IN_PROGRESS" &&
-      isJoinableDay(waitingStatus.currentDay ?? null),
+      isJoinableDay(waitingStatus.currentDay ?? null) &&
+      !participation?.joinedCurrentSeason,
   );
 
   useEffect(() => {
@@ -392,10 +400,11 @@ export default function DashboardPage() {
     let isCancelled = false;
 
     async function loadDashboard() {
-      const [pointsResult, itemsResult, waitingResult] = await Promise.allSettled([
+      const [pointsResult, itemsResult, waitingResult, participationResult] = await Promise.allSettled([
         getUserPoints(),
         getShopItems(),
         getGameWaitingStatus(),
+        getCurrentParticipation(),
       ]);
 
       if (isCancelled) {
@@ -426,33 +435,14 @@ export default function DashboardPage() {
         errors.push("시즌 정보를 불러오지 못했습니다.");
       }
 
+      if (participationResult.status === "fulfilled") {
+        setParticipation(participationResult.value);
+      } else {
+        errors.push("참여 상태를 불러오지 못했습니다.");
+      }
+
       setLoadError(errors[0] ?? null);
       setIsLoading(false);
-
-      // 게임 참여 중이면 돌아가기 경로 계산
-      try {
-        const storeData = await getStore(); // 성공하면 현재 시즌 store를 읽을 수 있음
-        try {
-          const timeData = await getSeasonTime();
-          const phase = timeData.seasonPhase as SeasonPhase;
-          const day = timeData.currentDay;
-
-          // playableFromDay > currentDay면 아직 대기 중 → /game/waiting으로
-          const pfd = storeData.playableFromDay;
-          if (typeof pfd === "number" && day < pfd) {
-            setGameReturnPath("/game/waiting");
-          } else {
-            const path = phaseToRoute(phase, day);
-            if (path && path !== "/") {
-              setGameReturnPath(path);
-            }
-          }
-        } catch {
-          setGameReturnPath(null);
-        }
-      } catch {
-        setGameReturnPath(null);
-      }
     }
 
     void loadDashboard();
@@ -461,6 +451,30 @@ export default function DashboardPage() {
       isCancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (!waitingStatus || !participation?.joinedCurrentSeason) {
+      setGameReturnPath(null);
+      return;
+    }
+
+    const phase = waitingStatus.seasonPhase as SeasonPhase | null;
+    const currentDay = waitingStatus.currentDay;
+    const playableFromDay = participation.playableFromDay;
+
+    if (typeof currentDay !== "number" || !phase) {
+      setGameReturnPath(null);
+      return;
+    }
+
+    if (typeof playableFromDay === "number" && currentDay < playableFromDay) {
+      setGameReturnPath("/game/waiting");
+      return;
+    }
+
+    const path = phaseToRoute(phase, currentDay);
+    setGameReturnPath(path && path !== "/" ? path : null);
+  }, [participation, waitingStatus]);
 
   useEffect(() => {
     let isCancelled = false;
