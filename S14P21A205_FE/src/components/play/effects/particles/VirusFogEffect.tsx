@@ -74,7 +74,7 @@ export default function VirusFogEffect({ durationMs }: Props) {
       z: -2 + Math.random() * 2,
       driftX: 0.2 + Math.random() * 0.5,
       driftY: 0.1 + Math.random() * 0.3,
-      scale: 2.5 + Math.random() * 4,
+      scale: 2.0 + Math.random() * 3,
       phase: Math.random() * Math.PI * 2,
     }));
   }, []);
@@ -176,7 +176,7 @@ export default function VirusFogEffect({ durationMs }: Props) {
       {/* 독안개 */}
       <instancedMesh ref={fogRef} args={[undefined, undefined, FOG_COUNT]}>
         <sphereGeometry args={[1.2, 12, 12]} />
-        <meshBasicMaterial color="#6b21a8" transparent opacity={0} depthWrite={false} />
+        <meshBasicMaterial color="#7e3aab" transparent opacity={0} depthWrite={false} />
       </instancedMesh>
 
       {/* 바이러스 (텍스처) */}
