@@ -76,7 +76,7 @@ public class StoreServiceImpl implements StoreService {
         Long storeId = store.getId();
         int currentDay = resolveCurrentDay(store, now);
 
-        if (currentDay >= store.getSeason().getTotalDays()) {
+        if (currentDay >= store.getSeason().resolveRuntimePlayableDays()) {
             throw new BaseException(ErrorCode.INVALID_INPUT_VALUE, "Location changes are unavailable on the last day.");
         }
         if (STORE_LOCATION_TRANSITION_SUPPORT.hasFuturePendingLocationChange(store, currentDay)) {
@@ -258,7 +258,7 @@ public class StoreServiceImpl implements StoreService {
     private int resolveCurrentDay(Store store, LocalDateTime now) {
         SeasonTimePoint seasonTimePoint = seasonTimelineService.resolve(store.getSeason(), now);
         Integer currentDay = seasonTimePoint.currentDay();
-        if (currentDay != null && currentDay >= 1 && currentDay <= store.getSeason().getTotalDays()) {
+        if (currentDay != null && currentDay >= 1 && currentDay <= store.getSeason().resolveRuntimePlayableDays()) {
             return currentDay;
         }
         Integer fallbackDay = store.getSeason().getCurrentDay();

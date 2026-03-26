@@ -165,6 +165,7 @@ public class SeasonLifecycleService {
         prepareDailyEventsIfMissing(scheduledSeason, locations);
 
         scheduledSeason.startAt(now, sourceBatchKey);
+        scheduledSeason.applyReservedDemoSkip();
         Random random = new Random(resolveSeed(scheduledSeason));
 
         List<WeatherLocation> weatherSchedule = rebuildWeatherSchedule(scheduledSeason, locations, random);
@@ -248,7 +249,7 @@ public class SeasonLifecycleService {
                         + "stage={} detailPhase={} day={}\n"
                         + "phaseRemaining={}s seasonRemaining={}s gameTime={} tick={}\n"
                         + "joinEnabled={} joinPlayableFromDay={}\n"
-                        + "startTime={} endTime={} batchKey={}\n"
+                        + "startTime={} endTime={} batchKey={} demoSkipStatus={} demoPlayableDays={} runtimePlayableDays={}\n"
                         + "==================================================",
                 now,
                 season.getId(),
@@ -264,7 +265,10 @@ public class SeasonLifecycleService {
                 formatValue(timePoint.joinPlayableFromDay()),
                 season.getStartTime(),
                 seasonEndAt,
-                formatValue(season.getSourceBatchKey())
+                formatValue(season.getSourceBatchKey()),
+                season.getDemoSkipStatus(),
+                formatValue(season.getDemoPlayableDays()),
+                season.resolveRuntimePlayableDays()
         );
     }
 
@@ -284,7 +288,7 @@ public class SeasonLifecycleService {
                         + "stage={} detailPhase={} day={}\n"
                         + "phaseRemaining={}s seasonRemaining={}s gameTime={} tick={}\n"
                         + "joinEnabled={} joinPlayableFromDay={}\n"
-                        + "startTime={} endTime={} batchKey={}\n"
+                        + "startTime={} endTime={} batchKey={} demoSkipStatus={} demoPlayableDays={} runtimePlayableDays={}\n"
                         + "==================================================",
                 now,
                 season.getId(),
@@ -300,7 +304,10 @@ public class SeasonLifecycleService {
                 "-",
                 season.getStartTime(),
                 season.getEndTime(),
-                formatValue(season.getSourceBatchKey())
+                formatValue(season.getSourceBatchKey()),
+                season.getDemoSkipStatus(),
+                formatValue(season.getDemoPlayableDays()),
+                season.resolveRuntimePlayableDays()
         );
     }
 

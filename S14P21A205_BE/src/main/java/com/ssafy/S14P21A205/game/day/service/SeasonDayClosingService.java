@@ -47,7 +47,7 @@ public class SeasonDayClosingService {
         }
 
         Season season = seasonRepository.findByIdAndStatus(seasonId, SeasonStatus.IN_PROGRESS).orElse(null);
-        if (season == null || season.getTotalDays() == null || day > season.getTotalDays()) {
+        if (season == null || season.resolveRuntimePlayableDays() <= 0 || day > season.resolveRuntimePlayableDays()) {
             return;
         }
 
@@ -57,7 +57,7 @@ public class SeasonDayClosingService {
             return;
         }
 
-        boolean isLastDay = day == season.getTotalDays();
+        boolean isLastDay = day == season.resolveRuntimePlayableDays();
 
         CompletableFuture<Void> reportFuture = CompletableFuture.runAsync(() -> {
             int successCount = 0;

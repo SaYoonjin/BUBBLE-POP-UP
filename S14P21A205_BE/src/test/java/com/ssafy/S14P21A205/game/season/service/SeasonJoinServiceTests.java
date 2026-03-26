@@ -201,7 +201,7 @@ class SeasonJoinServiceTests {
                 new SeasonJoinRequest(3, "late join")
         ))
                 .isInstanceOf(com.ssafy.S14P21A205.exception.BaseException.class)
-                .hasMessageContaining("only through day 5");
+                .hasMessageContaining("no longer available");
     }
 
     private User user(Integer id) {

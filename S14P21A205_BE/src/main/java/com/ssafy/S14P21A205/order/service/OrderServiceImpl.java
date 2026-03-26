@@ -273,7 +273,7 @@ public class OrderServiceImpl implements OrderService {
         if (!REGULAR_ORDER_DAYS.contains(currentDay)) {
             throw new BaseException(
                     ErrorCode.ORDER_NOT_AVAILABLE_DAY,
-                    "Regular orders are only available on days 1, 3, 5, and 7."
+                    "Regular orders are only available on eligible order days."
             );
         }
     }
@@ -290,7 +290,7 @@ public class OrderServiceImpl implements OrderService {
 
     private int resolveRegularOrderDay(Store store, SeasonTimePoint seasonTimePoint) {
         Integer currentDay = seasonTimePoint.currentDay();
-        if (currentDay == null || currentDay < 1 || currentDay > store.getSeason().getTotalDays()) {
+        if (currentDay == null || currentDay < 1 || currentDay > store.getSeason().resolveRuntimePlayableDays()) {
             throw new BaseException(ErrorCode.INVALID_INPUT_VALUE, "Current season day is out of range.");
         }
         return currentDay;
