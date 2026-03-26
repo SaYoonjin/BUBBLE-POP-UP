@@ -87,8 +87,8 @@ function LocationSlide() {
   const [hov, setHov] = useState<string|null>(null);
   const spots: LocationSpot[] = [
     { name:"홍대", x:"15%", y:"30%", grade:"A", d:0 },{ name:"여의도", x:"13%", y:"55%", grade:"B", d:.1 },
-    { name:"명동", x:"35%", y:"26%", grade:"S", d:.15 },{ name:"이태원", x:"38%", y:"50%", grade:"B", d:.2 },
-    { name:"성수", x:"58%", y:"24%", grade:"S", d:.25, active:true },{ name:"건대", x:"72%", y:"40%", grade:"B", d:.3 },
+    { name:"명동", x:"35%", y:"26%", grade:"S", d:.15 },{ name:"이태원", x:"38%", y:"50%", grade:"A", d:.2 },
+    { name:"서울숲/성수", x:"58%", y:"24%", grade:"S", d:.25, active:true },{ name:"신도림", x:"72%", y:"40%", grade:"B", d:.3 },
     { name:"강남", x:"50%", y:"68%", grade:"S", d:.35 },{ name:"잠실", x:"78%", y:"60%", grade:"A", d:.4 },
   ];
   const gc: Record<LocationGrade, string> = { S:"bg-rose-400", A:"bg-amber-400", B:"bg-slate-400" };
