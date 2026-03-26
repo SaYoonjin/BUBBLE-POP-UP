@@ -50,9 +50,9 @@ public class SeasonFinalRankingService {
             return;
         }
 
-        int totalDays = season.getTotalDays() == null || season.getTotalDays() <= 0
+        int totalDays = season.resolveRuntimePlayableDays() <= 0
                 ? DEFAULT_TOTAL_DAYS
-                : season.getTotalDays();
+                : season.resolveRuntimePlayableDays();
         // Final ranking is based on the full season history, so bankrupt stores stay included here.
         List<Store> stores = storeRepository.findAllBySeason_IdOrderByIdAsc(season.getId());
         if (stores.isEmpty()) {

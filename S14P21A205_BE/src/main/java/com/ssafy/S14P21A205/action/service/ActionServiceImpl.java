@@ -207,7 +207,6 @@ public class ActionServiceImpl implements ActionService {
 
         GameDayLiveState state = resolveCurrentLiveState(store, context);
         long updatedBalance = resolveUpdatedBalance("DISCOUNT", userId, store, day, valueOf(action.getCost()), state);
-        store.changePrice(newPrice);
 
         int averagePrice = storeRepository.findAveragePriceBySeasonIdAndMenuId(
                 store.getSeason().getId(),
@@ -381,7 +380,7 @@ public class ActionServiceImpl implements ActionService {
                 store.getSeason().getId(),
                 store.getLocation().getId(),
                 day,
-                store.getSeason().getTotalDays(),
+                store.getSeason().resolveRuntimePlayableDays(),
                 state.startedAt(),
                 now
         ).delaySeconds();
@@ -456,7 +455,7 @@ public class ActionServiceImpl implements ActionService {
     private int resolveCurrentDay(Store store) {
         SeasonTimePoint seasonTimePoint = seasonTimelineService.resolve(store.getSeason(), LocalDateTime.now(clock));
         Integer currentDay = seasonTimePoint.currentDay();
-        if (currentDay == null || currentDay < 1 || currentDay > store.getSeason().getTotalDays()) {
+        if (currentDay == null || currentDay < 1 || currentDay > store.getSeason().resolveRuntimePlayableDays()) {
             throw new BaseException(ErrorCode.INVALID_INPUT_VALUE, "Current season day is out of range.");
         }
         return currentDay;
@@ -520,7 +519,7 @@ public class ActionServiceImpl implements ActionService {
         validateActionExecutionPhase(seasonTimePoint.phase());
 
         Integer currentDay = seasonTimePoint.currentDay();
-        if (currentDay == null || currentDay < 1 || currentDay > store.getSeason().getTotalDays()) {
+        if (currentDay == null || currentDay < 1 || currentDay > store.getSeason().resolveRuntimePlayableDays()) {
             throw new BaseException(ErrorCode.INVALID_INPUT_VALUE, "Current season day is out of range.");
         }
 

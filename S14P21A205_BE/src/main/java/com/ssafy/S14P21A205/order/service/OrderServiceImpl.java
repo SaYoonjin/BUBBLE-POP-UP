@@ -20,6 +20,7 @@ import com.ssafy.S14P21A205.order.dto.CurrentOrderResponse;
 import com.ssafy.S14P21A205.order.dto.RegularOrderRequest;
 import com.ssafy.S14P21A205.order.dto.RegularOrderResponse;
 import com.ssafy.S14P21A205.order.entity.Order;
+import com.ssafy.S14P21A205.order.entity.OrderType;
 import com.ssafy.S14P21A205.order.repository.OrderRepository;
 import com.ssafy.S14P21A205.shop.entity.ItemCategory;
 import com.ssafy.S14P21A205.shop.entity.Menu;
@@ -62,11 +63,11 @@ public class OrderServiceImpl implements OrderService {
     private final SeasonTimelineService seasonTimelineService = new SeasonTimelineService();
 
     @Override
-    public CurrentOrderResponse getCurrentOrder(Integer userId) {
+    public CurrentOrderResponse getCurrentOrder(Integer userId, Integer menuId) {
         Store store = getStoreByUserId(userId);
         Long storeId = store.getId();
         int currentDay = resolveRegularOrderDay(store);
-        Menu menu = store.getMenu();
+        Menu menu = resolvePreviewMenu(store, menuId);
         List<Store> seasonStores = storeRepository.findBySeason_IdOrderByIdAsc(store.getSeason().getId());
 
         BigDecimal ingredientDiscountRate = getIngredientDiscountRate(store.getUser().getId());
@@ -79,14 +80,22 @@ public class OrderServiceImpl implements OrderService {
                 menuTrendRank
         );
         Integer stock = resolveStock(store, currentDay);
+        Integer baseSellingPrice = resolveBaseSellingPrice(store, currentDay);
+        Integer sellingPrice = resolveSellingPrice(
+                null,
+                Objects.equals(store.getMenu().getId(), menu.getId()),
+                baseSellingPrice,
+                pricingPolicy
+        );
 
         return CurrentOrderResponse.builder()
                 .menuId(Math.toIntExact(menu.getId()))
                 .menuName(menu.getMenuName())
                 .costPrice(pricingPolicy.costPrice())
+                .minimumSellingPrice(pricingPolicy.minimumSellingPrice())
                 .recommendedPrice(pricingPolicy.recommendedPrice())
                 .maxSellingPrice(pricingPolicy.maxSellingPrice())
-                .sellingPrice(store.getPrice())
+                .sellingPrice(sellingPrice)
                 .stock(stock)
                 .build();
     }
@@ -118,7 +127,8 @@ public class OrderServiceImpl implements OrderService {
                 ingredientCostMultiplier,
                 menuTrendRank
         );
-        Integer sellingPrice = resolveSellingPrice(request.price(), sameMenu, store.getPrice(), pricingPolicy);
+        Integer baseSellingPrice = resolveBaseSellingPrice(store, regularOrderDay);
+        Integer sellingPrice = resolveSellingPrice(request.price(), sameMenu, baseSellingPrice, pricingPolicy);
         validateSellingPrice(sellingPrice, pricingPolicy);
         Integer totalCost = Math.multiplyExact(pricingPolicy.costPrice(), request.quantity());
 
@@ -170,6 +180,13 @@ public class OrderServiceImpl implements OrderService {
     private Menu getMenuById(Integer menuId) {
         return menuRepository.findById(Long.valueOf(menuId))
                 .orElseThrow(() -> new BaseException(ErrorCode.MENU_NOT_FOUND));
+    }
+
+    private Menu resolvePreviewMenu(Store store, Integer menuId) {
+        if (menuId == null || Objects.equals(store.getMenu().getId(), Long.valueOf(menuId))) {
+            return store.getMenu();
+        }
+        return getMenuById(menuId);
     }
 
     private BigDecimal getIngredientDiscountRate(Integer userId) {
@@ -229,6 +246,17 @@ public class OrderServiceImpl implements OrderService {
         return pricingPolicy.recommendedPrice();
     }
 
+    private Integer resolveBaseSellingPrice(Store store, int day) {
+        return orderRepository
+                .findFirstByStore_IdAndOrderedDayLessThanEqualAndOrderTypeAndSalePriceIsNotNullOrderByOrderedDayDescIdDesc(
+                        store.getId(),
+                        day,
+                        OrderType.NORMAL
+                )
+                .map(Order::getSalePrice)
+                .orElseGet(() -> store.getPrice() != null ? store.getPrice() : store.getMenu().getOriginPrice());
+    }
+
     private BigDecimal resolveRegularOrderIngredientCostMultiplier(Store store, int day, Menu menu) {
         LocalDateTime effectiveAtOpening = seasonTimelineService.day(store.getSeason(), day).businessStart();
         return eventEffectResolver.resolve(
@@ -259,7 +287,7 @@ public class OrderServiceImpl implements OrderService {
         if (!REGULAR_ORDER_DAYS.contains(currentDay)) {
             throw new BaseException(
                     ErrorCode.ORDER_NOT_AVAILABLE_DAY,
-                    "Regular orders are only available on days 1, 3, 5, and 7."
+                    "Regular orders are only available on eligible order days."
             );
         }
     }
@@ -276,7 +304,7 @@ public class OrderServiceImpl implements OrderService {
 
     private int resolveRegularOrderDay(Store store, SeasonTimePoint seasonTimePoint) {
         Integer currentDay = seasonTimePoint.currentDay();
-        if (currentDay == null || currentDay < 1 || currentDay > store.getSeason().getTotalDays()) {
+        if (currentDay == null || currentDay < 1 || currentDay > store.getSeason().resolveRuntimePlayableDays()) {
             throw new BaseException(ErrorCode.INVALID_INPUT_VALUE, "Current season day is out of range.");
         }
         return currentDay;

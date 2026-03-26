@@ -153,14 +153,11 @@ public class GameDayStateService {
                 regionStoreCount
         );
 
-        if (calculatedState.liveState().salePrice() != null
-                && !calculatedState.liveState().salePrice().equals(store.getPrice())) {
-            store.changePrice(calculatedState.liveState().salePrice());
-        }
         if (calculatedState.currentMenu() != null
                 && (store.getMenu() == null || !calculatedState.currentMenu().equals(store.getMenu()))) {
             store.changeMenu(calculatedState.currentMenu());
         }
+        syncEmergencyOrderSalePrice(store, emergencyOrders, effectiveNow);
 
         gameDayStoreStateRedisRepository.saveStateAndTickLog(store.getId(), day, calculatedState.liveState());
         log.info(
@@ -190,7 +187,7 @@ public class GameDayStateService {
                 store.getSeason().getId(),
                 store.getLocation().getId(),
                 day,
-                store.getSeason().getTotalDays(),
+                store.getSeason().resolveRuntimePlayableDays(),
                 currentTimeline.dayStart(),
                 effectiveNow
         );
@@ -242,8 +239,8 @@ public class GameDayStateService {
             return Optional.empty();
         }
 
-        Integer totalDays = store.getSeason().getTotalDays();
-        if (totalDays != null && day > totalDays) {
+        int totalDays = store.getSeason().resolveRuntimePlayableDays();
+        if (day > totalDays) {
             return Optional.empty();
         }
 
@@ -305,7 +302,7 @@ public class GameDayStateService {
 
     private int resolveCurrentDay(Season season, SeasonTimePoint seasonTimePoint) {
         Integer currentDay = seasonTimePoint.currentDay();
-        if (currentDay == null || currentDay < 1 || currentDay > season.getTotalDays()) {
+        if (currentDay == null || currentDay < 1 || currentDay > season.resolveRuntimePlayableDays()) {
             throw new BaseException(ErrorCode.INVALID_INPUT_VALUE, "Current season day is out of range.");
         }
         return currentDay;
@@ -419,6 +416,16 @@ public class GameDayStateService {
                 resolved.pending(),
                 resolved.arriveAt()
         );
+    }
+
+    private void syncEmergencyOrderSalePrice(Store store, List<Order> emergencyOrders, LocalDateTime effectiveNow) {
+        Order latestArrivedEmergency = EMERGENCY_ORDER_ENGINE.resolveLatestArrivedOrderAt(emergencyOrders, effectiveNow);
+        if (latestArrivedEmergency == null || latestArrivedEmergency.getSalePrice() == null) {
+            return;
+        }
+        if (!latestArrivedEmergency.getSalePrice().equals(store.getPrice())) {
+            store.changePrice(latestArrivedEmergency.getSalePrice());
+        }
     }
 
     private CalculatedGameState calculateGameState(
