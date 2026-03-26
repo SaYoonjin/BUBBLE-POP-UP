@@ -128,8 +128,8 @@ public class GameDayStartService {
             return Optional.empty();
         }
 
-        Integer totalDays = store.getSeason().getTotalDays();
-        if (totalDays != null && day > totalDays) {
+        int totalDays = store.getSeason().resolveRuntimePlayableDays();
+        if (day > totalDays) {
             return Optional.empty();
         }
         if (!isPlayableDay(store, day)) {
@@ -215,7 +215,7 @@ public class GameDayStartService {
 
     private int resolveCurrentDay(Season season, SeasonTimePoint seasonTimePoint) {
         Integer currentDay = seasonTimePoint.currentDay();
-        if (currentDay == null || currentDay < 1 || currentDay > season.getTotalDays()) {
+        if (currentDay == null || currentDay < 1 || currentDay > season.resolveRuntimePlayableDays()) {
             throw new BaseException(ErrorCode.INVALID_INPUT_VALUE, "Current season day is out of range.");
         }
         return currentDay;

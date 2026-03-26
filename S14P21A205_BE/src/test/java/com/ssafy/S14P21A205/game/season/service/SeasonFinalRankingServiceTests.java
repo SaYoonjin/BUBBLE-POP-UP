@@ -60,6 +60,7 @@ class SeasonFinalRankingServiceTests {
         Season season = org.mockito.Mockito.mock(Season.class);
         when(season.getId()).thenReturn(11L);
         when(season.getTotalDays()).thenReturn(7);
+        when(season.resolveRuntimePlayableDays()).thenReturn(7);
 
         List<Store> stores = new ArrayList<>();
         List<DailyReport> reports = new ArrayList<>();
@@ -132,6 +133,7 @@ class SeasonFinalRankingServiceTests {
         Season season = org.mockito.Mockito.mock(Season.class);
         when(season.getId()).thenReturn(33L);
         when(season.getTotalDays()).thenReturn(7);
+        when(season.resolveRuntimePlayableDays()).thenReturn(7);
 
         Store store = createStore(301L, 1, "user-1");
         DailyReport bankruptDayThree = createDailyReport(store, 3, 100, 200, 10, new BigDecimal("0.10"), true);

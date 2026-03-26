@@ -94,8 +94,8 @@ public class GameDayReportService {
             LocalDateTime now,
             SeasonTimePoint seasonTimePoint
     ) {
-        Integer totalDays = store.getSeason().getTotalDays();
-        if (totalDays != null && day > totalDays) {
+        int totalDays = store.getSeason().resolveRuntimePlayableDays();
+        if (day > totalDays) {
             log.warn("[DayReport] Skipped: day {} > totalDays {}. storeId={}", day, totalDays, store.getId());
             return;
         }
@@ -221,7 +221,7 @@ public class GameDayReportService {
         int stockRemaining = normalizeStock(report.getStockRemaining());
         int stockDisposed = STOCK_DISPOSED_COUNT;
         boolean nextDayIsOrderDay = Boolean.TRUE.equals(
-                resolveIsNextDayOrderDay(report.getDay(), store.getSeason().getTotalDays()));
+                resolveIsNextDayOrderDay(report.getDay(), store.getSeason().resolveRuntimePlayableDays()));
         if (nextDayIsOrderDay && stockRemaining > 0) {
             stockDisposed = stockRemaining;
             stockRemaining = 0;
@@ -246,9 +246,9 @@ public class GameDayReportService {
                         store.getSeason().getId(),
                         resolveTomorrowLocationId(store, report.getDay()),
                         report.getDay(),
-                        store.getSeason().getTotalDays()
+                        store.getSeason().resolveRuntimePlayableDays()
                 ),
-                resolveIsNextDayOrderDay(report.getDay(), store.getSeason().getTotalDays()),
+                resolveIsNextDayOrderDay(report.getDay(), store.getSeason().resolveRuntimePlayableDays()),
                 defaultInt(report.getConsecutiveDeficitDays()),
                 Boolean.TRUE.equals(report.getIsBankrupt())
         );
@@ -303,7 +303,7 @@ public class GameDayReportService {
     }
 
     private void validateDay(int day, Season season) {
-        int totalDays = season.getTotalDays() == null ? MAX_SUPPORTED_DAY : season.getTotalDays();
+        int totalDays = season.resolveRuntimePlayableDays() <= 0 ? MAX_SUPPORTED_DAY : season.resolveRuntimePlayableDays();
         if (day < 1 || day > MAX_SUPPORTED_DAY || day > totalDays) {
             throw new BaseException(
                     ErrorCode.INVALID_DAY,
@@ -318,7 +318,7 @@ public class GameDayReportService {
             case LOCATION_SELECTION -> null;
             case DAY_PREPARING, DAY_BUSINESS -> currentDay == null || currentDay <= 1 ? null : currentDay - 1;
             case DAY_REPORT -> currentDay;
-            case SEASON_SUMMARY, NEXT_SEASON_WAITING, CLOSED -> season.getTotalDays();
+            case SEASON_SUMMARY, NEXT_SEASON_WAITING, CLOSED -> season.resolveRuntimePlayableDays();
         };
     }
 
@@ -399,7 +399,9 @@ public class GameDayReportService {
         if (store == null || store.getLocation() == null) {
             return null;
         }
-        if (day >= (store.getSeason() == null || store.getSeason().getTotalDays() == null ? MAX_SUPPORTED_DAY : store.getSeason().getTotalDays())) {
+        if (day >= (store.getSeason() == null || store.getSeason().resolveRuntimePlayableDays() <= 0
+                ? MAX_SUPPORTED_DAY
+                : store.getSeason().resolveRuntimePlayableDays())) {
             return store.getLocation().getId();
         }
         return STORE_LOCATION_TRANSITION_SUPPORT.resolveLocationForDay(store, day + 1).getId();

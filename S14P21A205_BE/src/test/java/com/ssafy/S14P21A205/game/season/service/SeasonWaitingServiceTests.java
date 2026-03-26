@@ -123,6 +123,7 @@ class SeasonWaitingServiceTests {
         when(season.getStatus()).thenReturn(status);
         when(season.getCurrentDay()).thenReturn(currentDay);
         when(season.getTotalDays()).thenReturn(totalDays);
+        when(season.resolveRuntimePlayableDays()).thenReturn(totalDays);
         when(season.getStartTime()).thenReturn(startTime);
         return season;
     }
