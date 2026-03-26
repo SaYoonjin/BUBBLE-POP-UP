@@ -52,7 +52,7 @@ import {
   elapsedToGameTime,
   type SeasonPhase,
 } from "../constants/gameTime";
-import { sendToUnity, setWeather, setDay, startDay, spawnShopAtIndex, setCameraRegion } from "../utils/unity";
+import { sendToUnity, setWeather, startDay, spawnShopAtIndex, setCameraRegion } from "../utils/unity";
 import { classifyEventEffect } from "../components/play/effects/effects";
 import { useEventEffectStore } from "../components/play/effects/useEventEffect";
 import EventEffect3DOverlay from "../components/play/effects/EventEffect3DOverlay";
@@ -520,12 +520,9 @@ function buildPromotionOptions(prices?: Partial<Record<PromotionType, number>>):
 const LOCATION_ICON_MAP: Record<string, string> = {
   홍대: "🎸",
   신도림: "🚉",
-  성수: "🏭",
   "서울숲/성수": "🌳",
-  성수동: "🏭",
   명동: "🛍️",
   이태원: "🌍",
-  건대: "🎓",
   강남: "💎",
   여의도: "💼",
   잠실: "🎡",
