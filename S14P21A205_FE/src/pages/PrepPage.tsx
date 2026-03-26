@@ -1,5 +1,5 @@
 import axios from "axios";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useOutletContext, useParams } from "react-router-dom";
 import type { GameGuardContext } from "../router/GameGuard";
 import AppHeader from "../components/common/AppHeader";
@@ -13,7 +13,7 @@ import {
   postRegularOrder,
   type CurrentOrderResponse,
 } from "../api/order";
-import { getGameWaitingStatus, type GameWaitingResponse } from "../api/game";
+import { getGameWaitingStatus, getSeasonTime, type GameWaitingResponse } from "../api/game";
 import {
   getNewsRanking,
   getTodayNews,
@@ -332,13 +332,65 @@ export default function PrepPage() {
     regularOrderStatus === "idle";
   const isPrepFormLocked =
     !canPrepareToday || isSubmittingRegularOrder || hasSubmittedRegularOrder;
-  const prepEndTimestampMs = useMemo(() => {
+  const [prepEndTimestampMs, setPrepEndTimestampMs] = useState<number | undefined>(() => {
     if (!isServerPreparing || typeof waitingStatus?.phaseRemainingSeconds !== "number") {
       return undefined;
     }
-
     return Date.now() + waitingStatus.phaseRemainingSeconds * 1000;
+  });
+
+  // waitingStatus 변경 시 prepEndTimestampMs 갱신
+  useEffect(() => {
+    if (!isServerPreparing || typeof waitingStatus?.phaseRemainingSeconds !== "number") {
+      setPrepEndTimestampMs(undefined);
+      return;
+    }
+    setPrepEndTimestampMs(Date.now() + waitingStatus.phaseRemainingSeconds * 1000);
   }, [isServerPreparing, waitingStatus?.phaseRemainingSeconds]);
+
+  // --- 서버 시간 동기화 ---
+
+  const resyncPrepEnd = useCallback(async () => {
+    try {
+      const timeData = await getSeasonTime();
+      if (timeData.seasonPhase !== "DAY_PREPARING") return;
+      const correctedEnd = Date.now() + timeData.phaseRemainingSeconds * 1000;
+      const drift = Math.abs(correctedEnd - (prepEndTimestampMs ?? 0));
+      if (drift > 1000) {
+        setPrepEndTimestampMs(correctedEnd);
+      }
+    } catch {
+      /* 무시 */
+    }
+  }, [prepEndTimestampMs]);
+
+  // 3.1 화면 진입 시 sync
+  useEffect(() => {
+    resyncPrepEnd();
+  }, []);
+
+  // 3.4 준비 종료 5초 전 sync
+  useEffect(() => {
+    if (!prepEndTimestampMs) return;
+    const delay = prepEndTimestampMs - 5000 - Date.now();
+    if (delay <= 0) return;
+    const timer = window.setTimeout(() => resyncPrepEnd(), delay);
+    return () => clearTimeout(timer);
+  }, [prepEndTimestampMs, resyncPrepEnd]);
+
+  // 3.5 탭 복귀 시 sync
+  useEffect(() => {
+    const handler = () => {
+      if (document.visibilityState === "visible") {
+        resyncPrepEnd();
+      }
+    };
+    document.addEventListener("visibilitychange", handler);
+    return () => document.removeEventListener("visibilitychange", handler);
+  }, [resyncPrepEnd]);
+
+  // --- 서버 시간 동기화 끝 ---
+
   const menuSelectorMenus = useMemo(
     () =>
       menus.map((menu) => {

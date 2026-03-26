@@ -330,6 +330,25 @@ export default function GameGuard() {
     };
   }, [checkAndRoute, scheduleTransition]);
 
+  // 탭 복귀 시 서버 상태 재확인 + 타이머 재스케줄링 (요구사항 3.5)
+  useEffect(() => {
+    const handler = () => {
+      if (document.visibilityState !== "visible") return;
+
+      // 기존 transition 타이머 클리어
+      if (timerRef.current) clearTimeout(timerRef.current);
+
+      checkAndRoute().then((result) => {
+        const isWaiting = location.pathname === "/game/waiting";
+        if (result.allowed && result.remaining > 0 && !isWaiting) {
+          scheduleTransition(result.remaining);
+        }
+      });
+    };
+    document.addEventListener("visibilitychange", handler);
+    return () => document.removeEventListener("visibilitychange", handler);
+  }, [checkAndRoute, scheduleTransition, location.pathname]);
+
   if (state.status === "loading") {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#FDFDFB] text-slate-900 font-display">
