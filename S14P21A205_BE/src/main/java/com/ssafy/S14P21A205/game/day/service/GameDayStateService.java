@@ -157,6 +157,7 @@ public class GameDayStateService {
                 && (store.getMenu() == null || !calculatedState.currentMenu().equals(store.getMenu()))) {
             store.changeMenu(calculatedState.currentMenu());
         }
+        syncEmergencyOrderSalePrice(store, emergencyOrders, effectiveNow);
 
         gameDayStoreStateRedisRepository.saveStateAndTickLog(store.getId(), day, calculatedState.liveState());
         log.info(
@@ -415,6 +416,16 @@ public class GameDayStateService {
                 resolved.pending(),
                 resolved.arriveAt()
         );
+    }
+
+    private void syncEmergencyOrderSalePrice(Store store, List<Order> emergencyOrders, LocalDateTime effectiveNow) {
+        Order latestArrivedEmergency = EMERGENCY_ORDER_ENGINE.resolveLatestArrivedOrderAt(emergencyOrders, effectiveNow);
+        if (latestArrivedEmergency == null || latestArrivedEmergency.getSalePrice() == null) {
+            return;
+        }
+        if (!latestArrivedEmergency.getSalePrice().equals(store.getPrice())) {
+            store.changePrice(latestArrivedEmergency.getSalePrice());
+        }
     }
 
     private CalculatedGameState calculateGameState(
