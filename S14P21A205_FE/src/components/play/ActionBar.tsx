@@ -34,7 +34,7 @@ export default function ActionBar({ onAction, usedActions, activeEffects }: Acti
               <div
                 className={`flex h-12 w-12 items-center justify-center rounded-xl border shadow-sm transition-colors ${
                   isActiveEffect
-                    ? "border-emerald-400 bg-emerald-500 text-white"
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-600"
                     : isUsed
                       ? "border-slate-200 bg-slate-100 text-slate-300"
                       : "border-slate-100 bg-white text-slate-600 group-hover:border-primary group-hover:bg-primary group-hover:text-white"
@@ -45,7 +45,7 @@ export default function ActionBar({ onAction, usedActions, activeEffects }: Acti
               <span
                 className={`text-[11px] font-bold transition-colors ${
                   isActiveEffect
-                    ? "text-emerald-700"
+                    ? "text-slate-700"
                     : isUsed
                       ? "text-slate-400"
                       : "text-slate-600 group-hover:text-primary"
@@ -54,8 +54,8 @@ export default function ActionBar({ onAction, usedActions, activeEffects }: Acti
                 {action.label}
               </span>
               {isActiveEffect && (
-                <span className="inline-flex items-center gap-1 rounded-full border border-emerald-400 bg-emerald-500 px-2 py-0.5 text-[10px] font-semibold text-white shadow-sm">
-                  <span className="h-1.5 w-1.5 rounded-full bg-white" />
+                <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-600 shadow-sm">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
                   진행중
                 </span>
               )}
