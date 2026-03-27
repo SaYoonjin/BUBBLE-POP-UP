@@ -192,6 +192,9 @@ export default function ReportPage() {
     if (report?.seasonId != null) {
       useGameStore.getState().setBankruptNoticeSeasonNumber(report.seasonId);
     }
+    if (report?.day != null) {
+      useGameStore.getState().setBankruptReportDay(report.day);
+    }
 
     navigate("/", {
       replace: true,
