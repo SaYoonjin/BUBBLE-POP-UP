@@ -26,6 +26,26 @@ interface RedirectTarget {
   state?: WaitingRouteState;
 }
 
+function isSetupPath(pathname: string): boolean {
+  return pathname.startsWith("/game/setup");
+}
+
+function isPrepPath(pathname: string): boolean {
+  return /^\/game\/\d+\/prep$/.test(pathname);
+}
+
+function isPlayPath(pathname: string): boolean {
+  return /^\/game\/\d+\/play$/.test(pathname);
+}
+
+function isReportPath(pathname: string): boolean {
+  return /^\/game\/\d+\/report$/.test(pathname);
+}
+
+function isNonGameplayHoldPath(pathname: string): boolean {
+  return isSetupPath(pathname) || pathname === "/game/waiting" || pathname === "/ranking";
+}
+
 async function resolveJoinedStoreAccess(day: number | null) {
   try {
     const participation = await getCurrentParticipation();
@@ -89,6 +109,9 @@ function isAllowedForJoinedUser(
   if (phase === "DAY_PREPARING" && pathname === "/game/waiting") {
     return true;
   }
+  if (phase === "DAY_REPORT") {
+    return isReportPath(pathname) || isNonGameplayHoldPath(pathname);
+  }
   if (phase === "SEASON_SUMMARY" || phase === "NEXT_SEASON_WAITING") {
     return pathname === "/ranking";
   }
@@ -102,7 +125,7 @@ function isAllowedForNewUser(phase: SeasonPhase, pathname: string): boolean {
   if ((phase === "SEASON_SUMMARY" || phase === "NEXT_SEASON_WAITING") && pathname === "/ranking") {
     return true;
   }
-  return pathname.startsWith("/game/setup") || pathname === "/game/waiting";
+  return isSetupPath(pathname) || pathname === "/game/waiting";
 }
 
 /** waiting 페이지로 보낼 때 route state 생성 */
@@ -278,7 +301,10 @@ export default function GameGuard() {
           ? isAllowedForJoinedUser(phase, day, location.pathname, waiting)
           : isAllowedForNewUser(phase, location.pathname);
 
-        if (!stillAllowed) {
+        const shouldAutoRedirectToReport =
+          phase === "DAY_REPORT" && (isPrepPath(location.pathname) || isPlayPath(location.pathname));
+
+        if (!stillAllowed && (phase !== "DAY_REPORT" || shouldAutoRedirectToReport)) {
           navigate(target.path, { replace: true, state: target.state });
         } else {
           scheduleTransition(timeData.phaseRemainingSeconds);
