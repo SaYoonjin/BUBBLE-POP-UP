@@ -580,8 +580,8 @@ function mapStoreMenusToEmergencyMenus(menus: StoreMenuResponse[]): EmergencyMen
     ingredientPrice: menu.ingredientPrice,
     ingredientDiscountMultiplier: normalizeDiscountMultiplier(menu.discount),
     emoji: resolveMenuEmoji(menu.menuId, menu.menuName),
-    recommendedPrice: menu.recommendedPrice ?? 0,
-    maxSellingPrice: menu.maxSellingPrice ?? 0,
+    recommendedPrice: menu.recommendedPrice,
+    maxSellingPrice: menu.maxSellingPrice,
   }));
 }
 
