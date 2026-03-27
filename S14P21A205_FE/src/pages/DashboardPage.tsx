@@ -319,7 +319,9 @@ export default function DashboardPage() {
     [location.state],
   );
   const showMidSeasonSetupExpiredModal = Boolean(routeState.showMidSeasonSetupExpiredModal);
-  const isItemSelectionLocked = participation?.joinedCurrentSeason === true;
+  const isActiveSeasonParticipant =
+    participation?.joinedCurrentSeason === true && participation?.storeAccessible === true;
+  const isItemSelectionLocked = isActiveSeasonParticipant;
   const selectedItems = useMemo(
     () => hydrateSelectedDashboardItems(selectedItemIds, shopItems),
     [selectedItemIds, shopItems],
@@ -400,7 +402,8 @@ export default function DashboardPage() {
   const showMidSeasonNotice = Boolean(
     waitingStatus?.status === "IN_PROGRESS" &&
       isJoinableDay(waitingStatus.currentDay ?? null) &&
-      !participation?.joinedCurrentSeason,
+      participation !== null &&
+      !isActiveSeasonParticipant,
   );
   const recentSeasonNumber = useMemo(() => {
     if (!waitingStatus) {
@@ -534,7 +537,7 @@ export default function DashboardPage() {
   }, [participationSyncKey]);
 
   useEffect(() => {
-    if (!waitingStatus || !participation?.joinedCurrentSeason) {
+    if (!waitingStatus || !isActiveSeasonParticipant) {
       setGameReturnPath(null);
       return;
     }
@@ -549,7 +552,7 @@ export default function DashboardPage() {
     }
 
     // 파산 유저 또는 시즌 종료 시 버튼 숨김
-    if (bankruptNoticeSeasonNumber != null || !participation.storeAccessible || phase === "SEASON_SUMMARY" || phase === "NEXT_SEASON_WAITING") {
+    if (bankruptNoticeSeasonNumber != null || phase === "SEASON_SUMMARY" || phase === "NEXT_SEASON_WAITING") {
       setGameReturnPath(null);
       return;
     }
@@ -561,7 +564,7 @@ export default function DashboardPage() {
 
     const path = phaseToRoute(phase, currentDay);
     setGameReturnPath(path && path !== "/" ? path : null);
-  }, [bankruptNoticeSeasonNumber, participation, waitingStatus]);
+  }, [bankruptNoticeSeasonNumber, isActiveSeasonParticipant, participation, waitingStatus]);
 
   useEffect(() => {
     let isCancelled = false;
