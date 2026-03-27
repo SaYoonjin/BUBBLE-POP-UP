@@ -64,6 +64,8 @@ export default function ReportPage() {
   const guardContext = useOutletContext<GameGuardContext>();
   const day = Number(dayParam) || 1;
   const { brandName } = useBrandName();
+  const playableFromDay = useGameStore((state) => state.playableFromDay);
+  const reportHistoryStartDay = Math.max(1, playableFromDay ?? 1);
 
   const [reportEndTimestampMs, setReportEndTimestampMs] = useState(guardContext.phaseEndTimestamp);
   const [report, setReport] = useState<GameDayReportResponse | null>(null);
@@ -105,29 +107,26 @@ export default function ReportPage() {
       try {
         const [todayResult, allResult] = await Promise.allSettled([
           getDayReport(day),
-          getAllDayReports(day),
+          getAllDayReports(reportHistoryStartDay, day - 1),
         ]);
 
         if (cancelled) return false;
 
-        const reports = allResult.status === "fulfilled" ? allResult.value : [];
-        setAllReports(reports);
-
         if (todayResult.status === "fulfilled") {
-          setReport(todayResult.value);
+          const currentReport = todayResult.value;
+          const reports = allResult.status === "fulfilled" ? allResult.value : [];
+          const historyReports = reports.filter(
+            (item) => item.seasonId === currentReport.seasonId,
+          );
+
+          setReport(currentReport);
+          setAllReports([...historyReports, currentReport]);
           setError(null);
           return true;
         }
 
-        const fallback =
-          reports.find((item) => item.day === day) ?? reports[reports.length - 1] ?? null;
-
-        setReport(fallback);
-        if (fallback) {
-          setError(null);
-          return true;
-        }
-
+        setReport(null);
+        setAllReports([]);
         return false;
       } catch {
         return false;
@@ -187,11 +186,14 @@ export default function ReportPage() {
       cancelled = true;
       for (const t of timers) clearTimeout(t);
     };
-  }, [day]);
+  }, [day, reportHistoryStartDay]);
 
   const handleBankruptExit = () => {
     if (report?.seasonId != null) {
       useGameStore.getState().setBankruptNoticeSeasonNumber(report.seasonId);
+    }
+    if (report?.day != null) {
+      useGameStore.getState().setBankruptReportDay(report.day);
     }
 
     navigate("/", {

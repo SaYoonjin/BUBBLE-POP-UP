@@ -1868,6 +1868,12 @@ function PlayPageSession({
         // 파산/시즌종료 에러 코드 → 메인으로 이동
         const code = (err as AxiosError<{ code?: string }>)?.response?.data?.code;
         if (code && GAME_EXIT_CODES.has(code)) {
+          if (code === "STORE-001") {
+            useGameStore.getState().setBankruptReportDay(dayNumber);
+          } else {
+            useGameStore.getState().clearBankruptReportDay();
+          }
+
           navigate("/", {
             replace: true,
             state: { hideGameReturnButton: true },
@@ -1878,7 +1884,7 @@ function PlayPageSession({
 
     const timer = window.setInterval(poll, 10_000);
     return () => window.clearInterval(timer);
-  }, [navigate]);
+  }, [dayNumber, navigate]);
 
   useEffect(() => {
     return () => {
