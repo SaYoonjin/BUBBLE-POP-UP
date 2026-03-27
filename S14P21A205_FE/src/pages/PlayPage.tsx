@@ -580,8 +580,8 @@ function mapStoreMenusToEmergencyMenus(menus: StoreMenuResponse[]): EmergencyMen
     ingredientPrice: menu.ingredientPrice,
     ingredientDiscountMultiplier: normalizeDiscountMultiplier(menu.discount),
     emoji: resolveMenuEmoji(menu.menuId, menu.menuName),
-    recommendedPrice: menu.recommendedPrice ?? 0,
-    maxSellingPrice: menu.maxSellingPrice ?? 0,
+    recommendedPrice: menu.recommendedPrice,
+    maxSellingPrice: menu.maxSellingPrice,
   }));
 }
 
@@ -739,6 +739,8 @@ function PlayPageSession({
   const nickname = useUserStore((s) => s.nickname) ?? "버블티";
   const { brandName } = useBrandName();
   const triggerEffect = useEventEffectStore((s) => s.triggerEffect);
+  const deferEffect = useEventEffectStore((s) => s.deferEffect);
+  const activateDeferred = useEventEffectStore((s) => s.activateDeferred);
   const activeEventEffect = useEventEffectStore((s) => s.activeEffect);
   const [activeModal, setActiveModal] = useState<ActionType | null>(null);
   const [serverUsedActions, setServerUsedActions] = useState<Set<ActionType>>(new Set());
@@ -772,13 +774,15 @@ function PlayPageSession({
   }, [activeEventEffect]);
 
   const [unityReady, setUnityReady] = useState(false);
+  const unityReadyRef = useRef(false);
+  useEffect(() => { unityReadyRef.current = unityReady; }, [unityReady]);
   const [dayWeatherType, setDayWeatherType] = useState<string | null>(null);
   const [storeRegionIndex, setStoreRegionIndex] = useState<number | null>(null);
   const todayEventScheduleSignatureRef = useRef("");
   const [balance, setBalance] = useState(0);
   const [stock, setStock] = useState(0);
   const [guests, setGuests] = useState(0);
-  const statQueue = useStatQueue(setStock, setBalance);
+  const statQueue = useStatQueue(setStock, setBalance, setGuests);
   const displayedGuestsRef = useRef(0);
   const displayedStockRef = useRef(0);
   const displayedBalanceRef = useRef(0);
@@ -1327,6 +1331,13 @@ function PlayPageSession({
     schedulePlannedVisitors(latestCustomerPlanRef.current, latestBackendCustomerCountRef.current);
   };
 
+  // Unity ready 시 대기 중이던 이벤트 이펙트 활성화
+  useEffect(() => {
+    if (unityReady) {
+      activateDeferred();
+    }
+  }, [unityReady, activateDeferred]);
+
   // Unity ready 이후 날씨 데이터가 도착하면 전송
   useEffect(() => {
     if (unityReady && dayWeatherType !== null) {
@@ -1437,19 +1448,34 @@ function PlayPageSession({
       const gd = state.customerCount - prevGuestsRef.current;
 
       // 재고/잔액은 항상 서버 절대값 기준으로 statQueue를 통해 점진 반영
-      statQueue.enqueue({
-        targetStock: state.inventory.totalStock,
-        targetBalance: state.cash,
-        currentStock: displayedStockRef.current,
-        currentBalance: displayedBalanceRef.current,
-      });
+      if (source === "action_sync") {
+        // 액션 모달 오픈 시: 재고/잔액/손님수 모두 서버와 점진 동기화
+        const pendingArrivals = spawnTimingRef.current.totalSpawned - spawnTimingRef.current.totalArrived;
+        const targetGuests = state.customerCount - Math.max(0, pendingArrivals);
+        statQueue.enqueue({
+          targetStock: state.inventory.totalStock,
+          targetBalance: state.cash,
+          targetGuests,
+          currentStock: displayedStockRef.current,
+          currentBalance: displayedBalanceRef.current,
+          currentGuests: displayedGuestsRef.current,
+        });
+        displayedGuestsRef.current = targetGuests;
+      } else {
+        statQueue.enqueue({
+          targetStock: state.inventory.totalStock,
+          targetBalance: state.cash,
+          currentStock: displayedStockRef.current,
+          currentBalance: displayedBalanceRef.current,
+        });
 
-      // 손님수: 유니티 도착 신호가 메인, 서버와 많이 벌어지면 보정
-      const guestDiff = state.customerCount - displayedGuestsRef.current;
-      if (Math.abs(guestDiff) > 20) {
-        const correction = Math.round(guestDiff / 2);
-        setGuests((prev) => prev + correction);
-        displayedGuestsRef.current += correction;
+        // 손님수: 유니티 도착 신호가 메인, 서버와 많이 벌어지면 보정
+        const guestDiff = state.customerCount - displayedGuestsRef.current;
+        if (Math.abs(guestDiff) > 20) {
+          const correction = Math.round(guestDiff / 2);
+          setGuests((prev) => prev + correction);
+          displayedGuestsRef.current += correction;
+        }
       }
 
       // Unity 비주얼 스폰 (숫자 변경과 분리, 시각 효과만)
@@ -1846,6 +1872,12 @@ function PlayPageSession({
         // 파산/시즌종료 에러 코드 → 메인으로 이동
         const code = (err as AxiosError<{ code?: string }>)?.response?.data?.code;
         if (code && GAME_EXIT_CODES.has(code)) {
+          if (code === "STORE-001") {
+            useGameStore.getState().setBankruptReportDay(dayNumber);
+          } else {
+            useGameStore.getState().clearBankruptReportDay();
+          }
+
           navigate("/", {
             replace: true,
             state: { hideGameReturnButton: true },
@@ -1856,7 +1888,7 @@ function PlayPageSession({
 
     const timer = window.setInterval(poll, 10_000);
     return () => window.clearInterval(timer);
-  }, [navigate]);
+  }, [dayNumber, navigate]);
 
   useEffect(() => {
     return () => {
@@ -1921,7 +1953,11 @@ function PlayPageSession({
               }, EFFECT_CONFIG[effectType].durationMs);
               pendingEventTimersRef.current.push(restoreId);
             }
-            triggerEffect(effectType);
+            if (unityReadyRef.current) {
+              triggerEffect(effectType);
+            } else {
+              deferEffect(effectType);
+            }
           }
         }
 
@@ -2024,7 +2060,20 @@ function PlayPageSession({
     return () => window.clearInterval(timer);
   }, [emergencyArriveAt]);
 
-  const handleAction = (action: ActionType) => {
+  const handleAction = async (action: ActionType) => {
+    try {
+      const results = await Promise.allSettled([
+        getGameDayState(),
+        action === "emergency" ? getStoreMenus() : Promise.resolve(null),
+      ]);
+      const [stateResult, menuResult] = results;
+      if (stateResult.status === "fulfilled") {
+        applyGameState(stateResult.value, "action_sync");
+      }
+      if (action === "emergency" && menuResult.status === "fulfilled" && menuResult.value) {
+        setMenuItems(mapStoreMenusToEmergencyMenus(menuResult.value.menus));
+      }
+    } catch { /* 동기화 실패해도 모달은 열기 */ }
     setActiveModal(action);
   };
 
