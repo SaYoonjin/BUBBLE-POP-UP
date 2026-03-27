@@ -548,7 +548,6 @@ export default function DashboardPage() {
   }, [participationSyncKey]);
 
   useEffect(() => {
-    if (!waitingStatus || !isActiveSeasonParticipant) {
     if (hideGameReturnButton) {
       setHasForcedExitSuppression(true);
     }
@@ -577,8 +576,7 @@ export default function DashboardPage() {
       hasForcedExitSuppression ||
       !waitingStatus ||
       waitingStatus.status !== "IN_PROGRESS" ||
-      !participation?.joinedCurrentSeason ||
-      !participation.storeAccessible
+      !isActiveSeasonParticipant
     ) {
       setGameReturnPath(null);
       return;
@@ -586,7 +584,7 @@ export default function DashboardPage() {
 
     const phase = waitingStatus.seasonPhase as SeasonPhase | null;
     const currentDay = waitingStatus.currentDay;
-    const playableFromDay = participation.playableFromDay;
+    const playableFromDay = participation?.playableFromDay;
 
     if (typeof currentDay !== "number" || !phase) {
       setGameReturnPath(null);
@@ -594,8 +592,12 @@ export default function DashboardPage() {
     }
 
     // 파산 유저 또는 시즌 종료 시 버튼 숨김
-    if (bankruptNoticeSeasonNumber != null || phase === "SEASON_SUMMARY" || phase === "NEXT_SEASON_WAITING") {
-    if (!RETURNABLE_GAME_PHASES.has(phase)) {
+    if (
+      bankruptNoticeSeasonNumber != null ||
+      phase === "SEASON_SUMMARY" ||
+      phase === "NEXT_SEASON_WAITING" ||
+      !RETURNABLE_GAME_PHASES.has(phase)
+    ) {
       setGameReturnPath(null);
       return;
     }
@@ -607,9 +609,13 @@ export default function DashboardPage() {
 
     const path = phaseToRoute(phase, currentDay);
     setGameReturnPath(path && path !== "/" ? path : null);
-  }, [bankruptNoticeSeasonNumber, isActiveSeasonParticipant, participation, waitingStatus]);
-
-  }, [hasForcedExitSuppression, participation, waitingStatus]);
+  }, [
+    bankruptNoticeSeasonNumber,
+    hasForcedExitSuppression,
+    isActiveSeasonParticipant,
+    participation,
+    waitingStatus,
+  ]);
 
   useEffect(() => {
     let isCancelled = false;
