@@ -633,15 +633,7 @@ export default function PrepPage() {
     return () => clearTimeout(timer);
   }, [isRegularOrderRouteDay, regularOrderStatus, prepEndTimestampMs]);
 
-  // 토스트 5초 후 자동 숨김
-  useEffect(() => {
-    if (!showOrderReminder) {
-      return;
-    }
 
-    const dismissTimer = setTimeout(() => setShowOrderReminder(false), 5_000);
-    return () => clearTimeout(dismissTimer);
-  }, [showOrderReminder]);
 
   const handleRegularOrderSubmit = async () => {
     if (!canSubmitRegularOrder) {
@@ -832,7 +824,7 @@ export default function PrepPage() {
                     </span>
                     <p className="leading-6">
                       정규 발주는 반드시 <span className="font-bold">발주신청하기</span> 버튼을 눌러야
-                      정상적으로 반영됩니다. 발주 완료 후에는 50초가 지나 자동으로 다음 화면으로 이동합니다.
+                      정상적으로 반영됩니다. 발주 완료 후에는 40초가 지나 자동으로 다음 화면으로 이동합니다.
                     </p>
                   </div>
                 )}
