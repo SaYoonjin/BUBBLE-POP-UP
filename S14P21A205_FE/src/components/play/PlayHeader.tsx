@@ -113,7 +113,7 @@ export default function PlayHeader({
         </div>
         <AnalogClock remainingMilliseconds={remainingMilliseconds} />
         <div
-          className={`flex flex-col items-center rounded-xl border px-2.5 py-1 text-center ${
+          className={`flex flex-col items-center justify-center rounded-xl border py-1 text-center w-[72px] ${
             isUrgent ? "border-red-200 bg-red-50/90" : "border-slate-100 bg-white/92"
           }`}
         >
@@ -130,6 +130,7 @@ export default function PlayHeader({
             }`}
           >
             {formatCountdown(remainingSeconds)}
+            <span className="text-xs font-bold ml-0.5">초</span>
           </span>
         </div>
       </div>
