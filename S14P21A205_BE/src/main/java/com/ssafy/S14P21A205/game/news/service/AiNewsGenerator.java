@@ -392,7 +392,7 @@ public class AiNewsGenerator {
     private NewsGenerationResult callAi(String promptText) throws Exception {
         Map<String, Object> requestBody = new HashMap<>();
         requestBody.put("model", model);
-        requestBody.put("max_tokens", 150);
+        requestBody.put("max_tokens", 500);
         requestBody.put("messages", List.of(
                 Map.of("role", "system", "content", SYSTEM_PROMPT),
                 Map.of("role", "user", "content", promptText)));
