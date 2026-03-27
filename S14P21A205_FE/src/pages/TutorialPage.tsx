@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useTutorialStore, TOTAL_TUTORIAL_STEPS } from "../stores/useTutorialStore";
+import { useTutorialStore } from "../stores/useTutorialStore";
 import { TutorialDataProvider } from "../components/tutorial/TutorialDataContext";
 import TutorialProgressBar from "../components/tutorial/TutorialProgressBar";
 import ChapterSidebar from "../components/tutorial/ChapterSidebar";

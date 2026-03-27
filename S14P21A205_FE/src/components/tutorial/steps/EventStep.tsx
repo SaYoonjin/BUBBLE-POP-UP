@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { GameAlert } from "../../play/EventSidebar";
 import TutorialPlayLayout from "../TutorialPlayLayout";
-import { MOCK_EVENTS, EVENT_ICON_MAP, MOCK_FESTIVALS, MOCK_MENUS, type EventCategory } from "../mockData";
+import { MOCK_EVENTS, EVENT_ICON_MAP, type EventCategory } from "../mockData";
 import { sendToUnity } from "../../../utils/unity";
 import { useEventEffectStore } from "../../play/effects/useEventEffect";
 import type { EventEffectType } from "../../play/effects/effects";
