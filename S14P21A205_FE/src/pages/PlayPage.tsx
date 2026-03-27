@@ -774,6 +774,8 @@ function PlayPageSession({
   }, [activeEventEffect]);
 
   const [unityReady, setUnityReady] = useState(false);
+  const unityReadyRef = useRef(false);
+  useEffect(() => { unityReadyRef.current = unityReady; }, [unityReady]);
   const [dayWeatherType, setDayWeatherType] = useState<string | null>(null);
   const [storeRegionIndex, setStoreRegionIndex] = useState<number | null>(null);
   const todayEventScheduleSignatureRef = useRef("");
@@ -1941,7 +1943,7 @@ function PlayPageSession({
               }, EFFECT_CONFIG[effectType].durationMs);
               pendingEventTimersRef.current.push(restoreId);
             }
-            if (unityReady) {
+            if (unityReadyRef.current) {
               triggerEffect(effectType);
             } else {
               deferEffect(effectType);
