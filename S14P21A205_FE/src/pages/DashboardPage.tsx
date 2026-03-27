@@ -81,7 +81,15 @@ const SHOP_ITEM_UI_BY_ID: Partial<
 
 interface DashboardRouteState {
   showMidSeasonSetupExpiredModal?: boolean;
+  hideGameReturnButton?: boolean;
 }
+
+const RETURNABLE_GAME_PHASES = new Set<SeasonPhase>([
+  "LOCATION_SELECTION",
+  "DAY_PREPARING",
+  "DAY_BUSINESS",
+  "DAY_REPORT",
+]);
 
 function toDiscountMultiplier(discountRate: number) {
   if (!Number.isFinite(discountRate)) {
@@ -207,6 +215,7 @@ function parseDashboardRouteState(value: unknown): DashboardRouteState {
 
   return {
     showMidSeasonSetupExpiredModal: Boolean(state.showMidSeasonSetupExpiredModal),
+    hideGameReturnButton: Boolean(state.hideGameReturnButton),
   };
 }
 
@@ -312,6 +321,8 @@ export default function DashboardPage() {
     [location.state],
   );
   const showMidSeasonSetupExpiredModal = Boolean(routeState.showMidSeasonSetupExpiredModal);
+  const hideGameReturnButton = Boolean(routeState.hideGameReturnButton);
+  const [hasForcedExitSuppression, setHasForcedExitSuppression] = useState(hideGameReturnButton);
   const selectedItems = useMemo(
     () => hydrateSelectedDashboardItems(selectedItemIds, shopItems),
     [selectedItemIds, shopItems],
@@ -478,7 +489,37 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
-    if (!waitingStatus || !participation?.joinedCurrentSeason) {
+    if (hideGameReturnButton) {
+      setHasForcedExitSuppression(true);
+    }
+  }, [hideGameReturnButton]);
+
+  useEffect(() => {
+    if (
+      !hasForcedExitSuppression ||
+      !waitingStatus ||
+      !participation
+    ) {
+      return;
+    }
+
+    if (
+      waitingStatus.status !== "IN_PROGRESS" ||
+      !participation.joinedCurrentSeason ||
+      !participation.storeAccessible
+    ) {
+      setHasForcedExitSuppression(false);
+    }
+  }, [hasForcedExitSuppression, participation, waitingStatus]);
+
+  useEffect(() => {
+    if (
+      hasForcedExitSuppression ||
+      !waitingStatus ||
+      waitingStatus.status !== "IN_PROGRESS" ||
+      !participation?.joinedCurrentSeason ||
+      !participation.storeAccessible
+    ) {
       setGameReturnPath(null);
       return;
     }
@@ -492,8 +533,7 @@ export default function DashboardPage() {
       return;
     }
 
-    // 파산 유저 또는 시즌 종료 시 버튼 숨김
-    if (bankruptNoticeSeasonNumber != null || !participation.storeAccessible || phase === "SEASON_SUMMARY" || phase === "NEXT_SEASON_WAITING") {
+    if (!RETURNABLE_GAME_PHASES.has(phase)) {
       setGameReturnPath(null);
       return;
     }
@@ -505,8 +545,8 @@ export default function DashboardPage() {
 
     const path = phaseToRoute(phase, currentDay);
     setGameReturnPath(path && path !== "/" ? path : null);
-  }, [bankruptNoticeSeasonNumber, participation, waitingStatus]);
-
+  }, [hasForcedExitSuppression, participation, waitingStatus]);
+ 
   useEffect(() => {
     let isCancelled = false;
 
@@ -589,10 +629,19 @@ export default function DashboardPage() {
 
     const timer = window.setTimeout(async () => {
       try {
-        const nextWaitingStatus = await getGameWaitingStatus();
+        const [nextWaitingStatusResult, nextParticipationResult] = await Promise.allSettled([
+          getGameWaitingStatus(),
+          getCurrentParticipation(),
+        ]);
 
         if (!isCancelled) {
-          setWaitingStatus(nextWaitingStatus);
+          if (nextWaitingStatusResult.status === "fulfilled") {
+            setWaitingStatus(nextWaitingStatusResult.value);
+          }
+
+          if (nextParticipationResult.status === "fulfilled") {
+            setParticipation(nextParticipationResult.value);
+          }
         }
       } catch {
         // Ignore transient polling errors and keep the last known state.

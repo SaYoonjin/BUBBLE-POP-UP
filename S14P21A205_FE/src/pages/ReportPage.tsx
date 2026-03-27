@@ -194,7 +194,10 @@ export default function ReportPage() {
       useGameStore.getState().setBankruptNoticeSeasonNumber(report.seasonId);
     }
 
-    navigate("/", { replace: true });
+    navigate("/", {
+      replace: true,
+      state: { hideGameReturnButton: true },
+    });
   };
 
   if (loading) {
