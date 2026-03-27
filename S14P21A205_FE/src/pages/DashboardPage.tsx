@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   getCurrentParticipation,
@@ -29,6 +29,7 @@ import SeasonCTA from "../components/common/SeasonCTA";
 import { useGameStore } from "../stores/useGameStore";
 import { setSeasonJoinIntent } from "../utils/seasonJoinIntent";
 import {
+  clearStoredSelectedDashboardItems,
   getDiscountLabel,
   getStoredSelectedDashboardItemIds,
   hydrateSelectedDashboardItems,
@@ -63,6 +64,8 @@ const dashBubbles = [
 
 const SUMMARY_SECONDS = SEASON_SUMMARY_SECONDS;
 const SEASON_POLLING_INTERVAL_MS = 1000;
+const ITEM_SELECTION_LOCK_MESSAGE =
+  "이미 이번 시즌에 참가 중이라 아이템을 변경할 수 없습니다. 다음 시즌에 다시 선택하세요.";
 
 const SHOP_ITEM_UI_BY_ID: Partial<
   Record<
@@ -210,6 +213,10 @@ function parseDashboardRouteState(value: unknown): DashboardRouteState {
   };
 }
 
+async function fetchParticipationStatus() {
+  return getCurrentParticipation();
+}
+
 function resolveSeasonCardData(
   waitingStatus: GameWaitingResponse | null,
   currentSeasonNumber: number | null,
@@ -312,13 +319,18 @@ export default function DashboardPage() {
     [location.state],
   );
   const showMidSeasonSetupExpiredModal = Boolean(routeState.showMidSeasonSetupExpiredModal);
+  const isItemSelectionLocked = participation?.joinedCurrentSeason === true;
   const selectedItems = useMemo(
     () => hydrateSelectedDashboardItems(selectedItemIds, shopItems),
     [selectedItemIds, shopItems],
   );
+  const selectableItems = useMemo(
+    () => (isItemSelectionLocked ? [] : selectedItems),
+    [isItemSelectionLocked, selectedItems],
+  );
   const effectiveSelectedIds = useMemo(
-    () => selectedItems.map((item) => item.id),
-    [selectedItems],
+    () => selectableItems.map((item) => item.id),
+    [selectableItems],
   );
   const itemGroups = useMemo(() => {
     const groupedItems = new Map<
@@ -373,11 +385,14 @@ export default function DashboardPage() {
   }, [shopItems]);
 
   const pendingUsedPoints = useMemo(
-    () => selectedItems.reduce((sum, item) => sum + item.point, 0),
-    [selectedItems],
+    () => selectableItems.reduce((sum, item) => sum + item.point, 0),
+    [selectableItems],
   );
   const displayedPoints =
     currentPoints === null ? 0 : Math.max(0, currentPoints - pendingUsedPoints);
+  const participationSyncKey = waitingStatus
+    ? `${waitingStatus.status ?? "null"}:${waitingStatus.nextSeasonNumber ?? "null"}:${waitingStatus.seasonPhase ?? "null"}`
+    : null;
   const seasonCard = useMemo(
     () => resolveSeasonCardData(waitingStatus, currentSeasonNumber),
     [currentSeasonNumber, waitingStatus],
@@ -413,13 +428,28 @@ export default function DashboardPage() {
       waitingStatus?.seasonPhase === "NEXT_SEASON_WAITING") &&
     (recentSeasonNumber ?? 0) >= 1;
 
+  const syncParticipation = useCallback(async () => fetchParticipationStatus(), []);
+
   useEffect(() => {
     if (shopItems.length === 0) {
       return;
     }
 
+    if (isItemSelectionLocked) {
+      return;
+    }
+
     setStoredSelectedDashboardItems(selectedItems);
-  }, [selectedItems, shopItems.length]);
+  }, [isItemSelectionLocked, selectedItems, shopItems.length]);
+
+  useEffect(() => {
+    if (!isItemSelectionLocked) {
+      return;
+    }
+
+    clearStoredSelectedDashboardItems();
+    setSelectedItemIds((prev) => (prev.length === 0 ? prev : []));
+  }, [isItemSelectionLocked]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -429,7 +459,7 @@ export default function DashboardPage() {
         getUserPoints(),
         getShopItems(),
         getGameWaitingStatus(),
-        getCurrentParticipation(),
+        syncParticipation(),
       ]);
 
       if (isCancelled) {
@@ -475,7 +505,33 @@ export default function DashboardPage() {
     return () => {
       isCancelled = true;
     };
-  }, []);
+  }, [syncParticipation]);
+
+  useEffect(() => {
+    if (participationSyncKey === null) {
+      return;
+    }
+
+    let isCancelled = false;
+
+    async function resyncParticipation() {
+      try {
+        const nextParticipation = await fetchParticipationStatus();
+
+        if (!isCancelled) {
+          setParticipation(nextParticipation);
+        }
+      } catch {
+        // Keep the last known participation state when refresh fails.
+      }
+    }
+
+    void resyncParticipation();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [participationSyncKey]);
 
   useEffect(() => {
     if (!waitingStatus || !participation?.joinedCurrentSeason) {
@@ -621,6 +677,10 @@ export default function DashboardPage() {
   };
 
   const handleToggle = (id: number) => {
+    if (isItemSelectionLocked) {
+      return;
+    }
+
     const item = shopItems.find((entry) => entry.id === id);
 
     if (!item) {
@@ -668,6 +728,8 @@ export default function DashboardPage() {
               selectedIds={effectiveSelectedIds}
               onToggle={handleToggle}
               availablePoints={displayedPoints}
+              disabled={isItemSelectionLocked}
+              disabledMessage={ITEM_SELECTION_LOCK_MESSAGE}
               isLoading={isLoading && shopItems.length === 0}
             />
           </div>
