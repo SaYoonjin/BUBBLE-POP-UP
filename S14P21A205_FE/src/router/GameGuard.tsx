@@ -52,6 +52,7 @@ async function resolveJoinedStoreAccess(day: number | null) {
 
     if (!participation.joinedCurrentSeason) {
       useGameStore.getState().clearGame();
+      useGameStore.getState().clearBankruptReportDay();
       return { joined: false, storeData: null as StoreResponse | null };
     }
 
@@ -67,12 +68,21 @@ async function resolveJoinedStoreAccess(day: number | null) {
 
     // 파산한 유저(storeAccessible=false)는 미참여 취급 -> setup 재진입 허용
     if (!participation.storeAccessible) {
-      return { joined: false, storeData: null as StoreResponse | null };
+      return {
+        joined: false,
+        reportOnly: true,
+        storeData: fallbackStoreData,
+      };
     }
 
-    return { joined: true, storeData: fallbackStoreData };
+    useGameStore.getState().clearBankruptReportDay();
+    return { joined: true, reportOnly: false, storeData: fallbackStoreData };
   } catch {
-    return { joined: false, storeData: null as StoreResponse | null };
+    return {
+      joined: false,
+      reportOnly: false,
+      storeData: null as StoreResponse | null,
+    };
   }
 }
 
@@ -128,6 +138,25 @@ function isAllowedForNewUser(phase: SeasonPhase, pathname: string): boolean {
   return isSetupPath(pathname) || pathname === "/game/waiting";
 }
 
+function isAllowedForReportOnlyUser(
+  phase: SeasonPhase,
+  day: number | null,
+  pathname: string,
+): boolean {
+  if (
+    phase === "DAY_REPORT" &&
+    day === useGameStore.getState().bankruptReportDay
+  ) {
+    return pathname === phaseToRoute("DAY_REPORT", day);
+  }
+
+  if (phase === "SEASON_SUMMARY" || phase === "NEXT_SEASON_WAITING") {
+    return pathname === "/ranking";
+  }
+
+  return false;
+}
+
 /** waiting 페이지로 보낼 때 route state 생성 */
 function buildWaitingState(
   timeData: CurrentSeasonTimeResponse,
@@ -181,6 +210,25 @@ function resolveNewUserTarget(canEnterSetup: boolean): RedirectTarget {
   return { path: canEnterSetup ? "/game/setup/location" : "/" };
 }
 
+function resolveReportOnlyUserTarget(
+  phase: SeasonPhase,
+  day: number | null,
+  canEnterSetup: boolean,
+): RedirectTarget {
+  if (
+    phase === "DAY_REPORT" &&
+    day === useGameStore.getState().bankruptReportDay
+  ) {
+    return { path: phaseToRoute("DAY_REPORT", day) ?? "/" };
+  }
+
+  if (phase === "SEASON_SUMMARY" || phase === "NEXT_SEASON_WAITING") {
+    return { path: "/ranking" };
+  }
+
+  return resolveNewUserTarget(canEnterSetup);
+}
+
 type GuardState =
   | { status: "loading" }
   | { status: "redirect"; target: RedirectTarget }
@@ -209,7 +257,7 @@ export default function GameGuard() {
       const joinIntent = hasSeasonJoinIntent();
 
       // 참여 여부 확인
-      const { joined, storeData } = await resolveJoinedStoreAccess(day);
+      const { joined, reportOnly, storeData } = await resolveJoinedStoreAccess(day);
 
       // participation 응답과 session cache만으로 진입 대기 여부를 계산한다.
       const playableFromDay = storeData?.playableFromDay ?? useGameStore.getState().playableFromDay;
@@ -228,6 +276,9 @@ export default function GameGuard() {
       if (joined) {
         allowed = isAllowedForJoinedUser(phase, day, pathname, waitingForPlayableDay);
         target = resolveJoinedUserTarget(phase, day, waitingForPlayableDay, timeData, storeData);
+      } else if (reportOnly) {
+        allowed = isAllowedForReportOnlyUser(phase, day, pathname);
+        target = resolveReportOnlyUserTarget(phase, day, Boolean(joinEnabled && joinIntent));
       } else {
         allowed = isAllowedForNewUser(phase, pathname);
         if (!allowed) {
@@ -284,7 +335,7 @@ export default function GameGuard() {
         const phase = timeData.seasonPhase as SeasonPhase;
         const day = timeData.currentDay;
 
-        const { joined, storeData } = await resolveJoinedStoreAccess(day);
+        const { joined, reportOnly, storeData } = await resolveJoinedStoreAccess(day);
         const canEnterSetup = Boolean(timeData.joinEnabled && hasSeasonJoinIntent());
 
         const pfd = storeData?.playableFromDay ?? useGameStore.getState().playableFromDay;
@@ -293,13 +344,17 @@ export default function GameGuard() {
         let target: RedirectTarget;
         if (joined) {
           target = resolveJoinedUserTarget(phase, day, waiting, timeData, storeData);
+        } else if (reportOnly) {
+          target = resolveReportOnlyUserTarget(phase, day, canEnterSetup);
         } else {
           target = resolveNewUserTarget(canEnterSetup);
         }
 
         const stillAllowed = joined
           ? isAllowedForJoinedUser(phase, day, location.pathname, waiting)
-          : isAllowedForNewUser(phase, location.pathname);
+          : reportOnly
+            ? isAllowedForReportOnlyUser(phase, day, location.pathname)
+            : isAllowedForNewUser(phase, location.pathname);
 
         const shouldAutoRedirectToReport =
           phase === "DAY_REPORT" && (isPrepPath(location.pathname) || isPlayPath(location.pathname));
