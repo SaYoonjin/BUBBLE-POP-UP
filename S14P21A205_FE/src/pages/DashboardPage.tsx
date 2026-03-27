@@ -603,7 +603,7 @@ export default function DashboardPage() {
     // 파산 유저 또는 시즌 종료 시 버튼 숨김
     if (
       bankruptNoticeSeasonNumber != null ||
-      bankruptReportDay != null ||
+      (bankruptReportDay != null && !(phase === "DAY_REPORT" && currentDay === bankruptReportDay)) ||
       phase === "SEASON_SUMMARY" ||
       phase === "NEXT_SEASON_WAITING" ||
       !RETURNABLE_GAME_PHASES.has(phase)
