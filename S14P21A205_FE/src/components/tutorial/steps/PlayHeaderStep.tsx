@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useTutorialStore } from "../../../stores/useTutorialStore";
 import TutorialPlayLayout from "../TutorialPlayLayout";
 
 /** 코치마크 스텝 정의 — target: "header" | "ranking" | "alert" */
@@ -60,7 +59,6 @@ function toCoachIndex(step: number): number | null {
 }
 
 export default function PlayHeaderStep() {
-  const { nextStep } = useTutorialStore();
   const [step, setStep] = useState(0);
   const headerRef = useRef<HTMLDivElement | null>(null);
   const rankingRef = useRef<HTMLDivElement | null>(null);
