@@ -9,11 +9,45 @@ import ShareModal from "../../play/modals/ShareModal";
 import MoveModal from "../../play/modals/MoveModal";
 import { MOCK_EMERGENCY_MENU_ITEMS, MOCK_MOVE_REGIONS, MOCK_PROMOTION_OPTIONS } from "../mockData";
 
+const ACTION_EFFECT_INFO: Record<ActionType, { icon: string; label: string; story: string; effects: string[] }> = {
+  discount: {
+    icon: "sell",
+    label: "할인",
+    story: "가격을 낮추면 지나가던 손님도 발걸음을 멈춥니다. 박리다매 전략으로 승부해보세요!",
+    effects: ["판매가를 낮춰 유입률 증가", "시장 평균가 대비 저렴할수록 효과 상승"],
+  },
+  emergency: {
+    icon: "local_shipping",
+    label: "긴급발주",
+    story: "재고가 바닥났는데 손님은 줄을 서고 있어요! 급하게 전화를 걸어 재료를 주문합니다.",
+    effects: ["부족한 재고를 즉시 발주", "원가 할증 적용", "교통 상황에 따라 도착 시간 변동"],
+  },
+  promotion: {
+    icon: "campaign",
+    label: "홍보",
+    story: "우리 가게를 알려야 손님이 옵니다. 어떤 방법으로 홍보할지 골라보세요!",
+    effects: ["유입률 증가", "인플루언서/SNS/전단지/입소문 타입별 비용과 효과가 다름"],
+  },
+  share: {
+    icon: "volunteer_activism",
+    label: "나눔",
+    story: "남은 재고를 이웃에게 나눠주면 입소문이 퍼집니다. 따뜻한 마음이 손님을 부르죠.",
+    effects: ["재고를 나눠 유입률 보너스 획득"],
+  },
+  move: {
+    icon: "move_location",
+    label: "팝업이전",
+    story: "이 동네는 더 이상 장사가 안 될 것 같아요. 새로운 터전을 찾아 떠나볼까요?",
+    effects: ["다음 영업일부터 선택한 지역으로 이전", "인테리어비 즉시 차감"],
+  },
+};
+
 export default function ActionStep() {
   const [openModal, setOpenModal] = useState<ActionType | null>(null);
   const [usedActions, setUsedActions] = useState<Set<ActionType>>(() => new Set());
   const [activeEffects, setActiveEffects] = useState<Set<ActionType>>(() => new Set());
   const [alerts, setAlerts] = useState<GameAlert[]>([]);
+  const [showEffectInfo, setShowEffectInfo] = useState<ActionType | null>(null);
 
   const handleAction = (action: ActionType) => {
     if (usedActions.has(action)) return;
@@ -32,6 +66,7 @@ export default function ActionStep() {
       return next;
     });
     setOpenModal(null);
+    setShowEffectInfo(action);
     setAlerts((prev) => [
       {
         id: Date.now(),
@@ -49,6 +84,7 @@ export default function ActionStep() {
         next.delete(action);
         return next;
       });
+      setShowEffectInfo(null);
     }, 5000);
   };
 
@@ -59,8 +95,8 @@ export default function ActionStep() {
       usedActions={usedActions}
       activeEffects={activeEffects}
     >
-      {/* 모달이 닫혀있을 때 안내 */}
-      {!openModal && (
+      {/* 아무 액션도 사용하지 않았을 때만 안내 */}
+      {!openModal && !showEffectInfo && usedActions.size === 0 && (
         <div className="absolute inset-x-0 bottom-36 z-30 flex justify-center px-4">
           <div className="rounded-2xl bg-white/95 backdrop-blur-sm border border-white/60 shadow-xl px-5 py-3">
             <p className="text-sm font-bold text-slate-800 text-center">
@@ -72,6 +108,60 @@ export default function ActionStep() {
           </div>
         </div>
       )}
+
+      {/* 액션 완료 후 효과 설명 오버레이 */}
+      {showEffectInfo && (() => {
+        const info = ACTION_EFFECT_INFO[showEffectInfo];
+        return (
+          <div
+            className="absolute inset-0 z-50 flex items-center justify-center cursor-pointer"
+            onClick={() => setShowEffectInfo(null)}
+          >
+            <div className="rounded-2xl shadow-2xl overflow-hidden min-w-[280px] max-w-sm border bg-white/85 backdrop-blur-md border-primary/30 pointer-events-none">
+              {/* 상단 컬러 바 */}
+              <div className="h-1.5 bg-gradient-to-r from-primary to-blue-500" />
+
+              <div className="px-6 py-5">
+                {/* 아이콘 + 이름 */}
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-primary/10">
+                    <span className="material-symbols-outlined text-xl text-primary">
+                      {info.icon}
+                    </span>
+                  </div>
+                  <div className="text-left">
+                    <p className="text-sm font-bold text-slate-800">{info.label}</p>
+                    <p className="text-[10px] text-slate-400">액션 효과</p>
+                  </div>
+                </div>
+
+                {/* 스토리 */}
+                <p className="text-slate-600 text-xs mt-3 leading-relaxed">
+                  {info.story}
+                </p>
+
+                {/* 구분선 */}
+                <div className="border-t border-slate-200/60 my-3" />
+
+                {/* 효과 목록 */}
+                <div className="flex flex-col gap-2">
+                  {info.effects.map((effect, i) => (
+                    <div
+                      key={i}
+                      className="flex items-start gap-2 text-xs text-slate-700"
+                    >
+                      <span className="material-symbols-outlined text-sm text-primary mt-px">check_circle</span>
+                      <span>{effect}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <p className="text-slate-400 text-[10px] mt-4 text-center">클릭하여 닫기</p>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* 실제 게임 모달들 */}
       {openModal === "discount" && (
