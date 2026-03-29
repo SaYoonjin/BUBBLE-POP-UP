@@ -511,7 +511,7 @@ function create50KTexture(): THREE.CanvasTexture {
 
 function makeBillData(count: number) {
   return Array.from({ length: count }, () => ({
-    x: (Math.random() - 0.5) * 50,
+    x: (Math.random() - 0.5) * 20,
     z: (Math.random() - 0.5) * 4,
     speed: 0.5 + Math.random() * 1.2,
     offset: Math.random() * 18,
