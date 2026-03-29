@@ -37,6 +37,8 @@ interface TutorialPlayLayoutProps {
   alertRef?: React.RefObject<HTMLDivElement | null>;
   /** Unity iframe ref 외부 노출 (이벤트 이펙트용) */
   unityIframeRef?: React.MutableRefObject<HTMLIFrameElement | null>;
+  /** Unity 로딩 완료 콜백 */
+  onUnityReady?: () => void;
 }
 
 export default function TutorialPlayLayout({
@@ -50,6 +52,7 @@ export default function TutorialPlayLayout({
   rankingRef,
   alertRef,
   unityIframeRef: externalIframeRef,
+  onUnityReady: externalOnUnityReady,
 }: TutorialPlayLayoutProps) {
   const [fallbackUsed] = useState<Set<ActionType>>(() => new Set());
   const [fallbackEffects] = useState<Set<ActionType>>(() => new Set());
@@ -63,7 +66,8 @@ export default function TutorialPlayLayout({
     setCameraRegion(iframeRef, SEONGSU_REGION_INDEX);
     setWeather(iframeRef, "SUNNY", SEONGSU_REGION_INDEX);
     startDay(iframeRef, 9999);
-  }, [iframeRef]);
+    externalOnUnityReady?.();
+  }, [iframeRef, externalOnUnityReady]);
 
   return (
     <div className="flex flex-col h-full">
