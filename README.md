@@ -33,8 +33,8 @@
 
 시즌 상태와 보유 자원을 확인한 뒤, 지역과 점포 전략을 정하고 영업을 준비합니다.
 
-> ![포인트](images/대시보드_포인트, 아이템.gif)
-> ![지역 선택](images/지역 선택, 팝업명 설명.gif)
+> ![포인트](./images/dashboard_point_item.gif)
+> ![지역 선택](./images/region_select_popup.gif)
 > 이미지 자리: `2일차_영업준비.gif`
 > 이미지 자리: `영업준비_정규발주.gif`
 
