@@ -2,42 +2,111 @@
 
 실시간 팝업스토어 경영 시뮬레이션 프로젝트입니다.
 
-사용자는 시즌에 참가해 점포 입지와 메뉴를 선택하고, 발주와 액션을 활용해 하루 단위로 매출을 운영합니다. 저장소는 프론트엔드, 백엔드, 데이터 파이프라인 및 운영 설정을 함께 관리하는 모노레포 구조입니다.
+사용자는 시즌에 참여해 점포 입지와 메뉴를 선택하고, 발주와 액션을 활용해 하루 단위로 매출을 운영합니다. 이 저장소는 프론트엔드, 백엔드, 데이터 파이프라인, 모니터링과 배포 설정을 함께 관리하는 모노레포입니다.
 
-## Overview
+## 한눈에 보기
 
-- OAuth2 + JWT 기반 인증
-- 시즌 참가, 영업 진행, 일일 리포트, 최종 랭킹 제공
-- MySQL + Redis 기반 실시간 게임 상태 및 랭킹 관리
-- Spark + HDFS 기반 환경 데이터 ETL
-- Prometheus + Grafana 기반 운영 모니터링
+- 장르: 실시간 팝업스토어 경영 시뮬레이션
+- 핵심 경험: 시즌 참가 -> 점포 개설 -> 영업 준비 -> 실시간 운영 -> 일일 리포트 -> 최종 랭킹
+- 기술 포인트: OAuth2/JWT 인증, Redis 기반 실시간 상태 관리, MySQL 영속화, Spark + HDFS ETL, Prometheus/Grafana 모니터링
+- 저장소 구성: React 기반 프론트엔드 + Spring Boot 백엔드 + 데이터/운영 인프라 설정
 
-## Repository Structure
+## 이 프로젝트가 보여주는 것
 
-- [S14P21A205_FE](S14P21A205_FE/README.md): Vite 기반 프론트엔드
-- [S14P21A205_BE](S14P21A205_BE/README.md): Spring Boot 백엔드
+- 단순 CRUD를 넘어 `실시간 시뮬레이션`, `랭킹 집계`, `스케줄링`, `외부 데이터 연동`이 함께 들어간 서비스입니다.
+- `Redis`와 `MySQL`의 역할을 분리해 빠르게 바뀌는 게임 상태와 최종 기록 데이터를 각각 다른 방식으로 관리합니다.
+- `Spark + HDFS` 기반 ETL로 유동인구, 교통, 뉴스 데이터를 게임 환경과 콘텐츠 생성에 연결했습니다.
+- 개발뿐 아니라 `Docker Compose`, `Nginx`, `Prometheus`, `Grafana`를 포함해 운영 관점까지 고려했습니다.
+
+## 서비스 흐름
+
+아래 `이미지 자리`는 나중에 GIF를 넣을 수 있도록 남겨둔 위치입니다.
+
+### 1. 서비스 진입과 로그인
+
+사용자는 랜딩 페이지에서 서비스 설명을 확인하고 OAuth2 로그인으로 진입합니다.
+
+> 이미지 자리: `랜딩페이지.gif`
+> 이미지 자리: `로그인.gif`
+
+### 2. 시즌 참여와 점포 준비
+
+시즌 상태와 보유 자원을 확인한 뒤, 지역과 점포 전략을 정하고 영업을 준비합니다.
+
+> 이미지 자리: `대시보드_포인트,아이템.gif`
+> 이미지 자리: `중간참여.gif`
+> 이미지 자리: `지역 선택, 팝업명 설명.gif`
+> 이미지 자리: `2일차_영업준비.gif`
+> 이미지 자리: `영업준비_정규발주.gif`
+
+### 3. 실시간 영업 운영
+
+영업 중에는 매출, 재고, 고객 수, 지역 순위를 실시간으로 확인하며 긴급 발주, 할인, 홍보, 나눔, 팝업 이전 같은 액션을 선택합니다.
+
+> 이미지 자리: `영업_대기.gif`
+> 이미지 자리: `영업중_실시간순위.gif`
+> 이미지 자리: `영업중_액션(긴급발주).gif`
+> 이미지 자리: `영업중_액션(할인).gif`
+> 이미지 자리: `영업중_액션(홍보).gif`
+> 이미지 자리: `영업중_액션(나눔).gif`
+> 이미지 자리: `영업중_액션(팝업이전).gif`
+> 이미지 자리: `영업중_이벤트.gif`
+> 이미지 자리: `눈오는배경.gif`
+
+### 4. 결과 확인과 회고
+
+하루가 끝나면 리포트와 뉴스, 시즌 종료 후에는 최종 랭킹과 통산 기록으로 플레이 결과를 돌아볼 수 있습니다.
+
+> 이미지 자리: `영업중_뉴스.gif`
+> 이미지 자리: `일일리포트.gif`
+> 이미지 자리: `2일차_일일리포트.gif`
+> 이미지 자리: `최종랭킹_통산기록.gif`
+> 이미지 자리: `파산리포트.gif`
+
+## 기술적으로 강조할 포인트
+
+### 실시간 상태와 영속 데이터 분리
+
+- `Redis`: 영업 중 실시간 상태, 랭킹 캐시, 토큰 관리
+- `MySQL`: 사용자, 시즌, 점포, 주문, 일일 리포트, 최종 랭킹 저장
+
+### 스케줄링 기반 게임 운영
+
+- 주기적 tick으로 영업 상태와 랭킹을 계산
+- 마감 시점에 일일 리포트, 뉴스, 최종 정산을 비동기 처리
+
+### 데이터 파이프라인 연동
+
+- HDFS 적재 데이터 기반 Spark ETL 수행
+- 인구, 유동인구, 뉴스 데이터를 게임 밸런스와 콘텐츠에 반영
+
+### 운영 관점 포함
+
+- Docker Compose 기반 로컬/운영 환경 구성
+- Spring Actuator + Prometheus + Grafana 기반 모니터링
+
+## 모노레포 구조
+
+- `S14P21A205_FE`: React, Vite, TypeScript 기반 프론트엔드
+- `S14P21A205_BE`: Spring Boot 백엔드, 게임 로직, 인증, 데이터 연동, 모니터링 설정
 - `S14P21A205_BE/monitoring`: Prometheus, Grafana 설정
 - `S14P21A205_BE/ops`: 배포 및 운영 스크립트
+- `S14P21A205_BE/spark`: Spark 작업 및 ETL 스크립트
 
-## Tech Stack
+## 기술 스택
 
-- Frontend: React, Vite, TypeScript, Tailwind CSS
-- Backend: Java 17, Spring Boot, Spring Security, JPA, Flyway
-- Database/Cache: MySQL, Redis
-- Data: Spark, HDFS
-- Infra: Docker Compose, Nginx
-- Monitoring: Prometheus, Grafana
+| 영역 | 사용 기술 |
+| --- | --- |
+| Frontend | React, Vite, TypeScript, Tailwind CSS |
+| Backend | Java 17, Spring Boot, Spring Security, Spring Data JPA, Flyway |
+| Auth | OAuth2, JWT |
+| Database / Cache | MySQL, Redis |
+| Data Pipeline | Spark, HDFS |
+| Infra | Docker Compose, Nginx |
+| Observability | Spring Actuator, Prometheus, Grafana |
 
-## Key Features
+## 바로가기
 
-- 실시간 시즌 진행과 점포 운영 API
-- 실시간 랭킹 계산 및 Redis 캐시
-- 발주, 할인, 기부, 긴급발주 등 액션 시스템
-- 시즌 종료 후 최종 랭킹 및 보상 처리
-- 외부 데이터 기반 환경 점수 ETL
-
-## Quick Links
-
-- Frontend README: [S14P21A205_FE/README.md](S14P21A205_FE/README.md)
-- Backend README: [S14P21A205_BE/README.md](S14P21A205_BE/README.md)
-
+- 백엔드 상세 문서: [S14P21A205_BE/README.md](S14P21A205_BE/README.md)
+- 프론트엔드 소스: [S14P21A205_FE](S14P21A205_FE)
+- 백엔드 소스: [S14P21A205_BE](S14P21A205_BE)
