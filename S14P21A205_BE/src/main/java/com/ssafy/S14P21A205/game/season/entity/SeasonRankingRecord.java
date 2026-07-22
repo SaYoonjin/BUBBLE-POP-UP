@@ -21,7 +21,10 @@ import org.hibernate.annotations.CreationTimestamp;
 @Entity
 @Table(
         name = "season_ranking_record",
-        uniqueConstraints = @UniqueConstraint(name = "uk_season_ranking_record_store", columnNames = {"store_id"})
+        uniqueConstraints = @UniqueConstraint(
+                name = "uk_season_ranking_record_store",
+                columnNames = "store_id"
+        )
 )
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class SeasonRankingRecord {

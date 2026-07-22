@@ -67,28 +67,28 @@ public class GameDayReportService {
     private final Clock clock;
 
     @Transactional
-    public void recordClosedDayReport(Store store) {
+    public boolean recordClosedDayReport(Store store) {
         LocalDateTime now = LocalDateTime.now(clock);
         SeasonTimePoint seasonTimePoint = SEASON_TIMELINE_SERVICE.resolve(store.getSeason(), now);
         Integer day = resolveReportDay(store.getSeason(), seasonTimePoint);
         if (day == null) {
-            return;
+            return false;
         }
-        recordClosedDayReport(store, day, now, seasonTimePoint);
+        return recordClosedDayReport(store, day, now, seasonTimePoint);
     }
 
     @Transactional
-    public void recordClosedDayReport(Store store, int day) {
+    public boolean recordClosedDayReport(Store store, int day) {
         if (store == null || day < 1) {
-            return;
+            return false;
         }
 
         LocalDateTime now = LocalDateTime.now(clock);
         SeasonTimePoint seasonTimePoint = SEASON_TIMELINE_SERVICE.resolve(store.getSeason(), now);
-        recordClosedDayReport(store, day, now, seasonTimePoint);
+        return recordClosedDayReport(store, day, now, seasonTimePoint);
     }
 
-    private void recordClosedDayReport(
+    private boolean recordClosedDayReport(
             Store store,
             int day,
             LocalDateTime now,
@@ -97,11 +97,11 @@ public class GameDayReportService {
         int totalDays = store.getSeason().resolveRuntimePlayableDays();
         if (day > totalDays) {
             log.warn("[DayReport] Skipped: day {} > totalDays {}. storeId={}", day, totalDays, store.getId());
-            return;
+            return false;
         }
         if (dailyReportRepository.existsByStoreIdAndDay(store.getId(), day)) {
             log.debug("[DayReport] Already exists. storeId={} day={}", store.getId(), day);
-            return;
+            return true;
         }
         DailyReport latestReport = dailyReportRepository.findFirstByStore_IdOrderByDayDesc(store.getId())
                 .orElse(null);
@@ -115,7 +115,7 @@ public class GameDayReportService {
                     latestReport.getDay(),
                     day
             );
-            return;
+            return true;
         }
 
         if (shouldRefreshCurrentDayState(day, seasonTimePoint)) {
@@ -128,13 +128,13 @@ public class GameDayReportService {
         }
         if (state == null || state.startedAt() == null) {
             log.warn("[DayReport] Skipped: Redis state missing. storeId={} day={} state={}", store.getId(), day, state);
-            return;
+            return false;
         }
 
         DayWindow timeline = SEASON_TIMELINE_SERVICE.day(store.getSeason(), day);
         if (now.isBefore(timeline.businessEnd())) {
             log.warn("[DayReport] Skipped: before businessEnd. storeId={} day={} now={} businessEnd={}", store.getId(), day, now, timeline.businessEnd());
-            return;
+            return false;
         }
 
         long settledRent = resolveClosingRent(store, state, day);
@@ -204,9 +204,10 @@ public class GameDayReportService {
             shopService.resetPurchasedItems(store.getUser().getId());
             gameDayStoreStateRedisRepository.saveBalance(store.getId(), day, 0L);
             gameDayStoreStateRedisRepository.updateField(store.getId(), day, "stock", "0");
-            return;
+            return true;
         }
         gameDayStoreStateRedisRepository.saveBalance(store.getId(), day, reportBalance);
+        return true;
     }
 
     @Transactional

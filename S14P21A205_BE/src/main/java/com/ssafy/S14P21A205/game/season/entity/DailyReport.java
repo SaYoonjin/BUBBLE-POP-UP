@@ -22,7 +22,10 @@ import org.hibernate.annotations.CreationTimestamp;
 @Entity
 @Table(
         name = "daily_report",
-        uniqueConstraints = @UniqueConstraint(name = "uk_daily_report_store_day", columnNames = {"store_id", "day"})
+        uniqueConstraints = @UniqueConstraint(
+                name = "uk_daily_report_store_day",
+                columnNames = {"store_id", "day"}
+        )
 )
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class DailyReport {

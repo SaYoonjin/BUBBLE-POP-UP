@@ -1,7 +1,6 @@
 package com.ssafy.S14P21A205.game.season.service;
 
 import com.ssafy.S14P21A205.game.day.policy.ProfitPolicy;
-import com.ssafy.S14P21A205.game.day.service.GameDayReportService;
 import com.ssafy.S14P21A205.game.season.entity.DailyReport;
 import com.ssafy.S14P21A205.game.season.entity.Season;
 import com.ssafy.S14P21A205.game.season.entity.SeasonRankingRecord;
@@ -36,18 +35,17 @@ public class SeasonFinalRankingService {
     private final StoreRepository storeRepository;
     private final DailyReportRepository dailyReportRepository;
     private final SeasonRankingRecordRepository seasonRankingRecordRepository;
-    private final GameDayReportService gameDayReportService;
     private final ProfitPolicy profitPolicy;
     private final UserRepository userRepository;
     private final ShopService shopService;
 
-    public void saveFinalRankings(Season season) {
+    public boolean saveFinalRankings(Season season) {
         if (season == null || season.getId() == null) {
-            return;
+            return false;
         }
         if (seasonRankingRecordRepository.existsByStore_Season_Id(season.getId())) {
             log.info("Final season rankings already exist. seasonId={}", season.getId());
-            return;
+            return true;
         }
 
         int totalDays = season.resolveRuntimePlayableDays() <= 0
@@ -57,10 +55,8 @@ public class SeasonFinalRankingService {
         List<Store> stores = storeRepository.findAllBySeason_IdOrderByIdAsc(season.getId());
         if (stores.isEmpty()) {
             log.info("Skipping final season rankings save. seasonId={} reason=no_stores", season.getId());
-            return;
+            return false;
         }
-
-        stores.forEach(store -> gameDayReportService.recordClosedDayReport(store, totalDays));
 
         List<DailyReport> reports = dailyReportRepository.findByStore_Season_IdAndDayLessThanOrderByStore_IdAscDayAsc(
                 season.getId(),
@@ -71,13 +67,13 @@ public class SeasonFinalRankingService {
         List<FinalRankingCandidate> candidates = buildCandidates(stores, aggregatedStatsByStoreId);
         if (candidates.isEmpty()) {
             log.info("Skipping final season rankings save. seasonId={} reason=no_candidates", season.getId());
-            return;
+            return false;
         }
 
         List<SeasonRankingRecord> records = buildRecords(candidates);
         if (records.isEmpty()) {
             log.info("Skipping final season rankings save. seasonId={} reason=no_records_generated", season.getId());
-            return;
+            return false;
         }
 
         seasonRankingRecordRepository.saveAll(records);
@@ -94,6 +90,7 @@ public class SeasonFinalRankingService {
                         .orElse(UNRANKED_FINAL_RANK),
                 summarize(records, 3)
         );
+        return true;
     }
 
     private Map<Long, AggregatedStats> aggregateReports(List<DailyReport> reports) {

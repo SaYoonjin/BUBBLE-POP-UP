@@ -28,6 +28,7 @@ import com.ssafy.S14P21A205.game.day.scheduler.SeasonDayClosingScheduler;
 import com.ssafy.S14P21A205.game.day.service.GameDayReportService;
 import com.ssafy.S14P21A205.game.day.service.GameDayStartService;
 import com.ssafy.S14P21A205.game.day.service.GameDayStateService;
+import com.ssafy.S14P21A205.game.day.service.DayClosingJobService;
 import com.ssafy.S14P21A205.game.day.service.SeasonDayClosingService;
 import com.ssafy.S14P21A205.game.day.state.repository.GameDayStoreStateRedisRepository;
 import com.ssafy.S14P21A205.game.environment.repository.SeasonWeatherRedisRepository;
@@ -185,6 +186,9 @@ class SecurityConfigTests {
 
     @MockitoBean
     private SeasonDayClosingService seasonDayClosingService;
+
+    @MockitoBean
+    private DayClosingJobService dayClosingJobService;
 
     @MockitoBean
     private SeasonFinalRankingService seasonFinalRankingService;

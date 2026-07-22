@@ -3,7 +3,6 @@ package com.ssafy.S14P21A205.game.season.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -11,7 +10,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.ssafy.S14P21A205.game.day.policy.ProfitPolicy;
-import com.ssafy.S14P21A205.game.day.service.GameDayReportService;
 import com.ssafy.S14P21A205.game.season.entity.DailyReport;
 import com.ssafy.S14P21A205.game.season.entity.Season;
 import com.ssafy.S14P21A205.game.season.entity.SeasonRankingRecord;
@@ -39,7 +37,6 @@ class SeasonFinalRankingServiceTests {
     private final StoreRepository storeRepository = org.mockito.Mockito.mock(StoreRepository.class);
     private final DailyReportRepository dailyReportRepository = org.mockito.Mockito.mock(DailyReportRepository.class);
     private final SeasonRankingRecordRepository seasonRankingRecordRepository = org.mockito.Mockito.mock(SeasonRankingRecordRepository.class);
-    private final GameDayReportService gameDayReportService = org.mockito.Mockito.mock(GameDayReportService.class);
     private final ProfitPolicy profitPolicy = new ProfitPolicy();
     private final UserRepository userRepository = org.mockito.Mockito.mock(UserRepository.class);
     private final ShopService shopService = org.mockito.Mockito.mock(ShopService.class);
@@ -48,7 +45,6 @@ class SeasonFinalRankingServiceTests {
             storeRepository,
             dailyReportRepository,
             seasonRankingRecordRepository,
-            gameDayReportService,
             profitPolicy,
             userRepository,
             shopService
@@ -82,7 +78,6 @@ class SeasonFinalRankingServiceTests {
 
         seasonFinalRankingService.saveFinalRankings(season);
 
-        verify(gameDayReportService, times(12)).recordClosedDayReport(any(Store.class), eq(7));
         ArgumentCaptor<List> recordsCaptor = ArgumentCaptor.forClass(List.class);
         verify(seasonRankingRecordRepository).saveAll(recordsCaptor.capture());
 
@@ -123,7 +118,6 @@ class SeasonFinalRankingServiceTests {
 
         verify(storeRepository, never()).findAllBySeason_IdOrderByIdAsc(anyLong());
         verify(dailyReportRepository, never()).findByStore_Season_IdAndDayLessThanOrderByStore_IdAscDayAsc(anyLong(), anyInt());
-        verify(gameDayReportService, never()).recordClosedDayReport(any(Store.class), anyInt());
         verify(seasonRankingRecordRepository, never()).saveAll(any());
     }
 
