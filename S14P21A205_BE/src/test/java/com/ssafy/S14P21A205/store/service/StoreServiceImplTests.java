@@ -209,9 +209,9 @@ class StoreServiceImplTests {
         ));
         when(newsRankingResolver.resolveMenuEntryRank(9L, 3, cookie)).thenReturn(null);
         when(newsRankingResolver.resolveMenuEntryRank(9L, 3, taco)).thenReturn(9);
-        when(eventEffectResolver.resolve(store.getSeason(), 3, LocalDateTime.of(2026, 3, 9, 14, 33), 3L, 5L))
+        when(eventEffectResolver.resolve(store.getSeason(), 3, LocalDateTime.of(2026, 3, 9, 14, 32, 40), 3L, 5L))
                 .thenReturn(eventEffect(new BigDecimal("1.05")));
-        when(eventEffectResolver.resolve(store.getSeason(), 3, LocalDateTime.of(2026, 3, 9, 14, 33), 3L, 8L))
+        when(eventEffectResolver.resolve(store.getSeason(), 3, LocalDateTime.of(2026, 3, 9, 14, 32, 40), 3L, 8L))
                 .thenReturn(eventEffect(new BigDecimal("0.95")));
 
         MenuListResponse response = storeService.getMenus(1);
